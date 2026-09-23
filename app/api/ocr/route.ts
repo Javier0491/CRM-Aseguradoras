@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth/dal";
 import { getExtractor } from "@/lib/ocr/extractor";
 import {
   OCR_MAX_BYTES,
@@ -17,6 +18,8 @@ function error(mensaje: string, status: number) {
  * devuelve los datos clave de la póliza extraídos por el motor configurado.
  */
 export async function POST(request: Request) {
+  if (!(await getCurrentUser())) return error("No autenticado.", 401);
+
   let formData: FormData;
   try {
     formData = await request.formData();

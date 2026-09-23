@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
 
 import { CapturaWorkspace } from "@/components/captura/captura-workspace";
+import { getAseguradorasOpciones } from "@/lib/polizas/queries";
 
 export const metadata: Metadata = {
   title: "Captura Inteligente",
 };
 
-export default function CapturaPage() {
+export default async function CapturaPage() {
+  const aseguradoras = await getAseguradorasOpciones();
+
   return (
     <>
       <div>
@@ -15,7 +18,7 @@ export default function CapturaPage() {
           Extrae los datos de una póliza con IA o captúrala manualmente por ramo.
         </p>
       </div>
-      <CapturaWorkspace />
+      <CapturaWorkspace aseguradoras={aseguradoras} />
     </>
   );
 }

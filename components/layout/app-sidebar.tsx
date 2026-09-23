@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsUpDown, LogOut, Settings } from "lucide-react";
+import { ChevronsUpDown, LogOut } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -26,6 +26,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { cerrarSesion } from "@/lib/auth/actions";
 import { isActivePath, mainNav, systemNav, type NavItem } from "@/lib/navigation";
 
 function NavGroup({ label, items, pathname }: { label: string; items: NavItem[]; pathname: string }) {
@@ -57,7 +58,14 @@ function NavGroup({ label, items, pathname }: { label: string; items: NavItem[];
   );
 }
 
-export function AppSidebar() {
+function inicialesDe(email: string | null) {
+  const nombre = email?.split("@")[0] ?? "";
+  const partes = nombre.split(/[._-]+/).filter(Boolean);
+  const ini = partes.length > 1 ? partes[0][0] + partes[1][0] : nombre.slice(0, 2);
+  return ini.toUpperCase() || "PJ";
+}
+
+export function AppSidebar({ email }: { email: string | null }) {
   const pathname = usePathname();
 
   return (
@@ -97,27 +105,30 @@ export function AppSidebar() {
                 <SidebarMenuButton size="lg" tooltip="Mi cuenta">
                   <Avatar className="size-8 rounded-md">
                     <AvatarFallback className="rounded-md bg-secondary text-xs">
-                      AD
+                      {inicialesDe(email)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">Administrador</span>
+                    <span className="truncate font-medium">Sesión activa</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      Dirección General
+                      {email ?? "Usuario"}
                     </span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="right" align="end" className="w-56">
-                <DropdownMenuLabel>Mi cuenta</DropdownMenuLabel>
+                <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+                  {email}
+                </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <Settings /> Configuración
-                </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <LogOut /> Cerrar sesión
-                </DropdownMenuItem>
+                <form action={cerrarSesion}>
+                  <DropdownMenuItem asChild variant="destructive">
+                    <button type="submit" className="w-full">
+                      <LogOut /> Cerrar sesión
+                    </button>
+                  </DropdownMenuItem>
+                </form>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>

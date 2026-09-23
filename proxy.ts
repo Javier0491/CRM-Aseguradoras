@@ -1,0 +1,40 @@
+import { NextResponse, type NextRequest } from "next/server";
+
+import { updateSession } from "@/lib/supabase/proxy";
+
+// Rutas accesibles sin sesión.
+const RUTAS_PUBLICAS = ["/login"];
+
+function esPublica(pathname: string) {
+  return RUTAS_PUBLICAS.some((ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`));
+}
+
+/**
+ * Bloqueo de acceso: todo el CRM requiere sesión.
+ * Es una verificación optimista; la sesión se valida de nuevo junto a los
+ * datos (lib/auth/dal.ts) en layouts, Server Actions y Route Handlers.
+ */
+export async function proxy(request: NextRequest) {
+  const { response, autenticado } = await updateSession(request);
+  const { pathname, search } = request.nextUrl;
+
+  if (!autenticado && !esPublica(pathname)) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
+    }
+    const login = new URL("/login", request.url);
+    if (pathname !== "/") login.searchParams.set("next", `${pathname}${search}`);
+    return NextResponse.redirect(login);
+  }
+
+  if (autenticado && esPublica(pathname)) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  return response;
+}
+
+export const config = {
+  // Todo excepto assets estáticos e imágenes.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)"],
+};

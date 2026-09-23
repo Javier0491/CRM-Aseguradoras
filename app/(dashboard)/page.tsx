@@ -131,7 +131,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">
-            Resumen Directivo
+            Resumen Directivo <Badge variant="outline" className="ml-2 border-warning/30 bg-warning/10 align-middle text-[11px] font-medium text-warning">Datos de ejemplo</Badge>
           </h1>
           <p className="text-sm text-muted-foreground">
             Indicadores clave de cartera, cobranza y comisiones.

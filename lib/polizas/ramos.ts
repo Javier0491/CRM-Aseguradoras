@@ -12,18 +12,17 @@ export const ramoLabels: Record<Ramo, string> = {
   empresarial: "Empresarial",
 };
 
-export const ASEGURADORAS = [
-  "Quálitas",
-  "GNP",
-  "MetLife",
-  "AXA",
-  "Mapfre",
-  "Chubb",
-  "HDI",
-  "Allianz",
+export const FORMAS_PAGO = [
+  { value: "ANUAL", label: "Anual", meses: 12 },
+  { value: "SEMESTRAL", label: "Semestral", meses: 6 },
+  { value: "TRIMESTRAL", label: "Trimestral", meses: 3 },
+  { value: "MENSUAL", label: "Mensual", meses: 1 },
 ] as const;
+export type FormaPago = (typeof FORMAS_PAGO)[number]["value"];
 
-export type CampoTipo = "text" | "number" | "currency" | "percent" | "date" | "select";
+export type CampoTipo = "text" | "number" | "currency" | "percent" | "date" | "select" | "email" | "tel";
+
+export type Opcion = { value: string; label: string };
 
 export type CampoDef = {
   name: string;
@@ -31,7 +30,8 @@ export type CampoDef = {
   type: CampoTipo;
   required?: boolean;
   placeholder?: string;
-  options?: readonly string[];
+  /** Un string se usa como valor y etiqueta a la vez. */
+  options?: readonly (string | Opcion)[];
   hint?: string;
   /** Ocupa las dos columnas del grid. */
   wide?: boolean;
@@ -42,15 +42,24 @@ export type SeccionDef = {
   campos: CampoDef[];
 };
 
-/** Datos generales, comunes a cualquier ramo. */
+export const normalizarOpcion = (o: string | Opcion): Opcion =>
+  typeof o === "string" ? { value: o, label: o } : o;
+
+/**
+ * Datos generales, comunes a cualquier ramo.
+ * Las opciones de "aseguradora" se inyectan en runtime desde la base de datos.
+ */
 export const camposGenerales: CampoDef[] = [
   { name: "cliente", label: "Cliente / Contratante", type: "text", required: true, placeholder: "Nombre o razón social", wide: true },
-  { name: "aseguradora", label: "Aseguradora", type: "select", required: true, options: ASEGURADORAS },
+  { name: "rfcCliente", label: "RFC del cliente", type: "text", required: true, placeholder: "12 o 13 caracteres", hint: "Se usa para identificar al cliente si ya existe." },
+  { name: "telefono", label: "Teléfono", type: "tel", required: true, placeholder: "10 dígitos" },
+  { name: "email", label: "Correo electrónico", type: "email", required: true, placeholder: "cliente@correo.mx", wide: true },
+  { name: "aseguradora", label: "Aseguradora", type: "select", required: true, options: [] },
   { name: "numeroPoliza", label: "Número de póliza", type: "text", required: true, placeholder: "Ej. QUA-AU-7710452" },
   { name: "vigenciaInicio", label: "Inicio de vigencia", type: "date", required: true },
   { name: "vigenciaFin", label: "Fin de vigencia", type: "date", required: true },
-  { name: "primaTotal", label: "Prima total", type: "currency", required: true, placeholder: "0.00" },
-  { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: ["Anual", "Semestral", "Trimestral", "Mensual"] },
+  { name: "primaTotal", label: "Prima total", type: "currency", required: true, placeholder: "0.00", hint: "Prima de toda la vigencia; se reparte entre los recibos." },
+  { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: FORMAS_PAGO.map(({ value, label }) => ({ value, label })) },
 ];
 
 export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {

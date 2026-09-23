@@ -1,0 +1,46 @@
+"use server";
+
+import { redirect } from "next/navigation";
+
+import { getSupabaseConfig } from "@/lib/supabase/config";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+export type LoginState = { error?: string; email?: string };
+
+/** Solo permite redirecciones internas para evitar open redirects (`//evil.com`, `https://…`). */
+function destinoSeguro(next: FormDataEntryValue | null) {
+  if (typeof next !== "string" || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) {
+    return "/";
+  }
+  return next;
+}
+
+export async function iniciarSesion(_prev: LoginState, formData: FormData): Promise<LoginState> {
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+
+  if (!email || !password) {
+    return { error: "Ingresa tu correo y contraseña.", email };
+  }
+  if (!getSupabaseConfig()) {
+    return { error: "La autenticación no está configurada en el servidor.", email };
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+  if (error) {
+    // Mensaje genérico: no revela si el correo existe.
+    return { error: "Correo o contraseña incorrectos.", email };
+  }
+
+  redirect(destinoSeguro(formData.get("next")));
+}
+
+export async function cerrarSesion() {
+  if (getSupabaseConfig()) {
+    const supabase = await createSupabaseServerClient();
+    await supabase.auth.signOut();
+  }
+  redirect("/login");
+}

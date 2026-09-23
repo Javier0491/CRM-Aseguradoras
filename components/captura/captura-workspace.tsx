@@ -5,13 +5,21 @@ import * as React from "react";
 import { OcrDropzone } from "@/components/captura/ocr-dropzone";
 import { PolizaForm, type PolizaFormInicial } from "@/components/captura/poliza-form";
 import type { ExtraccionPoliza } from "@/lib/ocr/types";
+import type { Opcion } from "@/lib/polizas/ramos";
 
-function aValoresIniciales(datos: ExtraccionPoliza): PolizaFormInicial {
+const normalizar = (s: string) =>
+  s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+
+function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): PolizaFormInicial {
+  // El OCR devuelve el nombre; el formulario necesita el id de la aseguradora en BD.
+  const aseguradora = aseguradoras.find(
+    (a) => normalizar(a.label) === normalizar(datos.aseguradora.valor)
+  );
   return {
     ramo: datos.ramo.valor,
     generales: {
       cliente: datos.cliente.valor,
-      aseguradora: datos.aseguradora.valor,
+      aseguradora: aseguradora?.value ?? "",
       numeroPoliza: datos.numeroPoliza.valor,
       vigenciaInicio: datos.vigencia.valor.inicio,
       vigenciaFin: datos.vigencia.valor.fin,
@@ -20,7 +28,7 @@ function aValoresIniciales(datos: ExtraccionPoliza): PolizaFormInicial {
   };
 }
 
-export function CapturaWorkspace() {
+export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
   // `version` remonta el formulario para que tome los valores extraídos como estado inicial.
   const [prellenado, setPrellenado] = React.useState<{
     version: number;
@@ -32,11 +40,18 @@ export function CapturaWorkspace() {
       <div className="xl:sticky xl:top-20">
         <OcrDropzone
           onAplicar={(datos) =>
-            setPrellenado((p) => ({ version: p.version + 1, inicial: aValoresIniciales(datos) }))
+            setPrellenado((p) => ({
+              version: p.version + 1,
+              inicial: aValoresIniciales(datos, aseguradoras),
+            }))
           }
         />
       </div>
-      <PolizaForm key={prellenado.version} inicial={prellenado.inicial} />
+      <PolizaForm
+        key={prellenado.version}
+        inicial={prellenado.inicial}
+        aseguradoras={aseguradoras}
+      />
     </div>
   );
 }

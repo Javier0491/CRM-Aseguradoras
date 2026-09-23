@@ -1,12 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Search } from "lucide-react";
+import { Bell, LogOut, Search } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { cerrarSesion } from "@/lib/auth/actions";
 import { allNav, isActivePath } from "@/lib/navigation";
 
 export function AppHeader() {
@@ -40,6 +41,12 @@ export function AppHeader() {
         >
           <Bell />
         </Button>
+        <form action={cerrarSesion}>
+          <Button type="submit" variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground">
+            <LogOut />
+            <span className="hidden sm:inline">Cerrar Sesión</span>
+          </Button>
+        </form>
       </div>
     </header>
   );

@@ -1,0 +1,57 @@
+import type { Metadata } from "next";
+import { ShieldCheck } from "lucide-react";
+
+import { LoginForm } from "@/components/auth/login-form";
+import { getSupabaseConfig } from "@/lib/supabase/config";
+
+export const metadata: Metadata = {
+  title: "Iniciar sesión",
+};
+
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const { next } = await searchParams;
+
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
+      {/* Retícula técnica de fondo */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.35] [background-image:linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] [background-size:48px_48px] [mask-image:radial-gradient(ellipse_at_center,black_20%,transparent_70%)]"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 left-1/2 size-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/10 blur-[120px]"
+      />
+
+      <div className="relative w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <div className="mb-4 flex size-14 items-center justify-center rounded-xl bg-primary font-mono text-lg font-bold text-primary-foreground shadow-[0_0_40px_-8px_var(--primary)]">
+            PJ
+          </div>
+          <h1 className="text-xl font-semibold tracking-[0.3em]">PJ MAGNUS</h1>
+          <p className="mt-1 text-xs tracking-wide text-muted-foreground uppercase">
+            Promotoría de Seguros · CRM
+          </p>
+        </div>
+
+        <div className="rounded-xl border bg-card p-6 shadow-2xl shadow-black/40">
+          <div className="mb-6 space-y-1">
+            <h2 className="text-base font-semibold">Iniciar sesión</h2>
+            <p className="text-sm text-muted-foreground">
+              Ingresa con las credenciales asignadas por la dirección.
+            </p>
+          </div>
+          <LoginForm
+            next={typeof next === "string" ? next : undefined}
+            configurado={getSupabaseConfig() !== null}
+          />
+        </div>
+
+        <p className="mt-6 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+          <ShieldCheck className="size-3.5 text-primary" />
+          Acceso restringido · uso interno exclusivo
+        </p>
+      </div>
+    </main>
+  );
+}

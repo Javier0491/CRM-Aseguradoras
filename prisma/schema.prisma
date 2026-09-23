@@ -17,6 +17,13 @@ enum Ramo {
   EMPRESARIAL
 }
 
+enum FormaPago {
+  ANUAL
+  SEMESTRAL
+  TRIMESTRAL
+  MENSUAL
+}
+
 enum EstadoRecibo {
   PENDIENTE
   PAGADO
@@ -57,14 +64,22 @@ model Aseguradora {
 }
 
 model Poliza {
-  id                     String  @id @default(cuid())
+  id                     String    @id @default(cuid())
   // Número tal como aparece en la carátula (lo captura el OCR).
-  numero_poliza_original String  @unique
+  numero_poliza_original String    @unique
   // Número vigente cuando la aseguradora lo reasigna en sus sistemas (SAP, MetLife, etc.).
-  numero_poliza_vigor    String? @unique
+  numero_poliza_vigor    String?   @unique
   ramo                   Ramo
   cliente_id             String
   aseguradora_id         String
+  vigencia_inicio        DateTime  @db.Date
+  vigencia_fin           DateTime  @db.Date
+  // Prima de toda la vigencia capturada; se reparte entre los recibos.
+  prima_total            Decimal   @db.Decimal(14, 2)
+  forma_pago             FormaPago
+  // Campos específicos del ramo (vehículo, suma asegurada, beneficiario, etc.).
+  datos_ramo             Json      @default("{}")
+  created_at             DateTime  @default(now())
 
   cliente     Cliente     @relation(fields: [cliente_id], references: [id])
   aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id])
@@ -72,19 +87,22 @@ model Poliza {
 
   @@index([cliente_id])
   @@index([aseguradora_id])
+  @@index([created_at])
   @@map("polizas")
 }
 
 model Recibo {
   id                String       @id @default(cuid())
   poliza_id         String
+  // Consecutivo del recibo dentro de la póliza (1..n).
+  numero            Int
   monto             Decimal      @db.Decimal(14, 2)
   fecha_vencimiento DateTime     @db.Date
   estado            EstadoRecibo @default(PENDIENTE)
 
   poliza Poliza @relation(fields: [poliza_id], references: [id])
 
-  @@index([poliza_id])
+  @@unique([poliza_id, numero])
   @@index([estado, fecha_vencimiento])
   @@map("recibos")
 }
