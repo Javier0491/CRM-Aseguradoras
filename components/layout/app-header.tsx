@@ -7,12 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { isActivePath, mainNav } from "@/lib/navigation";
+import { allNav, isActivePath } from "@/lib/navigation";
 
 export function AppHeader() {
   const pathname = usePathname();
   const current =
-    mainNav.find((item) => isActivePath(pathname, item.href)) ?? mainNav[0];
+    allNav.find((item) => isActivePath(pathname, item.href)) ?? allNav[0];
 
   return (
     <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur">

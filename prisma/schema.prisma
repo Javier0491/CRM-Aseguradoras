@@ -1,0 +1,90 @@
+// Esquema de datos del CRM PJ MAGNUS.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Ramo {
+  AUTOS
+  GASTOS_MEDICOS
+  VIDA
+  EMPRESARIAL
+}
+
+enum EstadoRecibo {
+  PENDIENTE
+  PAGADO
+  CONCILIADO
+}
+
+model Cliente {
+  id       String @id @default(cuid())
+  nombre   String
+  rfc      String
+  telefono String
+  email    String
+
+  polizas Poliza[]
+
+  @@index([rfc])
+  @@map("clientes")
+}
+
+model Aseguradora {
+  id                  String  @id @default(cuid())
+  nombre              String  @unique
+  color_hex           String
+  url_portal_cobranza String?
+  notas_acceso        String?
+
+  // Integración con API oficial (Fase 4).
+  // IMPORTANTE: api_key y api_secret deben guardarse cifrados en la aplicación
+  // antes de escribirse aquí; nunca en texto plano.
+  api_key      String?
+  api_secret   String?
+  api_endpoint String?
+  estado_api   String  @default("INACTIVA")
+
+  polizas Poliza[]
+
+  @@map("aseguradoras")
+}
+
+model Poliza {
+  id                     String  @id @default(cuid())
+  // Número tal como aparece en la carátula (lo captura el OCR).
+  numero_poliza_original String  @unique
+  // Número vigente cuando la aseguradora lo reasigna en sus sistemas (SAP, MetLife, etc.).
+  numero_poliza_vigor    String? @unique
+  ramo                   Ramo
+  cliente_id             String
+  aseguradora_id         String
+
+  cliente     Cliente     @relation(fields: [cliente_id], references: [id])
+  aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id])
+  recibos     Recibo[]
+
+  @@index([cliente_id])
+  @@index([aseguradora_id])
+  @@map("polizas")
+}
+
+model Recibo {
+  id                String       @id @default(cuid())
+  poliza_id         String
+  monto             Decimal      @db.Decimal(14, 2)
+  fecha_vencimiento DateTime     @db.Date
+  estado            EstadoRecibo @default(PENDIENTE)
+
+  poliza Poliza @relation(fields: [poliza_id], references: [id])
+
+  @@index([poliza_id])
+  @@index([estado, fecha_vencimiento])
+  @@map("recibos")
+}

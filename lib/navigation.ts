@@ -4,6 +4,7 @@ import {
   FileText,
   LayoutDashboard,
   Mail,
+  PlugZap,
   Scale,
   ScanText,
   Users,
@@ -26,6 +27,12 @@ export const mainNav: NavItem[] = [
   { title: "Aseguradoras", href: "/aseguradoras", icon: Building2 },
   { title: "Reportes", href: "/reportes", icon: BarChart3 },
 ];
+
+export const systemNav: NavItem[] = [
+  { title: "Integraciones", href: "/configuracion/integraciones", icon: PlugZap },
+];
+
+export const allNav = [...mainNav, ...systemNav];
 
 export function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);

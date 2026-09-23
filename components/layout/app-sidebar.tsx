@@ -26,7 +26,36 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { isActivePath, mainNav } from "@/lib/navigation";
+import { isActivePath, mainNav, systemNav, type NavItem } from "@/lib/navigation";
+
+function NavGroup({ label, items, pathname }: { label: string; items: NavItem[]; pathname: string }) {
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel className="text-[11px] uppercase tracking-wider">
+        {label}
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.href}>
+              <SidebarMenuButton
+                asChild
+                isActive={isActivePath(pathname, item.href)}
+                tooltip={item.title}
+                className="data-[active=true]:text-primary data-[active=true]:[&>svg]:text-primary"
+              >
+                <Link href={item.href}>
+                  <item.icon />
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -56,30 +85,8 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-[11px] uppercase tracking-wider">
-            Operación
-          </SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {mainNav.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isActivePath(pathname, item.href)}
-                    tooltip={item.title}
-                    className="data-[active=true]:text-primary data-[active=true]:[&>svg]:text-primary"
-                  >
-                    <Link href={item.href}>
-                      <item.icon />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavGroup label="Operación" items={mainNav} pathname={pathname} />
+        <NavGroup label="Sistema" items={systemNav} pathname={pathname} />
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
