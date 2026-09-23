@@ -53,6 +53,8 @@ import { cn } from "@/lib/utils";
 export type PolizaFormInicial = {
   ramo?: Ramo;
   generales?: Valores;
+  /** Campos específicos del ramo inicial. */
+  especificos?: Valores;
 };
 
 type Exito = Extract<GuardarPolizaResultado, { ok: true }>;
@@ -88,7 +90,11 @@ export function PolizaForm({
   const [ramo, setRamo] = React.useState<Ramo>(inicial?.ramo ?? "autos");
   const [generales, setGenerales] = React.useState<Valores>(inicial?.generales ?? {});
   // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
-  const [especificos, setEspecificos] = React.useState(vacioPorRamo);
+  const [especificos, setEspecificos] = React.useState(() => {
+    const base = vacioPorRamo();
+    if (inicial?.ramo && inicial.especificos) base[inicial.ramo] = { ...inicial.especificos };
+    return base;
+  });
   const [errores, setErrores] = React.useState<Errores>({});
   const [errorGeneral, setErrorGeneral] = React.useState<string | null>(null);
   const [exito, setExito] = React.useState<Exito | null>(null);

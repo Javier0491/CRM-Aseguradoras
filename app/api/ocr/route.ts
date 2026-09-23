@@ -1,10 +1,27 @@
+import {
+  APIConnectionError,
+  APIConnectionTimeoutError,
+  AuthenticationError,
+  BadRequestError,
+  PermissionDeniedError,
+  RateLimitError,
+} from "openai";
+
 import { getCurrentUser } from "@/lib/auth/dal";
-import { getExtractor } from "@/lib/ocr/extractor";
+import { db } from "@/lib/db";
+import {
+  getExtractor,
+  OcrNoConfiguradoError,
+  OcrRespuestaInvalidaError,
+} from "@/lib/ocr/extractor";
 import {
   OCR_MAX_BYTES,
   OCR_TIPOS_PERMITIDOS,
   type OcrRespuesta,
 } from "@/lib/ocr/types";
+
+// La lectura de una carátula con IA puede tardar varias decenas de segundos.
+export const maxDuration = 120;
 
 function error(mensaje: string, status: number) {
   return Response.json({ ok: false, error: mensaje } satisfies OcrRespuesta, {
@@ -12,10 +29,36 @@ function error(mensaje: string, status: number) {
   });
 }
 
+/** Traduce errores del proveedor de IA a respuestas claras para el usuario. */
+function errorDeExtraccion(e: unknown) {
+  if (e instanceof OcrNoConfiguradoError) {
+    return error("La captura inteligente no está configurada (falta OPENAI_API_KEY).", 503);
+  }
+  if (e instanceof AuthenticationError || e instanceof PermissionDeniedError) {
+    return error("La llave de OpenAI es inválida o no tiene permisos.", 503);
+  }
+  if (e instanceof RateLimitError) {
+    return error("Se alcanzó el límite de uso de OpenAI. Intenta en unos minutos o revisa el saldo de la cuenta.", 429);
+  }
+  if (e instanceof APIConnectionTimeoutError) {
+    return error("La lectura del documento tardó demasiado. Intenta de nuevo.", 504);
+  }
+  if (e instanceof APIConnectionError) {
+    return error("No se pudo contactar al servicio de IA.", 502);
+  }
+  if (e instanceof BadRequestError) {
+    return error("El servicio de IA no pudo procesar este archivo. Prueba con otro formato o una imagen más nítida.", 422);
+  }
+  if (e instanceof OcrRespuestaInvalidaError) {
+    return error("La IA no devolvió una lectura válida del documento. Intenta de nuevo.", 502);
+  }
+  return error("No fue posible procesar el documento.", 502);
+}
+
 /**
  * POST /api/ocr
  * Recibe un `multipart/form-data` con el campo `file` (PDF o imagen) y
- * devuelve los datos clave de la póliza extraídos por el motor configurado.
+ * devuelve los datos de la carátula extraídos con IA.
  */
 export async function POST(request: Request) {
   if (!(await getCurrentUser())) return error("No autenticado.", 401);
@@ -40,18 +83,25 @@ export async function POST(request: Request) {
     return error("El archivo excede el límite de 10 MB.", 413);
   }
 
-  const extractor = getExtractor();
   try {
-    const datos = await extractor.extraer(archivo);
+    const extractor = getExtractor();
+    // La IA solo puede elegir entre las aseguradoras registradas.
+    const aseguradoras = (
+      await db.aseguradora.findMany({ select: { nombre: true }, orderBy: { nombre: "asc" } })
+    ).map((a) => a.nombre);
+
+    const datos = await extractor.extraer(archivo, aseguradoras);
     return Response.json({
       ok: true,
       archivo: { nombre: archivo.name, tipo: archivo.type, bytes: archivo.size },
-      proveedor: extractor.nombre,
+      proveedor: extractor.proveedor,
+      modelo: extractor.modelo,
       procesadoEn: new Date().toISOString(),
       datos,
     } satisfies OcrRespuesta);
   } catch (e) {
-    console.error("[ocr] Error en la extracción", e);
-    return error("No fue posible procesar el documento.", 502);
+    // Solo el tipo y mensaje del error: nunca el contenido del documento.
+    console.error("[ocr] Error en la extracción:", e instanceof Error ? `${e.name}: ${e.message}` : e);
+    return errorDeExtraccion(e);
   }
 }

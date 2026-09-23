@@ -1,74 +1,93 @@
-import type { Ramo } from "@/lib/polizas/ramos";
+import "server-only";
+
+import OpenAI from "openai";
+
+import { normalizarExtraccion } from "@/lib/ocr/normalizar";
+import { construirSystemPrompt } from "@/lib/ocr/prompt";
+import { construirEsquemaExtraccion } from "@/lib/ocr/schema";
 import type { ExtraccionPoliza } from "@/lib/ocr/types";
 
-/**
- * Contrato de cualquier motor de extracción (OCR + LLM).
- * Para conectar un proveedor real basta con implementar esta interfaz
- * y devolverla desde `getExtractor()`.
- */
+/** Contrato de cualquier motor de extracción de carátulas. */
 export interface ExtractorPoliza {
-  nombre: string;
-  extraer(archivo: File): Promise<ExtraccionPoliza>;
+  proveedor: string;
+  modelo: string;
+  extraer(archivo: File, aseguradoras: readonly string[]): Promise<ExtraccionPoliza>;
 }
 
-const MUESTRAS: Record<Ramo, Omit<ExtraccionPoliza, "ramo">> = {
-  autos: {
-    aseguradora: { valor: "Quálitas", confianza: 0.98 },
-    cliente: { valor: "Transportes del Bajío S.A. de C.V.", confianza: 0.94 },
-    monto: { valor: 284_550.0, confianza: 0.97 },
-    vigencia: { valor: { inicio: "2026-09-01", fin: "2027-09-01" }, confianza: 0.91 },
-    numeroPoliza: { valor: "QUA-AU-7710452", confianza: 0.96 },
-  },
-  gastos_medicos: {
-    aseguradora: { valor: "GNP", confianza: 0.99 },
-    cliente: { valor: "María Fernanda López Ruiz", confianza: 0.95 },
-    monto: { valor: 48_320.4, confianza: 0.93 },
-    vigencia: { valor: { inicio: "2026-08-15", fin: "2027-08-15" }, confianza: 0.88 },
-    numeroPoliza: { valor: "GNP-GM-1029384", confianza: 0.9 },
-  },
-  vida: {
-    aseguradora: { valor: "MetLife", confianza: 0.97 },
-    cliente: { valor: "Carlos Andrés Mendoza", confianza: 0.92 },
-    monto: { valor: 22_910.0, confianza: 0.95 },
-    vigencia: { valor: { inicio: "2026-07-01", fin: "2046-07-01" }, confianza: 0.84 },
-    numeroPoliza: { valor: "MET-VI-5520193", confianza: 0.93 },
-  },
-  empresarial: {
-    aseguradora: { valor: "AXA", confianza: 0.96 },
-    cliente: { valor: "Grupo Industrial Norteño", confianza: 0.9 },
-    monto: { valor: 612_400.0, confianza: 0.94 },
-    vigencia: { valor: { inicio: "2026-10-01", fin: "2027-10-01" }, confianza: 0.89 },
-    numeroPoliza: { valor: "AXA-DA-3301827", confianza: 0.87 },
-  },
-};
+/** La extracción no está disponible por configuración (p. ej. falta la API key). */
+export class OcrNoConfiguradoError extends Error {}
 
-const PISTAS_RAMO: [RegExp, Ramo][] = [
-  [/auto|flotilla|vehic/i, "autos"],
-  [/gmm|medic|salud/i, "gastos_medicos"],
-  [/vida/i, "vida"],
-  [/empres|danos|daños|pyme|incendio/i, "empresarial"],
-];
+/** El modelo no devolvió una respuesta utilizable. */
+export class OcrRespuestaInvalidaError extends Error {}
 
-function inferirRamo(archivo: File): { ramo: Ramo; confianza: number } {
-  for (const [patron, ramo] of PISTAS_RAMO) {
-    if (patron.test(archivo.name)) return { ramo, confianza: 0.95 };
-  }
-  // Sin pistas en el nombre: elección determinista por tamaño del archivo.
-  const ramos = Object.keys(MUESTRAS) as Ramo[];
-  return { ramo: ramos[archivo.size % ramos.length], confianza: 0.72 };
+const MODELO_PREDETERMINADO = "gpt-4o";
+
+function crearExtractorOpenAI(apiKey: string, modelo: string): ExtractorPoliza {
+  const client = new OpenAI({ apiKey, timeout: 90_000, maxRetries: 1 });
+
+  return {
+    proveedor: "openai",
+    modelo,
+    async extraer(archivo, aseguradoras) {
+      const base64 = Buffer.from(await archivo.arrayBuffer()).toString("base64");
+      const dataUrl = `data:${archivo.type};base64,${base64}`;
+
+      const documento =
+        archivo.type === "application/pdf"
+          ? ({ type: "input_file", filename: archivo.name || "caratula.pdf", file_data: dataUrl } as const)
+          : ({ type: "input_image", image_url: dataUrl, detail: "high" } as const);
+
+      const response = await client.responses.create({
+        model: modelo,
+        temperature: 0,
+        max_output_tokens: 3000,
+        // No conservar en OpenAI las carátulas (contienen datos personales).
+        store: false,
+        instructions: construirSystemPrompt(aseguradoras),
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: "Extrae los datos de esta carátula de póliza." },
+              documento,
+            ],
+          },
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "extraccion_poliza",
+            strict: true,
+            schema: construirEsquemaExtraccion(aseguradoras),
+          },
+        },
+      });
+
+      if (response.status === "incomplete") {
+        throw new OcrRespuestaInvalidaError(
+          `Respuesta incompleta del modelo (${response.incomplete_details?.reason ?? "desconocido"}).`
+        );
+      }
+
+      const texto = response.output_text;
+      if (!texto) throw new OcrRespuestaInvalidaError("El modelo no devolvió contenido.");
+
+      let json: unknown;
+      try {
+        json = JSON.parse(texto);
+      } catch {
+        throw new OcrRespuestaInvalidaError("El modelo devolvió un JSON inválido.");
+      }
+      return normalizarExtraccion(json, aseguradoras);
+    },
+  };
 }
-
-/** Simulación: responde datos plausibles tras una latencia similar a la real. */
-const extractorSimulado: ExtractorPoliza = {
-  nombre: "simulado",
-  async extraer(archivo) {
-    await new Promise((resolve) => setTimeout(resolve, 1400));
-    const { ramo, confianza } = inferirRamo(archivo);
-    return { ...MUESTRAS[ramo], ramo: { valor: ramo, confianza } };
-  },
-};
 
 export function getExtractor(): ExtractorPoliza {
-  // TODO: devolver el extractor real (p. ej. OCR + Claude) cuando exista la integración.
-  return extractorSimulado;
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (!apiKey) {
+    throw new OcrNoConfiguradoError("Falta la variable de entorno OPENAI_API_KEY.");
+  }
+  const modelo = process.env.OPENAI_MODEL?.trim() || MODELO_PREDETERMINADO;
+  return crearExtractorOpenAI(apiKey, modelo);
 }

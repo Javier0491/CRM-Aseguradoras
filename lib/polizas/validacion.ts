@@ -17,7 +17,13 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_ANIOS_VIGENCIA = 30;
 
 export const normalizarRfc = (v: string) => v.replace(/[\s-]/g, "").toUpperCase();
-export const normalizarTelefono = (v: string) => v.replace(/\D/g, "");
+/** Solo dígitos; quita la lada internacional de México (+52 y el antiguo +521 de celulares). */
+export function normalizarTelefono(v: string) {
+  const d = v.replace(/\D/g, "");
+  if (d.length === 13 && d.startsWith("521")) return d.slice(3);
+  if (d.length === 12 && d.startsWith("52")) return d.slice(2);
+  return d;
+}
 
 /** Acepta "48,320.40", "$ 48320.4", etc. Devuelve NaN si no es numérico. */
 export function parseNumero(v: string): number {

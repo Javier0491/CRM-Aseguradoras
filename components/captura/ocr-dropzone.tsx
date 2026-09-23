@@ -28,13 +28,13 @@ import {
   type ExtraccionPoliza,
   type OcrRespuesta,
 } from "@/lib/ocr/types";
-import { ramoLabels } from "@/lib/polizas/ramos";
+import { camposGenerales, FORMAS_PAGO, ramoLabels } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
 
 type Estado =
   | { status: "idle" }
   | { status: "procesando"; archivo: File }
-  | { status: "listo"; archivo: File; datos: ExtraccionPoliza; proveedor: string }
+  | { status: "listo"; archivo: File; datos: ExtraccionPoliza; modelo: string }
   | { status: "error"; archivo?: File; mensaje: string };
 
 function formatBytes(bytes: number) {
@@ -112,7 +112,7 @@ export function OcrDropzone({
         status: "listo",
         archivo,
         datos: json.datos,
-        proveedor: json.proveedor,
+        modelo: json.modelo,
       });
     } catch (e) {
       if (controller.signal.aborted) return;
@@ -249,7 +249,7 @@ export function OcrDropzone({
         {estado.status === "listo" && (
           <ResultadoExtraccion
             datos={estado.datos}
-            proveedor={estado.proveedor}
+            modelo={estado.modelo}
             onAplicar={() => onAplicar(estado.datos)}
           />
         )}
@@ -283,68 +283,83 @@ function EstadoBadge({ estado }: { estado: Estado }) {
   }
 }
 
-function Confianza({ valor }: { valor: number }) {
-  const pct = Math.round(valor * 100);
-  const tono =
-    valor >= 0.9 ? "bg-success" : valor >= 0.8 ? "bg-primary" : "bg-warning";
-  return (
-    <div className="flex items-center gap-2" title={`Confianza ${pct}%`}>
-      <div className="h-1 w-14 overflow-hidden rounded-full bg-muted">
-        <div className={cn("h-full rounded-full", tono)} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="w-8 text-right text-[11px] text-muted-foreground tabular-nums">
-        {pct}%
-      </span>
-    </div>
-  );
+const formaPagoLabel = Object.fromEntries(FORMAS_PAGO.map((f) => [f.value, f.label]));
+
+function mostrarValor(campo: string, valor: string) {
+  if (campo === "primaTotal") return formatMoneda(Number(valor));
+  if (campo === "vigenciaInicio" || campo === "vigenciaFin") return formatFecha(`${valor}T00:00:00Z`);
+  if (campo === "formaPago") return formaPagoLabel[valor] ?? valor;
+  return valor;
 }
 
 function ResultadoExtraccion({
   datos,
-  proveedor,
+  modelo,
   onAplicar,
 }: {
   datos: ExtraccionPoliza;
-  proveedor: string;
+  modelo: string;
   onAplicar: () => void;
 }) {
   const filas = [
-    { label: "Aseguradora", valor: datos.aseguradora.valor, confianza: datos.aseguradora.confianza },
-    { label: "Cliente", valor: datos.cliente.valor, confianza: datos.cliente.confianza },
-    { label: "Ramo", valor: ramoLabels[datos.ramo.valor], confianza: datos.ramo.confianza },
-    { label: "Monto (prima total)", valor: formatMoneda(datos.monto.valor), confianza: datos.monto.confianza },
-    {
-      label: "Vigencia",
-      valor: `${formatFecha(datos.vigencia.valor.inicio)} – ${formatFecha(datos.vigencia.valor.fin)}`,
-      confianza: datos.vigencia.confianza,
-    },
-    { label: "Número de póliza", valor: datos.numeroPoliza.valor, confianza: datos.numeroPoliza.confianza },
+    { campo: "ramo", label: "Ramo", valor: datos.ramo ? ramoLabels[datos.ramo] : undefined },
+    ...camposGenerales.map((c) => ({
+      campo: c.name,
+      label: c.label,
+      valor: datos.generales[c.name] ? mostrarValor(c.name, datos.generales[c.name]) : undefined,
+    })),
   ];
+  const detectados = filas.filter((f) => f.valor).length;
+  const especificos = Object.keys(datos.especificos).length;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Datos detectados
+          Datos detectados · {detectados}/{filas.length}
         </p>
-        {proveedor === "simulado" && (
-          <span className="text-[11px] text-muted-foreground">Extracción simulada</span>
-        )}
+        <span className="font-mono text-[11px] text-muted-foreground">{modelo}</span>
       </div>
       <dl className="divide-y rounded-lg border">
         {filas.map((f) => (
-          <div key={f.label} className="flex items-center gap-3 px-3 py-2.5">
-            <dt className="w-28 shrink-0 text-xs text-muted-foreground">{f.label}</dt>
-            <dd className="min-w-0 flex-1 text-sm font-medium break-words tabular-nums">
-              {f.valor}
+          <div key={f.campo} className="flex items-start gap-3 px-3 py-2">
+            <dt className="w-28 shrink-0 pt-px text-xs text-muted-foreground">{f.label}</dt>
+            <dd
+              className={cn(
+                "min-w-0 flex-1 text-sm break-words tabular-nums",
+                f.valor ? "font-medium" : "text-xs text-muted-foreground italic"
+              )}
+            >
+              {f.valor ?? "No detectado"}
             </dd>
-            <Confianza valor={f.confianza} />
           </div>
         ))}
       </dl>
+      {datos.ramo && (
+        <p className="text-xs text-muted-foreground">
+          {especificos > 0
+            ? `${especificos} ${especificos === 1 ? "campo específico" : "campos específicos"} de ${ramoLabels[datos.ramo]} detectados.`
+            : `Sin campos específicos de ${ramoLabels[datos.ramo]} detectados.`}
+        </p>
+      )}
+      {datos.advertencias.length > 0 && (
+        <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2.5 text-xs text-warning">
+          <p className="mb-1.5 flex items-center gap-1.5 font-medium">
+            <AlertCircle className="size-3.5" /> Revisa antes de guardar
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            {datos.advertencias.map((a, i) => (
+              <li key={i}>{a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <Button className="w-full" onClick={onAplicar}>
         <Sparkles /> Aplicar al formulario
       </Button>
+      <p className="text-center text-[11px] text-muted-foreground">
+        La IA puede equivocarse: verifica los datos contra la carátula antes de guardar.
+      </p>
     </div>
   );
 }
@@ -352,9 +367,9 @@ function ResultadoExtraccion({
 function ResultadoSkeleton() {
   return (
     <div className="space-y-2" aria-live="polite" aria-busy="true">
-      <p className="text-xs text-muted-foreground">Leyendo documento y extrayendo campos…</p>
+      <p className="text-xs text-muted-foreground">Leyendo la carátula con IA; puede tardar hasta un minuto…</p>
       <div className="divide-y rounded-lg border">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-3">
             <div className="h-3 w-24 animate-pulse rounded bg-muted" />
             <div className="h-3 flex-1 animate-pulse rounded bg-muted" />

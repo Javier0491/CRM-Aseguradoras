@@ -11,20 +11,15 @@ const normalizar = (s: string) =>
   s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 
 function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): PolizaFormInicial {
-  // El OCR devuelve el nombre; el formulario necesita el id de la aseguradora en BD.
-  const aseguradora = aseguradoras.find(
-    (a) => normalizar(a.label) === normalizar(datos.aseguradora.valor)
-  );
+  // La IA devuelve el nombre de la aseguradora; el formulario necesita su id en BD.
+  const nombre = datos.generales.aseguradora;
+  const aseguradora = nombre
+    ? aseguradoras.find((a) => normalizar(a.label) === normalizar(nombre))
+    : undefined;
   return {
-    ramo: datos.ramo.valor,
-    generales: {
-      cliente: datos.cliente.valor,
-      aseguradora: aseguradora?.value ?? "",
-      numeroPoliza: datos.numeroPoliza.valor,
-      vigenciaInicio: datos.vigencia.valor.inicio,
-      vigenciaFin: datos.vigencia.valor.fin,
-      primaTotal: datos.monto.valor.toFixed(2),
-    },
+    ramo: datos.ramo ?? undefined,
+    generales: { ...datos.generales, aseguradora: aseguradora?.value ?? "" },
+    especificos: datos.especificos,
   };
 }
 
