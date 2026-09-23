@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { AseguradoraIntegracion } from "@/lib/integraciones/data";
+import type { AseguradoraIntegracion } from "@/lib/integraciones/types";
 
 export function ConfigurarApiDialog({
   aseguradora,

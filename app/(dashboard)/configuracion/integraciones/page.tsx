@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
-import { ExternalLink, PlugZap, ServerCog, Unplug } from "lucide-react";
+import { Database, ExternalLink, PlugZap, ServerCog, Unplug } from "lucide-react";
 
 import { ConfigurarApiDialog } from "@/components/integraciones/configurar-api-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import {
-  aseguradorasIntegracion,
-  type AseguradoraIntegracion,
-} from "@/lib/integraciones/data";
+import { colorTextoSobre, normalizarHex } from "@/lib/color";
+import { getAseguradorasIntegracion } from "@/lib/integraciones/queries";
+import type { AseguradoraIntegracion } from "@/lib/integraciones/types";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -20,6 +19,17 @@ const estadoConfig: Record<string, { label: string; dot: string; className: stri
   INACTIVA: { label: "Inactiva", dot: "bg-muted-foreground", className: "border-border bg-muted text-muted-foreground" },
 };
 
+function estadoDe(estadoApi: string) {
+  // Un valor no contemplado se muestra tal cual en lugar de ocultarse como "Inactiva".
+  return (
+    estadoConfig[estadoApi.toUpperCase()] ?? {
+      label: estadoApi,
+      dot: "bg-warning",
+      className: "border-warning/30 bg-warning/10 text-warning",
+    }
+  );
+}
+
 function hostname(url: string) {
   try {
     return new URL(url).hostname;
@@ -28,27 +38,35 @@ function hostname(url: string) {
   }
 }
 
+function iniciales(nombre: string) {
+  const palabras = nombre.trim().split(/\s+/);
+  return (palabras.length > 1 ? palabras[0][0] + palabras[1][0] : nombre.slice(0, 2)).toUpperCase();
+}
+
 function AseguradoraCard({ aseguradora }: { aseguradora: AseguradoraIntegracion }) {
-  const estado = estadoConfig[aseguradora.estado_api] ?? estadoConfig.INACTIVA;
+  const estado = estadoDe(aseguradora.estado_api);
+  const color = normalizarHex(aseguradora.color_hex);
 
   return (
     <Card className="relative gap-4 overflow-hidden py-5">
       <span
         aria-hidden
-        className="absolute inset-x-0 top-0 h-0.5"
-        style={{ backgroundColor: aseguradora.color_hex }}
+        className="absolute inset-x-0 top-0 h-0.5 bg-border"
+        style={color ? { backgroundColor: color } : undefined}
       />
       <CardHeader className="flex items-center gap-3 px-5">
         <div
-          className="flex size-9 shrink-0 items-center justify-center rounded-md text-xs font-bold text-white"
-          style={{ backgroundColor: aseguradora.color_hex }}
+          className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-bold"
+          style={color ? { backgroundColor: color, color: colorTextoSobre(color) } : undefined}
         >
-          {aseguradora.nombre.slice(0, 2).toUpperCase()}
+          {iniciales(aseguradora.nombre)}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{aseguradora.nombre}</p>
+          <p className="truncate font-medium" title={aseguradora.nombre}>
+            {aseguradora.nombre}
+          </p>
           <p className="font-mono text-[11px] text-muted-foreground">
-            {aseguradora.color_hex.toUpperCase()}
+            {color ?? `color inválido: ${aseguradora.color_hex}`}
           </p>
         </div>
         <Badge variant="outline" className={cn("gap-1.5", estado.className)}>
@@ -59,6 +77,10 @@ function AseguradoraCard({ aseguradora }: { aseguradora: AseguradoraIntegracion 
 
       <CardContent className="px-5">
         <dl className="space-y-2 rounded-md border bg-background/60 p-3 font-mono text-[11px]">
+          <div className="flex justify-between gap-3">
+            <dt className="text-muted-foreground">estado_api</dt>
+            <dd>{aseguradora.estado_api}</dd>
+          </div>
           <div className="flex justify-between gap-3">
             <dt className="text-muted-foreground">endpoint</dt>
             <dd className="truncate">{aseguradora.api_endpoint ?? "— sin configurar"}</dd>
@@ -91,9 +113,26 @@ function AseguradoraCard({ aseguradora }: { aseguradora: AseguradoraIntegracion 
   );
 }
 
-export default function IntegracionesPage() {
-  const total = aseguradorasIntegracion.length;
-  const activas = aseguradorasIntegracion.filter((a) => a.estado_api === "ACTIVA").length;
+function SinAseguradoras() {
+  return (
+    <Card className="border-dashed">
+      <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
+        <Database className="size-8 text-primary" />
+        <p className="font-medium">No hay aseguradoras registradas</p>
+        <p className="max-w-sm text-sm text-muted-foreground">
+          Carga el catálogo inicial ejecutando{" "}
+          <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">npx prisma db seed</code>.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+export default async function IntegracionesPage() {
+  const aseguradoras = await getAseguradorasIntegracion();
+
+  const total = aseguradoras.length;
+  const activas = aseguradoras.filter((a) => a.estado_api.toUpperCase() === "ACTIVA").length;
 
   const resumen = [
     { label: "Aseguradoras registradas", valor: total, icon: ServerCog },
@@ -129,14 +168,18 @@ export default function IntegracionesPage() {
         ))}
       </section>
 
-      <section
-        aria-label="Aseguradoras"
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
-      >
-        {aseguradorasIntegracion.map((a) => (
-          <AseguradoraCard key={a.id} aseguradora={a} />
-        ))}
-      </section>
+      {total === 0 ? (
+        <SinAseguradoras />
+      ) : (
+        <section
+          aria-label="Aseguradoras"
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+        >
+          {aseguradoras.map((a) => (
+            <AseguradoraCard key={a.id} aseguradora={a} />
+          ))}
+        </section>
+      )}
     </>
   );
 }
