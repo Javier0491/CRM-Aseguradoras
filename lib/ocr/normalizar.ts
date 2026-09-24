@@ -9,7 +9,7 @@ import {
   type CampoDef,
   type Ramo,
 } from "@/lib/polizas/ramos";
-import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
+import { extraerPolizaVigor, extraerPolizaVigorDeReferencia } from "@/lib/polizas/polizaParser";
 import { normalizarRfc, normalizarTelefono, validarCampo, type Valores } from "@/lib/polizas/validacion";
 
 const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -81,10 +81,29 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
     .filter((c) => !c.derivado)
     .map((c) => (c.name === "aseguradora" ? { ...c, options: aseguradoras } : c));
   const generales = extraerCampos(obj.generales, generalesDefs, advertencias);
-  // La póliza vigor no la lee la IA: se deriva del número impreso para el cruce de cobranza.
+  const referenciaPago =
+    typeof obj.referenciaPago === "string" && obj.referenciaPago.trim()
+      ? obj.referenciaPago.replace(/\s+/g, "").toUpperCase().slice(0, 60)
+      : null;
+
+  // La póliza vigor no la calcula la IA: se deriva en código para el cruce de cobranza.
+  // 1) del número impreso; 2) si no hay número, de la referencia de pago.
   if (generales.numeroImpreso) {
     generales.numeroImpreso = generales.numeroImpreso.toUpperCase();
     generales.polizaVigor = extraerPolizaVigor(generales.numeroImpreso);
+  } else if (referenciaPago) {
+    const vigor = extraerPolizaVigorDeReferencia(referenciaPago);
+    if (vigor) {
+      generales.polizaVigor = vigor;
+      advertencias.push(
+        `Póliza vigor ${vigor} calculada de la referencia de pago ${referenciaPago}; verifícala. ` +
+          "Captura el número de póliza manualmente."
+      );
+    } else {
+      advertencias.push(
+        `La referencia de pago ${referenciaPago} no tiene el formato esperado; captura la póliza vigor manualmente.`
+      );
+    }
   }
 
   const especificos = ramo
@@ -93,5 +112,5 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
 
   if (!ramo) advertencias.push("No se pudo determinar el ramo; selecciónalo manualmente.");
 
-  return { ramo, generales, especificos, advertencias };
+  return { ramo, generales, especificos, referenciaPago, advertencias };
 }

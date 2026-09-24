@@ -20,6 +20,11 @@ export type ExtraccionPoliza = {
   generales: Valores;
   /** Campos específicos del ramo detectado. */
   especificos: Valores;
+  /**
+   * Referencia de pago tal como aparece impresa. Si la carátula no trae el número de
+   * póliza, de aquí se calcula la póliza vigor.
+   */
+  referenciaPago: string | null;
   /** Observaciones para que el usuario revise (datos ambiguos, ilegibles, etc.). */
   advertencias: string[];
 };

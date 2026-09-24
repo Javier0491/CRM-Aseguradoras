@@ -34,3 +34,22 @@ export function extraerPolizaVigor(numeroImpreso: string): string {
   // Un núcleo sin dígitos significa que el prefijo o sufijo era en realidad la póliza.
   return /\d/.test(nucleo) ? nucleo : normalizado.replace(NO_ALFANUMERICO, "");
 }
+
+/**
+ * Póliza vigor a partir de la referencia de pago, para aseguradoras cuya carátula no
+ * trae el número de póliza explícito (p. ej. "MEDICA00000I12345670").
+ *
+ * Regla de negocio: se toman los dígitos que siguen INMEDIATAMENTE a la letra "I"
+ * (mayúscula o minúscula) y se elimina el último.
+ *   "MEDICA00000I12345670" → "1234567"
+ *   "MEDICA00000I12982553" → "1298255"
+ *
+ * Si hay varias "I" seguidas de dígitos, se usa la última (la de "MEDICA" no cuenta
+ * porque no la siguen dígitos). Devuelve null si la referencia no sigue el formato.
+ */
+export function extraerPolizaVigorDeReferencia(referencia: string): string | null {
+  const normalizada = referencia.replace(/\s+/g, "").toUpperCase();
+  const coincidencias = [...normalizada.matchAll(/I(\d{2,})/g)];
+  const digitos = coincidencias.at(-1)?.[1];
+  return digitos ? digitos.slice(0, -1) : null;
+}

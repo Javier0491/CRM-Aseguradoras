@@ -157,7 +157,11 @@ export function PolizaForm({
   const [errorGeneral, setErrorGeneral] = React.useState<string | null>(null);
   const [exito, setExito] = React.useState<Exito | null>(null);
   // Si el usuario corrige a mano la póliza vigor, deja de recalcularse desde el número impreso.
-  const [vigorManual, setVigorManual] = React.useState(false);
+  // Lo mismo si llega precargada sin salir del número (p. ej. calculada de la referencia de pago).
+  const [vigorManual, setVigorManual] = React.useState(() => {
+    const vigor = inicial?.generales?.polizaVigor;
+    return Boolean(vigor) && vigor !== extraerPolizaVigor(inicial?.generales?.numeroImpreso ?? "");
+  });
   const [subiendo, setSubiendo] = React.useState<TipoArchivo | null>(null);
 
   // La validación es la misma que aplica la Server Action (lib/polizas/validacion.ts).

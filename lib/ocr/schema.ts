@@ -88,13 +88,19 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
         ...objeto(camposEspecificos(), aseguradoras),
         description: "Campos del ramo detectado; los de otros ramos van en null.",
       },
+      referenciaPago: {
+        type: ["string", "null"],
+        description:
+          'Valor del campo "Referencia" o "Referencia de Pago Actual", transcrito carácter por carácter ' +
+          "sin espacios (ej. MEDICA00000I12345670). null si no aparece.",
+      },
       advertencias: {
         type: "array",
         items: { type: "string" },
         description: "Observaciones breves en español para que el usuario revise.",
       },
     },
-    required: ["ramo", "generales", "especificos", "advertencias"],
+    required: ["ramo", "generales", "especificos", "referenciaPago", "advertencias"],
     additionalProperties: false,
   };
 }

@@ -29,6 +29,19 @@ CAMPOS GENERALES
   importe de un solo recibo. Número sin símbolo ni separadores de miles (ej. 48320.40).
 - formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL.
 
+REFERENCIA DE PAGO Y PÓLIZA VIGOR
+En algunas aseguradoras la póliza vigor se calcula a partir de la referencia de pago.
+- referenciaPago: si ves un campo "Referencia" o "Referencia de Pago Actual" (por ejemplo con el
+  formato MEDICA00000I12345670), transcríbelo EXACTAMENTE, carácter por carácter y sin espacios.
+  Distingue con cuidado la letra "I" del dígito "1" y la letra "O" del dígito "0". Si no aparece,
+  devuelve null.
+- No calcules la póliza vigor: el sistema la obtiene de la referencia con esta regla, tomando los
+  dígitos que están INMEDIATAMENTE DESPUÉS de la letra "I" y eliminando el último dígito
+  ("MEDICA00000I12345670" → "1234567"; "MEDICA00000I12982553" → "1298255"). Por eso es
+  fundamental que la referencia se transcriba sin errores.
+- Si el número de póliza no aparece explícitamente, deja numeroImpreso en null; no lo inventes a
+  partir de la referencia.
+
 RAMO
 Analiza el documento y determina el ramo del seguro. Debes clasificarlo ESTRICTAMENTE en una de las
 siguientes opciones: "Autos", "Gastos Médicos", "Vida Individual", "Vida Grupo", "Daños", "Hogar".
