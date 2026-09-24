@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { validarAsegurados } from "@/lib/polizas/asegurados";
-import { seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
+import { RAMO_DB, seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
 import { generarRecibos } from "@/lib/polizas/recibos";
 import {
   mesesPorFormaPago,
@@ -24,18 +24,6 @@ export type GuardarPolizaResultado =
       cliente: { nombre: string; nuevo: boolean };
     }
   | { ok: false; error?: string; errores?: Errores };
-
-const RAMO_DB = {
-  autos: "AUTOS",
-  gmm_individual: "GMM_INDIVIDUAL",
-  gmm_colectivo: "GMM_COLECTIVO",
-  vida_individual: "VIDA_INDIVIDUAL",
-  vida_grupo: "VIDA_GRUPO",
-  danos: "DANOS",
-  rc_profesional: "RC_PROFESIONAL",
-  hogar: "HOGAR",
-  otros: "OTROS",
-} as const satisfies Record<Ramo, string>;
 
 /** RFC genéricos del SAT: compartidos por muchas personas, no identifican al cliente. */
 const RFC_GENERICOS = new Set(["XAXX010101000", "XEXX010101000"]);

@@ -43,6 +43,8 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
   // Ramo seleccionado en el formulario: GMM Colectivo habilita el segundo documento.
   const [ramo, setRamo] = React.useState<Ramo>("autos");
   const [leyendoComplemento, setLeyendoComplemento] = React.useState(false);
+  // PDF del formato de negociación: se guarda como tercer archivo de la póliza.
+  const [negociacion, setNegociacion] = React.useState<File | null>(null);
   const formRef = React.useRef<PolizaFormHandle>(null);
 
   return (
@@ -71,9 +73,16 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
               contexto="gmm_colectivo"
               titulo="Subir Formato de Negociación / Orden de Emisión (Opcional)"
               descripcion="Complementa la carátula: la IA toma la empresa contratante, la póliza, las vigencias y resume las reglas del plan en Condiciones del Subgrupo."
-              onProcesando={setLeyendoComplemento}
+              onProcesando={(procesando) => {
+                setLeyendoComplemento(procesando);
+                if (procesando) setNegociacion(null);
+              }}
+              onLimpiar={() => setNegociacion(null)}
               // Se integra a lo ya capturado en lugar de reemplazar el formulario.
-              onAplicar={(datos) => formRef.current?.aplicarComplemento(aValoresIniciales(datos, aseguradoras))}
+              onAplicar={(datos, archivo) => {
+                setNegociacion(archivo.type === "application/pdf" ? archivo : null);
+                formRef.current?.aplicarComplemento(aValoresIniciales(datos, aseguradoras));
+              }}
             />
           </div>
         )}
@@ -86,10 +95,13 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
         extrayendo={extrayendo || leyendoComplemento}
         onRamoChange={setRamo}
         caratula={caratula}
+        // Solo aplica mientras el ramo sea GMM Colectivo (el panel se oculta con otro ramo).
+        negociacion={ramo === "gmm_colectivo" ? negociacion : null}
         onReiniciar={() => {
           setCaratula(null);
           setExtrayendo(false);
           setLeyendoComplemento(false);
+          setNegociacion(null);
           setRonda((r) => r + 1);
         }}
       />

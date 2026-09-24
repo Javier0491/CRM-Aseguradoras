@@ -103,6 +103,12 @@ export type PolizaFormHandle = {
   aplicarComplemento: (datos: PolizaFormInicial) => void;
 };
 
+const SUBIENDO: Record<TipoArchivo, string> = {
+  caratula: "carátula",
+  negociacion: "formato de negociación",
+  expediente: "expediente",
+};
+
 /** Campos del complemento que reemplazan lo capturado en lugar de solo llenar vacíos. */
 const CAMPOS_DEL_COMPLEMENTO = new Set(["condicionesSubgrupo"]);
 
@@ -179,6 +185,7 @@ export function PolizaForm({
   aseguradoras,
   extrayendo = false,
   caratula = null,
+  negociacion = null,
   onReiniciar,
   onRamoChange,
   ref,
@@ -195,6 +202,8 @@ export function PolizaForm({
    * como carátula de la póliza al pulsar "Guardar".
    */
   caratula?: File | null;
+  /** PDF del formato de negociación (GMM Colectivo), del segundo panel. Se guarda igual. */
+  negociacion?: File | null;
   /** "Limpiar" o "Capturar otra": el contenedor también debe descartar el documento leído. */
   onReiniciar?: () => void;
 }) {
@@ -336,10 +345,12 @@ export function PolizaForm({
 
   const onSubmit = handleSubmit(async (values) => {
     limpiarAvisos();
-    const errorCaratula = caratula ? await validarArchivo("caratula", caratula) : null;
-    if (errorCaratula) {
-      setErrorGeneral(`Carátula: ${errorCaratula}`);
-      return;
+    for (const [tipo, archivo] of [["caratula", caratula], ["negociacion", negociacion]] as const) {
+      const error = archivo ? await validarArchivo(tipo, archivo) : null;
+      if (error) {
+        setErrorGeneral(`${ARCHIVOS[tipo].etiqueta}: ${error}`);
+        return;
+      }
     }
 
     const res = await guardarPoliza({
@@ -352,7 +363,11 @@ export function PolizaForm({
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
       const archivos: Exito["archivos"] = {};
-      const porTipo: Record<TipoArchivo, File | null> = { caratula, expediente: values.expediente };
+      const porTipo: Record<TipoArchivo, File | null> = {
+        caratula,
+        negociacion,
+        expediente: values.expediente,
+      };
       for (const tipo of TIPOS_ARCHIVO) {
         const archivo = porTipo[tipo];
         if (!archivo) continue;
@@ -625,7 +640,7 @@ export function PolizaForm({
           <Button type="submit" disabled={bloqueado || exito !== null}>
             {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />}
             {subiendo
-              ? `Subiendo ${subiendo === "caratula" ? "carátula" : "expediente"}…`
+              ? `Subiendo ${SUBIENDO[subiendo]}…`
               : isSubmitting
                 ? "Guardando…"
                 : "Guardar póliza"}

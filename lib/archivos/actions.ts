@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 
-import { ARCHIVOS_BUCKET, esTipoArchivo, rutaArchivoValida, type TipoArchivo } from "@/lib/archivos/config";
+import {
+  ARCHIVOS_BUCKET,
+  COLUMNAS_ARCHIVO,
+  esTipoArchivo,
+  rutaArchivoValida,
+  type TipoArchivo,
+} from "@/lib/archivos/config";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -15,9 +21,8 @@ export type VincularArchivoResultado =
 type Referencia = { path: string; nombre: string; bytes: number; subido: Date };
 
 function camposPoliza(tipo: TipoArchivo, r: Referencia): Prisma.PolizaUpdateInput {
-  return tipo === "caratula"
-    ? { caratula_path: r.path, caratula_nombre: r.nombre, caratula_bytes: r.bytes, caratula_subido_at: r.subido }
-    : { expediente_path: r.path, expediente_nombre: r.nombre, expediente_bytes: r.bytes, expediente_subido_at: r.subido };
+  const c = COLUMNAS_ARCHIVO[tipo];
+  return { [c.path]: r.path, [c.nombre]: r.nombre, [c.bytes]: r.bytes, [c.subido]: r.subido };
 }
 
 /**
@@ -46,10 +51,10 @@ export async function vincularArchivo(
 
   const poliza = await db.poliza.findUnique({
     where: { id: polizaId },
-    select: { caratula_path: true, expediente_path: true },
+    select: { caratula_path: true, negociacion_path: true, expediente_path: true },
   });
   if (!poliza) return { ok: false, error: "La póliza no existe." };
-  const anterior = tipo === "caratula" ? poliza.caratula_path : poliza.expediente_path;
+  const anterior = poliza[COLUMNAS_ARCHIVO[tipo].path];
 
   const supabase = await createSupabaseServerClient();
   const storage = supabase.storage.from(ARCHIVOS_BUCKET);

@@ -15,6 +15,22 @@ export const RAMOS = [
 ] as const;
 export type Ramo = (typeof RAMOS)[number];
 
+/** Valor del enum `Ramo` en la base de datos para cada ramo del formulario. */
+export const RAMO_DB = {
+  autos: "AUTOS",
+  gmm_individual: "GMM_INDIVIDUAL",
+  gmm_colectivo: "GMM_COLECTIVO",
+  vida_individual: "VIDA_INDIVIDUAL",
+  vida_grupo: "VIDA_GRUPO",
+  danos: "DANOS",
+  rc_profesional: "RC_PROFESIONAL",
+  hogar: "HOGAR",
+  otros: "OTROS",
+} as const satisfies Record<Ramo, string>;
+
+export const ramoDesdeDb = (valor: string): Ramo | null =>
+  RAMOS.find((r) => RAMO_DB[r] === valor) ?? null;
+
 // Estas etiquetas son también las opciones con las que la IA clasifica el ramo.
 export const ramoLabels: Record<Ramo, string> = {
   autos: "Autos",

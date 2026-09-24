@@ -91,15 +91,20 @@ model Poliza {
   // Archivos de la póliza en Supabase Storage, bucket "expedientes".
   // Solo se guarda la referencia (ruta dentro del bucket); el archivo vive en Storage.
   // Carátula en PDF: para consultarla rápido sin descargar el expediente.
-  caratula_path        String?
-  caratula_nombre      String?
-  caratula_bytes       Int?
-  caratula_subido_at   DateTime?
+  caratula_path         String?
+  caratula_nombre       String?
+  caratula_bytes        Int?
+  caratula_subido_at    DateTime?
+  // Formato de negociación u orden de emisión (PDF) de GMM Colectivo.
+  negociacion_path      String?
+  negociacion_nombre    String?
+  negociacion_bytes     Int?
+  negociacion_subido_at DateTime?
   // Expediente completo (ZIP) de respaldo.
-  expediente_path      String?
-  expediente_nombre    String?
-  expediente_bytes     Int?
-  expediente_subido_at DateTime?
+  expediente_path       String?
+  expediente_nombre     String?
+  expediente_bytes      Int?
+  expediente_subido_at  DateTime?
 
   cliente     Cliente     @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
   // Restrict: borrar una aseguradora no debe arrastrar la cartera de pólizas.

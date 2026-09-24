@@ -22,10 +22,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ARCHIVOS, formatBytes, TIPOS_ARCHIVO, type TipoArchivo } from "@/lib/archivos/config";
+import {
+  ARCHIVOS,
+  COLUMNAS_ARCHIVO,
+  formatBytes,
+  TIPOS_ARCHIVO,
+  type TipoArchivo,
+} from "@/lib/archivos/config";
 import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
+import { ramoDesdeDb, seccionesPorRamo, type CampoDef } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -91,6 +98,8 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
               </dl>
             </CardContent>
           </Card>
+
+          <DatosRamo ramo={poliza.ramo} datos={poliza.datos_ramo} />
 
           <Card className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
@@ -179,26 +188,23 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
             <CardDescription>Carátula y expediente de respaldo de la póliza.</CardDescription>
           </CardHeader>
           <CardContent className="divide-y">
-            {TIPOS_ARCHIVO.map((tipo) => (
-              <DocumentoPoliza
-                key={tipo}
-                polizaId={poliza.id}
-                tipo={tipo}
-                archivo={
-                  tipo === "caratula"
-                    ? {
-                        nombre: poliza.caratula_nombre,
-                        bytes: poliza.caratula_bytes,
-                        subido: poliza.caratula_subido_at,
-                      }
-                    : {
-                        nombre: poliza.expediente_nombre,
-                        bytes: poliza.expediente_bytes,
-                        subido: poliza.expediente_subido_at,
-                      }
-                }
-              />
-            ))}
+            {TIPOS_ARCHIVO.filter(
+              // El formato de negociación solo aplica a GMM Colectivo (o si ya existe).
+              (tipo) =>
+                tipo !== "negociacion" ||
+                poliza.ramo === "GMM_COLECTIVO" ||
+                poliza.negociacion_path !== null
+            ).map((tipo) => {
+              const c = COLUMNAS_ARCHIVO[tipo];
+              return (
+                <DocumentoPoliza
+                  key={tipo}
+                  polizaId={poliza.id}
+                  tipo={tipo}
+                  archivo={{ nombre: poliza[c.nombre], bytes: poliza[c.bytes], subido: poliza[c.subido] }}
+                />
+              );
+            })}
           </CardContent>
         </Card>
       </div>
@@ -215,7 +221,8 @@ function DocumentoPoliza({
   tipo: TipoArchivo;
   archivo: { nombre: string | null; bytes: number | null; subido: Date | null };
 }) {
-  const Icono = tipo === "caratula" ? FileText : FileArchive;
+  const def = ARCHIVOS[tipo];
+  const Icono = def.verEnLinea ? FileText : FileArchive;
   // Enlaces normales (no <Link>): la ruta responde con una redirección a Storage.
   const href = `/polizas/${polizaId}/archivos/${tipo}`;
 
@@ -223,7 +230,7 @@ function DocumentoPoliza({
     <section className="space-y-3 py-4 first:pt-0 last:pb-0">
       <h3 className="flex items-center gap-2 text-sm font-medium">
         <Icono className="size-4 text-muted-foreground" />
-        {ARCHIVOS[tipo].etiqueta}
+        {def.etiqueta}
       </h3>
       {archivo.nombre ? (
         <>
@@ -235,23 +242,23 @@ function DocumentoPoliza({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {tipo === "caratula" ? (
+            {def.verEnLinea ? (
               <>
                 <Button asChild size="sm">
                   <a href={href} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink /> Ver carátula
+                    <ExternalLink /> {TEXTO_VER[tipo] ?? "Ver"}
                   </a>
                 </Button>
                 <Button asChild size="sm" variant="outline">
                   <a href={`${href}?descargar=1`} download>
-                    <Download /> Descargar PDF
+                    <Download /> Descargar {def.extension.toUpperCase()}
                   </a>
                 </Button>
               </>
             ) : (
               <Button asChild size="sm">
                 <a href={href} download>
-                  <Download /> Descargar ZIP
+                  <Download /> Descargar {def.extension.toUpperCase()}
                 </a>
               </Button>
             )}
@@ -272,5 +279,102 @@ function DocumentoPoliza({
         </>
       )}
     </section>
+  );
+}
+
+const TEXTO_VER: Partial<Record<TipoArchivo, string>> = {
+  caratula: "Ver carátula",
+  negociacion: "Ver formato",
+};
+
+/** Muestra un valor guardado en datos_ramo según el tipo de su campo. */
+function formatearValor(campo: CampoDef | undefined, valor: unknown): string {
+  if (valor === null || valor === undefined || valor === "") return "";
+  const n = typeof valor === "number" ? valor : Number(valor);
+  switch (campo?.type) {
+    case "currency":
+      return Number.isFinite(n) ? formatMoneda(n) : String(valor);
+    case "percent":
+      return `${String(valor)} %`;
+    // "number" (año, plazo, asegurados…) se muestra tal cual: sin separador de miles ("2025", no "2,025").
+    case "date":
+      return typeof valor === "string" ? formatFecha(`${valor}T00:00:00Z`) : String(valor);
+    default:
+      return String(valor);
+  }
+}
+
+const humanizar = (clave: string) =>
+  clave.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+
+/**
+ * Campos específicos del ramo (datos_ramo), con las mismas secciones y etiquetas que el
+ * formulario de captura. Lo que no corresponde a un campo actual (p. ej. datos de una
+ * versión anterior del formulario) se muestra en "Otros datos" para no ocultarlo.
+ */
+function DatosRamo({ ramo, datos }: { ramo: string; datos: unknown }) {
+  const valores =
+    typeof datos === "object" && datos !== null && !Array.isArray(datos)
+      ? (datos as Record<string, unknown>)
+      : {};
+  const clave = ramoDesdeDb(ramo);
+  const secciones = clave ? seccionesPorRamo[clave] : [];
+  const conocidos = new Set(secciones.flatMap((s) => s.campos.map((c) => c.name)));
+
+  const bloques = [
+    ...secciones.map((s) => ({
+      titulo: s.titulo,
+      filas: s.campos
+        .map((c) => ({ campo: c, label: c.label, valor: formatearValor(c, valores[c.name]) }))
+        .filter((f) => f.valor),
+    })),
+    {
+      titulo: "Otros datos",
+      filas: Object.keys(valores)
+        .filter((k) => !conocidos.has(k))
+        .map((k) => ({ campo: undefined, label: humanizar(k), valor: formatearValor(undefined, valores[k]) }))
+        .filter((f) => f.valor),
+    },
+  ].filter((b) => b.filas.length > 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Datos del ramo</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {bloques.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Sin datos específicos del ramo.</p>
+        ) : (
+          bloques.map((b) => (
+            <section key={b.titulo} className="space-y-3">
+              <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                {b.titulo}
+              </h3>
+              <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+                {b.filas.map((f) => {
+                  const largo = f.campo?.type === "textarea";
+                  return (
+                    <div key={f.label} className={cn("min-w-0", (largo || f.campo?.wide) && "sm:col-span-2")}>
+                      <dt className="text-xs text-muted-foreground">{f.label}</dt>
+                      <dd
+                        className={cn(
+                          "text-sm font-medium",
+                          largo
+                            ? "mt-1 rounded-lg border bg-background/60 p-3 font-normal whitespace-pre-line"
+                            : "truncate"
+                        )}
+                      >
+                        {f.valor}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            </section>
+          ))
+        )}
+      </CardContent>
+    </Card>
   );
 }

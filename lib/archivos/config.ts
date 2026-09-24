@@ -1,10 +1,11 @@
-// Archivos de una póliza en Supabase Storage (carátula PDF y expediente ZIP).
+// Archivos de una póliza en Supabase Storage: carátula (PDF), formato de negociación de
+// GMM Colectivo (PDF) y expediente completo (ZIP).
 // Reglas compartidas por cliente y servidor.
 
 /** Bucket privado; ver supabase/storage-expedientes.sql. */
 export const ARCHIVOS_BUCKET = "expedientes";
 
-export const TIPOS_ARCHIVO = ["caratula", "expediente"] as const;
+export const TIPOS_ARCHIVO = ["caratula", "negociacion", "expediente"] as const;
 export type TipoArchivo = (typeof TIPOS_ARCHIVO)[number];
 
 type DefinicionArchivo = {
@@ -16,7 +17,11 @@ type DefinicionArchivo = {
   maxBytes: number;
   /** Primeros bytes válidos del archivo. */
   firmas: number[][];
+  /** Se puede abrir en el navegador (PDF); si no, siempre se descarga. */
+  verEnLinea: boolean;
 };
+
+const FIRMA_PDF = [0x25, 0x50, 0x44, 0x46]; // %PDF
 
 export const ARCHIVOS: Record<TipoArchivo, DefinicionArchivo> = {
   caratula: {
@@ -25,7 +30,17 @@ export const ARCHIVOS: Record<TipoArchivo, DefinicionArchivo> = {
     mime: "application/pdf",
     accept: ".pdf,application/pdf",
     maxBytes: 20 * 1024 * 1024,
-    firmas: [[0x25, 0x50, 0x44, 0x46]], // %PDF
+    firmas: [FIRMA_PDF],
+    verEnLinea: true,
+  },
+  negociacion: {
+    etiqueta: "Formato de Negociación / Orden de Emisión (PDF)",
+    extension: "pdf",
+    mime: "application/pdf",
+    accept: ".pdf,application/pdf",
+    maxBytes: 20 * 1024 * 1024,
+    firmas: [FIRMA_PDF],
+    verEnLinea: true,
   },
   expediente: {
     etiqueta: "Expediente Completo (ZIP)",
@@ -38,8 +53,31 @@ export const ARCHIVOS: Record<TipoArchivo, DefinicionArchivo> = {
       [0x50, 0x4b, 0x03, 0x04], // PK con archivos
       [0x50, 0x4b, 0x05, 0x06], // PK vacío
     ],
+    verEnLinea: false,
   },
 };
+
+/** Columnas de `polizas` que guardan la referencia de cada tipo de archivo. */
+export const COLUMNAS_ARCHIVO = {
+  caratula: {
+    path: "caratula_path",
+    nombre: "caratula_nombre",
+    bytes: "caratula_bytes",
+    subido: "caratula_subido_at",
+  },
+  negociacion: {
+    path: "negociacion_path",
+    nombre: "negociacion_nombre",
+    bytes: "negociacion_bytes",
+    subido: "negociacion_subido_at",
+  },
+  expediente: {
+    path: "expediente_path",
+    nombre: "expediente_nombre",
+    bytes: "expediente_bytes",
+    subido: "expediente_subido_at",
+  },
+} as const satisfies Record<TipoArchivo, Record<"path" | "nombre" | "bytes" | "subido", string>>;
 
 export const esTipoArchivo = (v: unknown): v is TipoArchivo =>
   typeof v === "string" && (TIPOS_ARCHIVO as readonly string[]).includes(v);

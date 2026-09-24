@@ -30,7 +30,7 @@ export function ArchivoInput({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [arrastrando, setArrastrando] = React.useState(false);
   const def = ARCHIVOS[tipo];
-  const Icono = tipo === "caratula" ? FileText : FileArchive;
+  const Icono = def.verEnLinea ? FileText : FileArchive;
 
   if (value) {
     return (
