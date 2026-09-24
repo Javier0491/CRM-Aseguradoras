@@ -53,6 +53,13 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
     { label: "Vigencia", valor: `${formatFecha(poliza.vigencia_inicio)} – ${formatFecha(poliza.vigencia_fin)}` },
     { label: "Prima total", valor: formatMoneda(Number(poliza.prima_total)) },
     { label: "Forma de pago", valor: formaPagoLabel[poliza.forma_pago] },
+    {
+      label: "Comisión",
+      valor:
+        poliza.comision_personalizada_pct !== null
+          ? `${Number(poliza.comision_personalizada_pct)}% (personalizada)`
+          : "Según la matriz de comisiones",
+    },
     { label: "Registrada", valor: formatFecha(poliza.created_at) },
   ];
 

@@ -82,14 +82,20 @@ async function produccionPorAseguradora({ desde, hasta }: Rango) {
 
 function recibosConciliados({ desde, hasta }: Rango) {
   return db.recibo.findMany({
-    where: { estado: "CONCILIADO", fecha_vencimiento: { gte: desde, lte: hasta } },
-    orderBy: { fecha_vencimiento: "desc" },
+    // Conciliados dentro del periodo (fin de día incluido), los más recientes primero.
+    where: {
+      estado: "CONCILIADO",
+      conciliado_at: { gte: desde, lt: new Date(hasta.getTime() + 86_400_000) },
+    },
+    orderBy: { conciliado_at: "desc" },
     take: LIMITE_RECIBOS,
     select: {
       id: true,
       numero: true,
       monto: true,
       fecha_vencimiento: true,
+      comision_pagada: true,
+      conciliado_at: true,
       poliza: {
         select: {
           id: true,

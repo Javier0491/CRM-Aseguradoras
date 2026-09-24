@@ -92,7 +92,7 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
         enum: RAMOS.map((r) => ramoLabels[r]),
         description: 'Ramo del seguro según el contenido del documento. "Otros" si no hay certeza.',
       },
-      generales: objeto(camposGenerales.filter((c) => !c.derivado), aseguradoras),
+      generales: objeto(camposGenerales.filter((c) => !c.derivado && !c.sinOcr), aseguradoras),
       especificos: {
         ...objeto(camposEspecificos(), aseguradoras),
         description: "Campos del ramo detectado; los de otros ramos van en null.",

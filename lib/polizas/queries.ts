@@ -132,6 +132,7 @@ export async function getPolizaDetalle(id: string) {
       prima_total: true,
       forma_pago: true,
       created_at: true,
+      comision_personalizada_pct: true,
       datos_ramo: true,
       caratula_path: true,
       caratula_nombre: true,

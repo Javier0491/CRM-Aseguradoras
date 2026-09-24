@@ -154,7 +154,7 @@ export function normalizarExtraccion(
   }
 
   const generalesDefs = camposGenerales
-    .filter((c) => !c.derivado)
+    .filter((c) => !c.derivado && !c.sinOcr)
     .map((c) => (c.name === "aseguradora" ? { ...c, options: aseguradoras } : c));
   const generales = extraerCampos(obj.generales, generalesDefs, advertencias);
   const referenciaPago =

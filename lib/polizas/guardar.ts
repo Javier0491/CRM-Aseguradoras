@@ -104,6 +104,9 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
           prima_total: parseNumero(g.primaTotal).toFixed(2),
           forma_pago: g.formaPago as FormaPago,
           datos_ramo: datosRamo(ramo, especificos),
+          comision_personalizada_pct: g.comisionPersonalizadaPct
+            ? parseNumero(g.comisionPersonalizadaPct).toFixed(2)
+            : null,
           asegurados: {
             create: asegurados.map((a, orden) => ({
               orden,

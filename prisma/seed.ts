@@ -29,6 +29,22 @@ const aseguradoras = [
   { nombre: "Bupa", color_hex: "#0079C8" },
 ];
 
+// Matriz de comisiones INICIAL de ejemplo: ajústala a los contratos reales de la promotoría.
+// Un solo renglón de año 1 funciona como porcentaje fijo para todos los años.
+const esquemasComision: {
+  aseguradora: string;
+  ramo: "AUTOS" | "GMM_INDIVIDUAL" | "GMM_COLECTIVO" | "VIDA_INDIVIDUAL";
+  anio: number;
+  porcentaje: number;
+}[] = [
+  { aseguradora: "MetLife", ramo: "VIDA_INDIVIDUAL", anio: 1, porcentaje: 45 },
+  { aseguradora: "MetLife", ramo: "VIDA_INDIVIDUAL", anio: 2, porcentaje: 10 },
+  { aseguradora: "MetLife", ramo: "GMM_COLECTIVO", anio: 1, porcentaje: 8 },
+  { aseguradora: "Quálitas", ramo: "AUTOS", anio: 1, porcentaje: 12 },
+  { aseguradora: "GNP", ramo: "AUTOS", anio: 1, porcentaje: 12 },
+  { aseguradora: "GNP", ramo: "GMM_INDIVIDUAL", anio: 1, porcentaje: 15 },
+];
+
 async function main() {
   // Upsert por nombre (único): el seed es idempotente y puede ejecutarse varias veces.
   // En las existentes solo se actualiza el color: no se toca el estado de su integración.
@@ -39,7 +55,21 @@ async function main() {
       create: { ...a, estado_api: "INACTIVA" },
     });
   }
-  console.log(`Seed completado: ${aseguradoras.length} aseguradoras.`);
+  // Solo se crean los porcentajes que faltan: nunca se sobrescribe uno ya ajustado.
+  let creados = 0;
+  for (const e of esquemasComision) {
+    const aseguradora = await db.aseguradora.findUniqueOrThrow({ where: { nombre: e.aseguradora } });
+    const clave = { aseguradora_id: aseguradora.id, ramo: e.ramo, anio_poliza: e.anio };
+    const existe = await db.esquemaComision.findUnique({ where: { aseguradora_id_ramo_anio_poliza: clave } });
+    if (!existe) {
+      await db.esquemaComision.create({ data: { ...clave, porcentaje: e.porcentaje } });
+      creados++;
+    }
+  }
+  console.log(
+    `Seed completado: ${aseguradoras.length} aseguradoras, ${creados} esquemas de comisión nuevos ` +
+      `(${esquemasComision.length - creados} ya existían).`
+  );
 }
 
 main()

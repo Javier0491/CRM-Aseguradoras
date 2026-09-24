@@ -63,30 +63,34 @@ model Aseguradora {
   api_endpoint String?
   estado_api   String  @default("INACTIVA")
 
-  polizas Poliza[]
+  polizas  Poliza[]
+  esquemas EsquemaComision[]
 
   @@map("aseguradoras")
 }
 
 model Poliza {
-  id              String    @id @default(cuid())
+  id                         String    @id @default(cuid())
   // Lectura cruda del número tal como aparece en la carátula (lo captura el OCR).
-  numeroImpreso   String    @unique @map("numero_poliza_original")
+  numeroImpreso              String    @unique @map("numero_poliza_original")
   // Póliza raíz: clave exacta de cobranza, derivada de numeroImpreso con
   // extraerPolizaVigor() (lib/polizas/polizaParser.ts). No es única: las
   // renovaciones (-01, -02, ...) comparten la misma póliza raíz.
-  polizaVigor     String?   @map("numero_poliza_vigor")
-  ramo            Ramo
-  cliente_id      String
-  aseguradora_id  String
-  vigencia_inicio DateTime  @db.Date
-  vigencia_fin    DateTime  @db.Date
+  polizaVigor                String?   @map("numero_poliza_vigor")
+  ramo                       Ramo
+  cliente_id                 String
+  aseguradora_id             String
+  vigencia_inicio            DateTime  @db.Date
+  vigencia_fin               DateTime  @db.Date
   // Prima de toda la vigencia capturada; se reparte entre los recibos.
-  prima_total     Decimal   @db.Decimal(14, 2)
-  forma_pago      FormaPago
+  prima_total                Decimal   @db.Decimal(14, 2)
+  forma_pago                 FormaPago
   // Campos específicos del ramo (vehículo, suma asegurada, beneficiario, etc.).
-  datos_ramo      Json      @default("{}")
-  created_at      DateTime  @default(now())
+  datos_ramo                 Json      @default("{}")
+  // Porcentaje de comisión negociado para esta póliza (p. ej. colectivos de MetLife cuya
+  // comisión depende de la edad de los integrantes). Si existe, reemplaza al EsquemaComision.
+  comision_personalizada_pct Decimal?  @db.Decimal(5, 2)
+  created_at                 DateTime  @default(now())
 
   // Archivos de la póliza en Supabase Storage, bucket "expedientes".
   // Solo se guarda la referencia (ruta dentro del bucket); el archivo vive en Storage.
@@ -128,6 +132,9 @@ model Recibo {
   monto             Decimal      @db.Decimal(14, 2)
   fecha_vencimiento DateTime     @db.Date
   estado            EstadoRecibo @default(PENDIENTE)
+  // Rastro de la conciliación: comisión que reportó la aseguradora y cuándo se concilió.
+  comision_pagada   Decimal?     @db.Decimal(14, 2)
+  conciliado_at     DateTime?
 
   poliza Poliza @relation(fields: [poliza_id], references: [id], onDelete: Cascade)
 
@@ -158,4 +165,20 @@ model Asegurado {
 
   @@index([poliza_id])
   @@map("asegurados")
+}
+
+// Matriz de comisiones: porcentaje por aseguradora, ramo y año de la póliza (1 = negocio
+// nuevo, 2 = primera renovación…). Si el año no está definido se usa el mayor año definido
+// que no lo exceda, así un solo renglón de año 1 funciona como porcentaje fijo.
+model EsquemaComision {
+  id             String  @id @default(cuid())
+  aseguradora_id String
+  ramo           Ramo
+  anio_poliza    Int
+  porcentaje     Decimal @db.Decimal(5, 2)
+
+  aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
+
+  @@unique([aseguradora_id, ramo, anio_poliza])
+  @@map("esquemas_comision")
 }

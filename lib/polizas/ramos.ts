@@ -90,6 +90,8 @@ export type CampoDef = {
   wide?: boolean;
   /** Se calcula a partir de otro campo: la IA no lo extrae. */
   derivado?: boolean;
+  /** Se captura a mano: la IA no lo extrae (p. ej. datos negociados que no vienen en la carátula). */
+  sinOcr?: boolean;
   /**
    * Solo "text": valores sugeridos que se ofrecen al escribir, sin impedir texto libre.
    * Un valor que coincide con una sugerencia (sin importar mayúsculas ni acentos) se
@@ -133,6 +135,7 @@ export const camposGenerales: CampoDef[] = [
   { name: "vigenciaFin", label: "Fin de vigencia", type: "date", required: true },
   { name: "primaTotal", label: "Prima total", type: "currency", required: true, placeholder: "0.00", hint: "Prima de toda la vigencia; se reparte entre los recibos." },
   { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: FORMAS_PAGO.map(({ value, label }) => ({ value, label })) },
+  { name: "comisionPersonalizadaPct", label: "Comisión personalizada (%)", type: "percent", placeholder: "Opcional", hint: "Solo si la póliza negoció un % distinto a la matriz de comisiones.", sinOcr: true },
 ];
 
 /**

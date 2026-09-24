@@ -1,0 +1,646 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import {
+  AlertCircle,
+  CheckCircle2,
+  CircleAlert,
+  CircleHelp,
+  FileSpreadsheet,
+  Loader2,
+  ScanSearch,
+  SearchX,
+  UploadCloud,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { analizarConciliacion, aplicarConciliacion } from "@/lib/conciliacion/actions";
+import {
+  adivinarMapeo,
+  construirFilas,
+  detectarEncabezado,
+  ESTADO_MAX_BYTES,
+  EXTENSIONES_ESTADO,
+  leerArchivoEstado,
+  type Celda,
+  type Hoja,
+  type Mapeo,
+} from "@/lib/conciliacion/archivo";
+import {
+  TOLERANCIA_MXN,
+  type EstatusMatch,
+  type ResultadoMatch,
+  type ResumenMatch,
+} from "@/lib/conciliacion/tipos";
+import { formatMoneda, formatNumero } from "@/lib/format";
+import type { Opcion } from "@/lib/polizas/ramos";
+import { cn } from "@/lib/utils";
+
+const estatusConfig: Record<EstatusMatch, { label: string; icono: LucideIcon; clase: string }> = {
+  conciliado: { label: "Conciliado", icono: CheckCircle2, clase: "border-success/30 bg-success/10 text-success" },
+  diferencia: { label: "Diferencia", icono: CircleAlert, clase: "border-warning/30 bg-warning/10 text-warning" },
+  no_encontrado: { label: "No encontrado", icono: SearchX, clase: "border-destructive/30 bg-destructive/10 text-destructive" },
+  revisar: { label: "Revisar", icono: CircleHelp, clase: "border-border bg-muted text-muted-foreground" },
+};
+const ORDEN_ESTATUS: EstatusMatch[] = ["conciliado", "diferencia", "no_encontrado", "revisar"];
+
+type Archivo = { nombre: string; hojas: Hoja[]; hoja: number; encabezado: number; mapeo: Mapeo };
+type Analisis = { resultados: ResultadoMatch[]; resumen: ResumenMatch };
+
+const texto = (c: Celda | undefined) =>
+  c === null || c === undefined ? "" : c instanceof Date ? c.toISOString().slice(0, 10) : String(c);
+
+export function ConciliacionWorkspace({
+  aseguradoras,
+  conEsquema,
+}: {
+  aseguradoras: Opcion[];
+  /** Aseguradoras que tienen matriz de comisiones. */
+  conEsquema: string[];
+}) {
+  const [aseguradora, setAseguradora] = React.useState("");
+  const [archivo, setArchivo] = React.useState<Archivo | null>(null);
+  const [leyendo, setLeyendo] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [analisis, setAnalisis] = React.useState<Analisis | null>(null);
+  const [analizando, startAnalisis] = React.useTransition();
+  const [filtro, setFiltro] = React.useState<EstatusMatch | "todos">("todos");
+  const [confirmar, setConfirmar] = React.useState(false);
+  const [aplicando, startAplicar] = React.useTransition();
+  const [aplicados, setAplicados] = React.useState<number | null>(null);
+
+  const hojaActual = archivo ? archivo.hojas[archivo.hoja] : null;
+  const encabezados = hojaActual ? (hojaActual.filas[archivo!.encabezado] ?? []) : [];
+  const conversion = React.useMemo(
+    () => (archivo && hojaActual ? construirFilas(hojaActual.filas, archivo.encabezado, archivo.mapeo) : null),
+    [archivo, hojaActual]
+  );
+  const listoParaAnalizar = Boolean(aseguradora && conversion && conversion.filas.length > 0);
+  const nombreAseguradora = aseguradoras.find((a) => a.value === aseguradora)?.label;
+
+  async function cargar(f: File) {
+    setError(null);
+    setAnalisis(null);
+    setAplicados(null);
+    if (!EXTENSIONES_ESTADO.some((ext) => f.name.toLowerCase().endsWith(ext))) {
+      setError("Formato no soportado: usa un archivo CSV o Excel (.xlsx, .xls).");
+      return;
+    }
+    if (f.size > ESTADO_MAX_BYTES) {
+      setError("El archivo excede el límite de 10 MB.");
+      return;
+    }
+    setLeyendo(true);
+    try {
+      const hojas = await leerArchivoEstado(f);
+      const hoja = Math.max(0, hojas.findIndex((h) => h.filas.length > 0));
+      if (!hojas[hoja]?.filas.length) throw new Error("vacío");
+      const encabezado = detectarEncabezado(hojas[hoja].filas);
+      setArchivo({ nombre: f.name, hojas, hoja, encabezado, mapeo: adivinarMapeo(hojas[hoja].filas[encabezado]) });
+    } catch (e) {
+      console.error("[conciliacion] lectura", e);
+      setArchivo(null);
+      setError("No se pudo leer el archivo. Verifica que sea un CSV o Excel válido y que no esté vacío.");
+    } finally {
+      setLeyendo(false);
+    }
+  }
+
+  function actualizarArchivo(cambios: Partial<Archivo>) {
+    setArchivo((a) => (a ? { ...a, ...cambios } : a));
+    setAnalisis(null);
+    setAplicados(null);
+  }
+
+  function analizar() {
+    if (!conversion) return;
+    setError(null);
+    setAplicados(null);
+    startAnalisis(async () => {
+      const res = await analizarConciliacion(aseguradora, conversion.filas);
+      if (res.ok) {
+        setAnalisis({ resultados: res.resultados, resumen: res.resumen });
+        setFiltro("todos");
+      } else {
+        setError(res.error);
+      }
+    });
+  }
+
+  function aplicar() {
+    if (!conversion) return;
+    startAplicar(async () => {
+      const res = await aplicarConciliacion(aseguradora, conversion.filas);
+      setConfirmar(false);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      setAplicados(res.conciliados);
+      // Se vuelve a cruzar para reflejar el nuevo estado de los recibos.
+      const nuevo = await analizarConciliacion(aseguradora, conversion.filas);
+      if (nuevo.ok) setAnalisis({ resultados: nuevo.resultados, resumen: nuevo.resumen });
+    });
+  }
+
+  const visibles = analisis
+    ? analisis.resultados.filter((r) => filtro === "todos" || r.estatus === filtro)
+    : [];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">1. Estado de cuenta de comisiones</CardTitle>
+          <CardDescription>
+            Elige la aseguradora y sube su estado de cuenta en CSV o Excel. El archivo se lee en tu
+            navegador; solo se envían los renglones de póliza y comisión.
+          </CardDescription>
+          {archivo && (
+            <CardAction>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setArchivo(null);
+                  setAnalisis(null);
+                  setAplicados(null);
+                  setError(null);
+                }}
+              >
+                <X /> Quitar archivo
+              </Button>
+            </CardAction>
+          )}
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+            <div className="space-y-2">
+              <Label htmlFor="aseguradora">Aseguradora</Label>
+              <Select
+                value={aseguradora}
+                onValueChange={(v) => {
+                  setAseguradora(v);
+                  setAnalisis(null);
+                  setAplicados(null);
+                }}
+              >
+                <SelectTrigger id="aseguradora" className="w-full">
+                  <SelectValue placeholder="Selecciona la aseguradora" />
+                </SelectTrigger>
+                <SelectContent>
+                  {aseguradoras.map((a) => (
+                    <SelectItem key={a.value} value={a.value}>
+                      {a.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {aseguradora && !conEsquema.includes(aseguradora) && (
+                <p className="text-xs text-warning">
+                  {nombreAseguradora} no tiene matriz de comisiones: sus renglones saldrán como &quot;Revisar&quot;
+                  salvo las pólizas con % personalizado.
+                </p>
+              )}
+            </div>
+            <ZonaArchivo onArchivo={cargar} leyendo={leyendo} nombre={archivo?.nombre} />
+          </div>
+
+          {error && (
+            <p className="flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <AlertCircle className="size-4 shrink-0" /> {error}
+            </p>
+          )}
+
+          {archivo && hojaActual && (
+            <div className="space-y-4 rounded-lg border bg-background/60 p-4">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {archivo.hojas.length > 1 && (
+                  <SelectorColumna
+                    label="Hoja"
+                    valor={String(archivo.hoja)}
+                    opciones={archivo.hojas.map((h, i) => ({ value: String(i), label: h.nombre }))}
+                    onChange={(v) => {
+                      const hoja = Number(v);
+                      const encabezado = detectarEncabezado(archivo.hojas[hoja].filas);
+                      actualizarArchivo({ hoja, encabezado, mapeo: adivinarMapeo(archivo.hojas[hoja].filas[encabezado]) });
+                    }}
+                  />
+                )}
+                <SelectorColumna
+                  label="Fila de encabezados"
+                  valor={String(archivo.encabezado)}
+                  opciones={hojaActual.filas.slice(0, 20).map((f, i) => ({
+                    value: String(i),
+                    label: `Fila ${i + 1}: ${f.map(texto).filter(Boolean).slice(0, 3).join(", ") || "(vacía)"}`,
+                  }))}
+                  onChange={(v) => {
+                    const encabezado = Number(v);
+                    actualizarArchivo({ encabezado, mapeo: adivinarMapeo(hojaActual.filas[encabezado]) });
+                  }}
+                />
+                {(["poliza", "comision", "recibo"] as const).map((clave) => (
+                  <SelectorColumna
+                    key={clave}
+                    label={{ poliza: "Columna de póliza *", comision: "Columna de comisión pagada *", recibo: "Columna de recibo (opcional)" }[clave]}
+                    valor={archivo.mapeo[clave] === null ? "" : String(archivo.mapeo[clave])}
+                    opciones={[
+                      ...(clave === "recibo" ? [{ value: "ninguna", label: "No usar" }] : []),
+                      ...encabezados.map((c, i) => ({ value: String(i), label: texto(c) || `Columna ${i + 1}` })),
+                    ]}
+                    onChange={(v) =>
+                      actualizarArchivo({ mapeo: { ...archivo.mapeo, [clave]: v === "ninguna" ? null : Number(v) } })
+                    }
+                  />
+                ))}
+              </div>
+
+              <VistaPrevia filas={hojaActual.filas} encabezado={archivo.encabezado} mapeo={archivo.mapeo} />
+
+              {conversion && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  <span>
+                    <strong className="text-foreground tabular-nums">{formatNumero(conversion.filas.length)}</strong>{" "}
+                    renglones para cruzar
+                  </span>
+                  {conversion.omitidas.length > 0 && (
+                    <details>
+                      <summary className="cursor-pointer hover:text-foreground">
+                        {conversion.omitidas.length} omitidos (totales, subtítulos o montos no numéricos)
+                      </summary>
+                      <ul className="mt-1 list-disc pl-5">
+                        {conversion.omitidas.slice(0, 20).map((o) => (
+                          <li key={`${o.fila}-${o.motivo}`}>
+                            {o.fila > 0 ? `Fila ${o.fila}: ` : ""}
+                            {o.motivo}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="justify-end border-t [.border-t]:pt-4">
+          <Button onClick={analizar} disabled={!listoParaAnalizar || analizando}>
+            {analizando ? <Loader2 className="animate-spin" /> : <ScanSearch />}
+            {analizando ? "Cruzando…" : "Analizar cruce"}
+          </Button>
+        </CardFooter>
+      </Card>
+
+      {analisis && (
+        <Card className="gap-0 py-0">
+          <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+            <CardTitle className="text-base">2. Resultado del cruce · {nombreAseguradora}</CardTitle>
+            <CardDescription>
+              Comisión esperada = monto del recibo × % de la póliza o de la matriz de comisiones. Se
+              considera que coincide con una diferencia de hasta {formatMoneda(TOLERANCIA_MXN)}.
+            </CardDescription>
+          </CardHeader>
+
+          <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.4fr)]">
+            {ORDEN_ESTATUS.map((e) => {
+              const c = estatusConfig[e];
+              const activo = filtro === e;
+              return (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => setFiltro(activo ? "todos" : e)}
+                  aria-pressed={activo}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors hover:bg-accent/40",
+                    activo && "border-primary/50 bg-accent/40"
+                  )}
+                >
+                  <c.icono className={cn("size-5 shrink-0", c.clase.split(" ").find((k) => k.startsWith("text-")))} />
+                  <span>
+                    <span className="block text-xl font-semibold tabular-nums">{analisis.resumen[e]}</span>
+                    <span className="block text-xs text-muted-foreground">{c.label}</span>
+                  </span>
+                </button>
+              );
+            })}
+            <div className="rounded-lg border px-3 py-2.5 text-xs">
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Esperada</span>
+                <span className="tabular-nums">{formatMoneda(analisis.resumen.esperada)}</span>
+              </div>
+              <div className="flex justify-between gap-2">
+                <span className="text-muted-foreground">Pagada</span>
+                <span className="tabular-nums">{formatMoneda(analisis.resumen.pagada)}</span>
+              </div>
+              <div className="mt-1 flex justify-between gap-2 border-t pt-1 font-medium">
+                <span>Diferencia</span>
+                <span className="tabular-nums">{formatMoneda(analisis.resumen.pagada - analisis.resumen.esperada)}</span>
+              </div>
+              {analisis.resumen.pagadaSinCruce !== 0 && (
+                <div className="mt-1 flex justify-between gap-2 text-muted-foreground">
+                  <span title="Pagado en renglones no encontrados o por revisar">Pagado sin cruce</span>
+                  <span className="tabular-nums">{formatMoneda(analisis.resumen.pagadaSinCruce)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="w-16 pl-5">Fila</TableHead>
+                <TableHead>Póliza</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Recibo</TableHead>
+                <TableHead className="text-right">Comisión esperada</TableHead>
+                <TableHead className="text-right">Comisión pagada</TableHead>
+                <TableHead className="text-right">Diferencia</TableHead>
+                <TableHead className="pr-5">Estatus de match</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibles.map((r) => {
+                const c = estatusConfig[r.estatus];
+                return (
+                  <TableRow key={r.fila}>
+                    <TableCell className="pl-5 text-xs text-muted-foreground tabular-nums">{r.fila}</TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {r.poliza ? (
+                        <Link href={`/polizas/${r.poliza.id}`} className="hover:text-primary hover:underline">
+                          {r.poliza.numeroImpreso}
+                        </Link>
+                      ) : (
+                        r.polizaArchivo
+                      )}
+                      {r.poliza && r.poliza.numeroImpreso !== r.polizaArchivo && (
+                        <p className="text-[11px] text-muted-foreground">archivo: {r.polizaArchivo}</p>
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-[220px] truncate">
+                      {r.poliza?.cliente ?? <span className="text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground tabular-nums">
+                      {r.recibo ? `${r.recibo.numero}/${r.recibo.total}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {r.comisionEsperada !== null ? formatMoneda(r.comisionEsperada) : "—"}
+                      {r.porcentaje && r.recibo && (
+                        <p className="text-[11px] text-muted-foreground">
+                          {r.porcentaje.valor}% de {formatMoneda(r.recibo.monto)} ·{" "}
+                          {r.porcentaje.origen === "personalizado" ? "personalizado" : `año ${r.porcentaje.anio}`}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">{formatMoneda(r.comisionPagada)}</TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right tabular-nums",
+                        r.diferencia !== null && Math.abs(r.diferencia) > TOLERANCIA_MXN ? "text-warning" : "text-muted-foreground"
+                      )}
+                    >
+                      {r.diferencia === null ? "—" : `${r.diferencia > 0 ? "+" : ""}${formatMoneda(r.diferencia)}`}
+                    </TableCell>
+                    <TableCell className="pr-5">
+                      <Badge variant="outline" className={cn("gap-1", c.clase)}>
+                        <c.icono className="size-3" /> {c.label}
+                      </Badge>
+                      {r.detalle && <p className="mt-1 max-w-[220px] text-[11px] text-muted-foreground">{r.detalle}</p>}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {visibles.length === 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                    No hay renglones con este estatus.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          <CardFooter className="flex flex-wrap items-center gap-3 border-t px-5 py-4 [.border-t]:pt-4">
+            <div className="mr-auto text-sm" aria-live="polite">
+              {aplicados !== null ? (
+                <span className="flex items-center gap-1.5 text-success">
+                  <CheckCircle2 className="size-4" /> {aplicados} {aplicados === 1 ? "recibo conciliado" : "recibos conciliados"}.
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Solo se concilian los renglones en verde; diferencias y no encontrados no se modifican.
+                </span>
+              )}
+            </div>
+            <Button onClick={() => setConfirmar(true)} disabled={analisis.resumen.conciliado === 0 || aplicando}>
+              <CheckCircle2 /> Aplicar Conciliación ({analisis.resumen.conciliado})
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
+
+      <Dialog open={confirmar} onOpenChange={(v) => !aplicando && setConfirmar(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Aplicar la conciliación?</DialogTitle>
+            <DialogDescription>
+              Se marcarán como <strong>CONCILIADOS</strong> {analisis?.resumen.conciliado ?? 0} recibos de{" "}
+              {nombreAseguradora} y se guardará la comisión pagada de cada uno. Las diferencias, los no
+              encontrados y los renglones por revisar no se modifican.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost" disabled={aplicando}>
+                Cancelar
+              </Button>
+            </DialogClose>
+            <Button onClick={aplicar} disabled={aplicando}>
+              {aplicando ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+              {aplicando ? "Aplicando…" : "Aplicar conciliación"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SelectorColumna({
+  label,
+  valor,
+  opciones,
+  onChange,
+}: {
+  label: string;
+  valor: string;
+  opciones: Opcion[];
+  onChange: (v: string) => void;
+}) {
+  const id = React.useId();
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-xs">
+        {label}
+      </Label>
+      <Select value={valor} onValueChange={onChange}>
+        <SelectTrigger id={id} className="w-full bg-card">
+          <SelectValue placeholder="Selecciona…" />
+        </SelectTrigger>
+        <SelectContent>
+          {opciones.map((o) => (
+            <SelectItem key={o.value} value={o.value}>
+              {o.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function VistaPrevia({ filas, encabezado, mapeo }: { filas: Celda[][]; encabezado: number; mapeo: Mapeo }) {
+  const columnas = filas[encabezado] ?? [];
+  const datos = filas.slice(encabezado + 1, encabezado + 6);
+  const marcadas = new Set([mapeo.poliza, mapeo.comision, mapeo.recibo].filter((c): c is number => c !== null));
+  return (
+    <div className="overflow-x-auto rounded-md border">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b bg-muted/40">
+            {columnas.map((c, i) => (
+              <th
+                key={i}
+                className={cn(
+                  "px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground",
+                  marcadas.has(i) && "text-primary"
+                )}
+              >
+                {texto(c) || `Columna ${i + 1}`}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="tabular-nums">
+          {datos.map((f, i) => (
+            <tr key={i} className="border-b last:border-0">
+              {columnas.map((_, j) => (
+                <td key={j} className={cn("px-3 py-1.5 whitespace-nowrap", marcadas.has(j) && "bg-primary/5")}>
+                  {texto(f[j])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
+        Vista previa: primeros {datos.length} renglones. En dorado, las columnas que se usan en el cruce.
+      </p>
+    </div>
+  );
+}
+
+function ZonaArchivo({
+  onArchivo,
+  leyendo,
+  nombre,
+}: {
+  onArchivo: (f: File) => void;
+  leyendo: boolean;
+  nombre?: string;
+}) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const [arrastrando, setArrastrando] = React.useState(false);
+  return (
+    <div className="space-y-2">
+      <span className="text-sm font-medium">Archivo</span>
+      <button
+        type="button"
+        disabled={leyendo}
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setArrastrando(true);
+        }}
+        onDragLeave={() => setArrastrando(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setArrastrando(false);
+          const f = e.dataTransfer.files[0];
+          if (f) onArchivo(f);
+        }}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg border border-dashed bg-background/60 px-4 py-4 text-left transition-colors outline-none",
+          "hover:border-primary/60 hover:bg-primary/[0.03] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40",
+          arrastrando && "border-primary bg-primary/[0.06]"
+        )}
+      >
+        {leyendo ? (
+          <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
+        ) : nombre ? (
+          <FileSpreadsheet className="size-5 shrink-0 text-primary" />
+        ) : (
+          <UploadCloud className="size-5 shrink-0 text-muted-foreground" />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-medium">
+            {leyendo ? "Leyendo archivo…" : nombre ?? (arrastrando ? "Suelta el archivo aquí" : "Arrastra el estado de cuenta o haz clic para seleccionar")}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {nombre ? "Haz clic para cambiar el archivo" : "CSV, XLSX o XLS · máximo 10 MB"}
+          </span>
+        </span>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="sr-only"
+        tabIndex={-1}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onArchivo(f);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}

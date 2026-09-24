@@ -144,6 +144,7 @@ const iconosRamo: Record<Ramo, LucideIcon> = {
 const CAMPOS_POLIZA = [
   "aseguradora",
   "formaPago",
+  "comisionPersonalizadaPct",
   "numeroImpreso",
   "polizaVigor",
   "vigenciaInicio",

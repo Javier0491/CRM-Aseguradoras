@@ -196,7 +196,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           <Card className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Últimos Recibos Conciliados</CardTitle>
-              <CardDescription>Recibos con vencimiento en el periodo ya conciliados.</CardDescription>
+              <CardDescription>Recibos conciliados en el periodo contra estados de cuenta.</CardDescription>
               <CardAction>
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/conciliacion">Ver conciliación</Link>
@@ -218,8 +218,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                     <TableHead>Cliente</TableHead>
                     <TableHead>Aseguradora</TableHead>
                     <TableHead>Ramo</TableHead>
-                    <TableHead>Vencimiento</TableHead>
-                    <TableHead className="pr-5 text-right">Monto</TableHead>
+                    <TableHead>Conciliado</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead className="pr-5 text-right">Comisión</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -240,9 +241,12 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                       <TableCell>
                         <RamoBadge ramo={r.poliza.ramo} />
                       </TableCell>
-                      <TableCell className="tabular-nums">{formatFecha(r.fecha_vencimiento)}</TableCell>
-                      <TableCell className="pr-5 text-right font-medium tabular-nums">
-                        {formatMoneda(Number(r.monto))}
+                      <TableCell className="tabular-nums">
+                        {r.conciliado_at ? formatFecha(r.conciliado_at) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{formatMoneda(Number(r.monto))}</TableCell>
+                      <TableCell className="pr-5 text-right font-medium text-primary tabular-nums">
+                        {r.comision_pagada !== null ? formatMoneda(Number(r.comision_pagada)) : "—"}
                       </TableCell>
                     </TableRow>
                   ))}
