@@ -87,21 +87,23 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
       : null;
 
   // La póliza vigor no la calcula la IA: se deriva en código para el cruce de cobranza.
-  // 1) del número impreso; 2) si no hay número, de la referencia de pago.
-  if (generales.numeroImpreso) {
-    generales.numeroImpreso = generales.numeroImpreso.toUpperCase();
-    generales.polizaVigor = extraerPolizaVigor(generales.numeroImpreso);
-  } else if (referenciaPago) {
-    const vigor = extraerPolizaVigorDeReferencia(referenciaPago);
-    if (vigor) {
-      generales.polizaVigor = vigor;
+  // Una referencia de pago con el formato esperado SIEMPRE manda, aunque la IA haya
+  // leído un número de póliza (suele tomar cualquier número de la carátula). Solo sin
+  // referencia válida se deriva del número impreso.
+  if (generales.numeroImpreso) generales.numeroImpreso = generales.numeroImpreso.toUpperCase();
+  const vigorReferencia = referenciaPago ? extraerPolizaVigorDeReferencia(referenciaPago) : null;
+
+  if (vigorReferencia) {
+    generales.polizaVigor = vigorReferencia;
+    advertencias.push(
+      `Póliza vigor ${vigorReferencia} calculada de la referencia de pago ${referenciaPago}; verifícala.`
+    );
+  } else {
+    if (generales.numeroImpreso) generales.polizaVigor = extraerPolizaVigor(generales.numeroImpreso);
+    if (referenciaPago) {
       advertencias.push(
-        `Póliza vigor ${vigor} calculada de la referencia de pago ${referenciaPago}; verifícala. ` +
-          "Captura el número de póliza manualmente."
-      );
-    } else {
-      advertencias.push(
-        `La referencia de pago ${referenciaPago} no tiene el formato esperado; captura la póliza vigor manualmente.`
+        `La referencia de pago ${referenciaPago} no tiene el formato esperado (letra "I" seguida de ` +
+          "dígitos); la póliza vigor no se calculó con ella."
       );
     }
   }
