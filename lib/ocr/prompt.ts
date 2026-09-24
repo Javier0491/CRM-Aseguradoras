@@ -13,8 +13,18 @@ de Gastos Médicos Mayores Colectivo, que complementa a la carátula porque trae
   resumen claro de las reglas del plan: Suma Asegurada, Deducible, Coaseguro (y su tope) y las
   Coberturas principales. Si hay varios subgrupos o categorías (p. ej. directivos y empleados),
   usa una línea por subgrupo con sus reglas. Usa solo lo que está impreso; no inventes montos.
-- Llena también los campos de condiciones del plan (sumaAsegurada, deducible, coaseguro,
-  topeCoaseguro, nivelHospitalario) con los valores del subgrupo principal, si aparecen.
+- ADEMÁS del resumen, llena los campos del plan con los valores del Subgrupo 1 (o del subgrupo
+  principal si no están numerados). Cada monto va separado en cantidad y unidad:
+  · sumaAseguradaValor + sumaAseguradaUnidad: "2000 U.M.A.M." → 2000 y "UMAM";
+    "$5,000,000" → 5000000 y "MXN"; "USD 1,000,000" → 1000000 y "USD".
+  · deducibleValor + deducibleUnidad: "3 U.M.A.M." → 3 y "UMAM".
+  · coaseguro: "10%" → 10.
+  · topeCoaseguroValor + topeCoaseguroUnidad: igual que los montos anteriores, si hay tope.
+  · nivelHospitalario: solo si coincide con uno de los valores permitidos; si no, null.
+  U.M.A.M., UMAM, UMA mensual o "Unidades de Medida y Actualización mensuales" son "UMAM".
+- Coberturas adicionales según las reglas del subgrupo principal: maternidad, emergenciaExtranjero
+  y correccionVista son "Sí" si el subgrupo la incluye, "No" si la excluye expresamente y null si
+  no se menciona. otrasCoberturas: lista breve de las demás coberturas incluidas (ej. dental).
 - asegurados_lista debe ir vacío: los asegurados se manejan con un censo aparte.`;
 
 export function construirSystemPrompt(aseguradoras: readonly string[], contexto?: ContextoOcr) {
@@ -102,6 +112,8 @@ CAMPOS ESPECÍFICOS
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
 - condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma
   asegurada, deducible, coaseguro y coberturas principales), solo con lo impreso.
+- Campos "…Valor" y "…Unidad" (GMM Colectivo): la cantidad como número y su unidad por separado
+  (MXN, UMAM o USD), tal como vienen en el subgrupo principal.
 
 ADVERTENCIAS
 Lista breve en español de datos que el usuario debe revisar: campos ilegibles, valores ambiguos,

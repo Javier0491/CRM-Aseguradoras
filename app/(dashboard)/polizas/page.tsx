@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FilePlus2, FileText, Paperclip, Receipt, Wallet } from "lucide-react";
+import { CalendarClock, FilePlus2, FileText, Paperclip, Receipt, SearchX, Wallet } from "lucide-react";
 
+import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
 import {
   AseguradoraTag,
+  AseguradosResumen,
+  EstadoVigenciaIndicador,
   estadoRecibo,
   formaPagoLabel,
   ramoLabel,
+  RamoBadge,
   Vencimiento,
 } from "@/components/polizas/poliza-ui";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +26,13 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
-import { getPolizasListado, getRecibosListado, LIMITE_LISTADO } from "@/lib/polizas/queries";
+import type { Ramo } from "@/lib/generated/prisma/client";
+import {
+  DIAS_POR_VENCER,
+  getPolizasListado,
+  getRecibosListado,
+  LIMITE_LISTADO,
+} from "@/lib/polizas/queries";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -58,15 +68,31 @@ function NotaLimite({ mostrados, total }: { mostrados: number; total: number }) 
   );
 }
 
-export default async function PolizasPage() {
-  const [{ polizas, total: totalPolizas }, { recibos, total: totalRecibos, pendientes }] =
-    await Promise.all([getPolizasListado(), getRecibosListado()]);
+const esRamo = (v: unknown): v is Ramo => typeof v === "string" && v in ramoLabel;
+const opcionesRamo = (Object.keys(ramoLabel) as Ramo[]).map((r) => ({ value: r, label: ramoLabel[r] }));
+
+export default async function PolizasPage({ searchParams }: PageProps<"/polizas">) {
+  const params = await searchParams;
+  const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
+  const ramo = esRamo(params.ramo) ? params.ramo : undefined;
+  const filtrando = q.trim() !== "" || ramo !== undefined;
+
+  const [
+    { polizas, total: totalPolizas, totalGeneral, porVencer },
+    { recibos, total: totalRecibos, pendientes },
+  ] = await Promise.all([getPolizasListado({ q, ramo }), getRecibosListado()]);
   const hoy = hoyISO();
 
   const resumen = [
-    { label: "Pólizas registradas", valor: formatNumero(totalPolizas), icon: FileText },
-    { label: "Recibos pendientes", valor: formatNumero(pendientes.cantidad), icon: Receipt },
-    { label: "Monto por cobrar", valor: formatMoneda(pendientes.monto), icon: Wallet },
+    { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, clase: "text-primary" },
+    {
+      label: `Por vencer · ${DIAS_POR_VENCER} días`,
+      valor: formatNumero(porVencer),
+      icon: CalendarClock,
+      clase: porVencer > 0 ? "text-warning" : "text-primary",
+    },
+    { label: "Recibos pendientes", valor: formatNumero(pendientes.cantidad), icon: Receipt, clase: "text-primary" },
+    { label: "Monto por cobrar", valor: formatMoneda(pendientes.monto), icon: Wallet, clase: "text-primary" },
   ];
 
   return (
@@ -85,10 +111,10 @@ export default async function PolizasPage() {
         </Button>
       </div>
 
-      <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-3">
+      <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {resumen.map((r) => (
           <Card key={r.label} className="flex-row items-center gap-4 px-5 py-4">
-            <div className="flex size-9 items-center justify-center rounded-md border bg-background text-primary">
+            <div className={cn("flex size-9 items-center justify-center rounded-md border bg-background", r.clase)}>
               <r.icon className="size-4" />
             </div>
             <div>
@@ -99,77 +125,103 @@ export default async function PolizasPage() {
         ))}
       </section>
 
-      {totalPolizas === 0 ? (
+      {totalGeneral === 0 ? (
         <SinDatos />
       ) : (
         <Tabs defaultValue="polizas" className="gap-4">
           <TabsList>
-            <TabsTrigger value="polizas">Pólizas · {formatNumero(totalPolizas)}</TabsTrigger>
+            <TabsTrigger value="polizas">
+              Pólizas · {formatNumero(filtrando ? totalPolizas : totalGeneral)}
+            </TabsTrigger>
             <TabsTrigger value="recibos">Recibos · {formatNumero(totalRecibos)}</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="polizas">
+          <TabsContent value="polizas" className="space-y-4">
+            <FiltrosPolizas q={q} ramo={ramo ?? ""} ramos={opcionesRamo} />
             <Card className="gap-0 py-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="pl-5">Póliza</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Aseguradora</TableHead>
-                    <TableHead>Ramo</TableHead>
-                    <TableHead>Vigencia</TableHead>
-                    <TableHead className="text-right">Prima total</TableHead>
-                    <TableHead>Forma de pago</TableHead>
-                    <TableHead className="pr-5 text-right">Recibos pagados</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {polizas.map((p) => {
-                    const cobrados = p.recibos.filter((r) => r.estado !== "PENDIENTE").length;
-                    return (
-                      <TableRow key={p.id}>
-                        <TableCell className="pl-5">
-                          <Link
-                            href={`/polizas/${p.id}`}
-                            className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary hover:underline"
-                          >
-                            {p.numeroImpreso}
-                            {p.caratula_path && (
-                              <FileText className="size-3 text-primary" aria-label="Con carátula PDF" />
+              {polizas.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
+                  <SearchX className="size-7 text-muted-foreground" />
+                  <p className="font-medium">Ninguna póliza coincide con los filtros</p>
+                  <p className="text-sm text-muted-foreground">
+                    Prueba con otro número, nombre o RFC, o cambia el ramo.
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-5">Póliza</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Ramo</TableHead>
+                      <TableHead>Asegurados</TableHead>
+                      <TableHead>Aseguradora</TableHead>
+                      <TableHead>Estado</TableHead>
+                      <TableHead className="text-right">Prima total</TableHead>
+                      <TableHead className="pr-5 text-right">Recibos pagados</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {polizas.map((p) => {
+                      const cobrados = p.recibos.filter((r) => r.estado !== "PENDIENTE").length;
+                      return (
+                        <TableRow key={p.id}>
+                          <TableCell className="pl-5">
+                            <Link
+                              href={`/polizas/${p.id}`}
+                              className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary hover:underline"
+                            >
+                              {p.numeroImpreso}
+                              {(p.caratula_path || p.negociacion_path) && (
+                                <FileText className="size-3 text-primary" aria-label="Con documentos PDF" />
+                              )}
+                              {p.expediente_path && (
+                                <Paperclip className="size-3 text-primary" aria-label="Con expediente ZIP" />
+                              )}
+                            </Link>
+                            {p.polizaVigor && (
+                              <p className="font-mono text-[11px] text-muted-foreground">
+                                vigor: {p.polizaVigor}
+                              </p>
                             )}
-                            {p.expediente_path && (
-                              <Paperclip className="size-3 text-primary" aria-label="Con expediente ZIP" />
-                            )}
-                          </Link>
-                          {p.polizaVigor && (
-                            <p className="font-mono text-[11px] text-muted-foreground">
-                              vigor: {p.polizaVigor}
+                          </TableCell>
+                          <TableCell className="max-w-[220px]">
+                            <p className="truncate font-medium">{p.cliente.nombre}</p>
+                            <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
+                          </TableCell>
+                          <TableCell>
+                            <RamoBadge ramo={p.ramo} />
+                          </TableCell>
+                          <TableCell className="max-w-[200px]">
+                            <AseguradosResumen
+                              ramo={p.ramo}
+                              contratante={p.cliente.nombre}
+                              titular={p.asegurados[0]?.nombre ?? null}
+                              total={p._count.asegurados}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+                          </TableCell>
+                          <TableCell>
+                            <EstadoVigenciaIndicador fin={p.vigencia_fin} hoy={hoy} diasAviso={DIAS_POR_VENCER} />
+                            <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                              {formatFecha(p.vigencia_inicio)} – {formatFecha(p.vigencia_fin)}
                             </p>
-                          )}
-                        </TableCell>
-                        <TableCell className="max-w-[240px]">
-                          <p className="truncate font-medium">{p.cliente.nombre}</p>
-                          <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
-                        </TableCell>
-                        <TableCell>
-                          <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{ramoLabel[p.ramo]}</TableCell>
-                        <TableCell className="text-xs tabular-nums">
-                          {formatFecha(p.vigencia_inicio)} – {formatFecha(p.vigencia_fin)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          {formatMoneda(Number(p.prima_total))}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">{formaPagoLabel[p.forma_pago]}</TableCell>
-                        <TableCell className="pr-5 text-right tabular-nums">
-                          {cobrados}/{p.recibos.length}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <p className="font-medium tabular-nums">{formatMoneda(Number(p.prima_total))}</p>
+                            <p className="text-[11px] text-muted-foreground">{formaPagoLabel[p.forma_pago]}</p>
+                          </TableCell>
+                          <TableCell className="pr-5 text-right tabular-nums">
+                            {cobrados}/{p.recibos.length}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
               <NotaLimite mostrados={polizas.length} total={totalPolizas} />
             </Card>
           </TabsContent>

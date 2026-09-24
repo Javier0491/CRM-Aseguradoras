@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
 import { LoginForm } from "@/components/auth/login-form";
+import { getCurrentUser } from "@/lib/auth/dal";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 
 export const metadata: Metadata = {
@@ -9,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  // Misma verificación que el layout del CRM (getUser), para no redirigir en ciclo.
+  if (await getCurrentUser()) redirect("/");
   const { next } = await searchParams;
 
   return (

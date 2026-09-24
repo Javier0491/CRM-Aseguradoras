@@ -27,9 +27,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(login);
   }
 
-  if (autenticado && esPublica(pathname)) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
+  // Quien ya tiene sesión y abre /login lo decide la propia página con getUser(). Aquí no:
+  // getClaims() solo valida la firma del token, que sigue siendo válido un rato después de
+  // que la sesión se revoca en Supabase; redirigir desde aquí provocaba un ciclo
+  // /login → / → /login cuando el layout (getUser) ya no reconocía la sesión.
 
   return response;
 }

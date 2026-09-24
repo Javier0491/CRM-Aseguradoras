@@ -127,6 +127,30 @@ const CONDICIONES_GMM: CampoDef[] = [
 const COBERTURAS_GMM: CampoDef[] = [
   { name: "maternidad", label: "Cobertura de maternidad", type: "select", options: ["Sí", "No"] },
   { name: "emergenciaExtranjero", label: "Emergencia en el extranjero", type: "select", options: ["Sí", "No"] },
+  { name: "correccionVista", label: "Corrección de la vista", type: "select", options: ["Sí", "No"] },
+  { name: "otrasCoberturas", label: "Otras coberturas", type: "text", wide: true, placeholder: "Ej. Dental, ayuda por maternidad, reconocimiento de antigüedad" },
+];
+
+/**
+ * Unidades en que los formatos de negociación de GMM Colectivo expresan montos
+ * (p. ej. "2000 U.M.A.M." = 2000 Unidades de Medida y Actualización mensuales).
+ */
+const UNIDADES_MONTO: Opcion[] = [
+  { value: "MXN", label: "Pesos (MXN)" },
+  { value: "UMAM", label: "UMAM" },
+  { value: "USD", label: "Dólares (USD)" },
+];
+
+// GMM Colectivo: cada monto es cantidad + unidad, porque suelen venir en UMAM y no en pesos.
+const CONDICIONES_GMM_COLECTIVO: CampoDef[] = [
+  { name: "sumaAseguradaValor", label: "Suma asegurada", type: "number", required: true, placeholder: "Ej. 2000", hint: "Cantidad en la unidad indicada (2000 si es 2000 UMAM)." },
+  { name: "sumaAseguradaUnidad", label: "Unidad de la suma asegurada", type: "select", required: true, options: UNIDADES_MONTO },
+  { name: "deducibleValor", label: "Deducible", type: "number", required: true, placeholder: "Ej. 3" },
+  { name: "deducibleUnidad", label: "Unidad del deducible", type: "select", required: true, options: UNIDADES_MONTO },
+  { name: "coaseguro", label: "Coaseguro", type: "percent", required: true, placeholder: "Ej. 10" },
+  { name: "topeCoaseguroValor", label: "Tope de coaseguro", type: "number", placeholder: "Ej. 30" },
+  { name: "topeCoaseguroUnidad", label: "Unidad del tope de coaseguro", type: "select", options: UNIDADES_MONTO },
+  { name: "nivelHospitalario", label: "Nivel hospitalario", type: "select", required: true, options: ["Esencial", "Estándar", "Plus", "Premium"] },
 ];
 
 export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
@@ -162,7 +186,7 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
     { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
   ],
   gmm_colectivo: [
-    { titulo: "Condiciones del plan", campos: CONDICIONES_GMM },
+    { titulo: "Condiciones del plan · subgrupo principal", campos: CONDICIONES_GMM_COLECTIVO },
     { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
     {
       titulo: "Subgrupo",
