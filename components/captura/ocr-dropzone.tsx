@@ -55,10 +55,13 @@ function validarArchivo(archivo: File): string | null {
 export function OcrDropzone({
   onAplicar,
   onProcesando,
+  onLimpiar,
 }: {
   /** Se invoca en cuanto termina la extracción para prellenar el formulario. */
   onAplicar: (datos: ExtraccionPoliza, archivo: File) => void;
   onProcesando?: (procesando: boolean) => void;
+  /** El usuario descartó el documento con "Limpiar". */
+  onLimpiar?: () => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -141,6 +144,7 @@ export function OcrDropzone({
     actualizarPreview(null);
     setEstado({ status: "idle" });
     if (inputRef.current) inputRef.current.value = "";
+    onLimpiar?.();
   }
 
   function onDrop(e: React.DragEvent) {

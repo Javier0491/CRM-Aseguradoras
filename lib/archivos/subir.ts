@@ -14,7 +14,11 @@ export async function subirArchivo(
   const path = `${polizaId}/${crypto.randomUUID()}.${def.extension}`;
   const storage = createSupabaseBrowserClient().storage.from(ARCHIVOS_BUCKET);
 
-  const { error } = await storage.upload(path, archivo, { contentType: def.mime, upsert: false });
+  // Con un File, supabase-js envía el tipo del propio archivo e ignora `contentType`.
+  // Windows etiqueta los ZIP como "application/x-zip-compressed", que el bucket rechaza,
+  // así que se reetiqueta con el tipo canónico (el contenido ya se validó por su firma).
+  const cuerpo = new Blob([archivo], { type: def.mime });
+  const { error } = await storage.upload(path, cuerpo, { contentType: def.mime, upsert: false });
   if (error) {
     console.error("[subirArchivo]", error);
     return { ok: false, error: "No se pudo subir el archivo a Storage." };

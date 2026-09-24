@@ -71,8 +71,6 @@ export type PolizaFormInicial = {
   generales?: Valores;
   /** Campos específicos del ramo inicial. */
   especificos?: Valores;
-  /** PDF que se leyó con el OCR; se conserva como carátula de la póliza. */
-  caratula?: File;
 };
 
 type Exito = Extract<GuardarPolizaResultado, { ok: true }> & {
@@ -85,8 +83,7 @@ type FormValues = {
   generales: Valores;
   // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
   especificos: Record<Ramo, Valores>;
-  // Archivos que se suben a Storage después de guardar la póliza.
-  caratula: File | null;
+  /** Expediente de respaldo; se sube a Storage después de guardar la póliza. */
   expediente: File | null;
 };
 
@@ -112,19 +109,21 @@ const CAMPOS_POLIZA = [
 ];
 const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
 
-const AYUDA_ARCHIVO: Record<TipoArchivo, string> = {
-  caratula: "Opcional. Se toma del PDF leído con IA; puedes cambiarlo.",
-  expediente: "Opcional. Solo se guarda como respaldo; no se analiza con IA.",
-};
+// Todos los campos con "" explícito: `reset()` no vacía un campo cuyo valor nuevo es
+// undefined (conserva el anterior), así que "Limpiar" necesita cada clave presente.
+const vacios = (campos: CampoDef[]): Valores => Object.fromEntries(campos.map((c) => [c.name, ""]));
 
 function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
-  const especificos = Object.fromEntries(RAMOS.map((r) => [r, {}])) as Record<Ramo, Valores>;
-  if (inicial?.ramo && inicial.especificos) especificos[inicial.ramo] = { ...inicial.especificos };
+  const especificos = Object.fromEntries(
+    RAMOS.map((r) => [r, vacios(seccionesPorRamo[r].flatMap((s) => s.campos))])
+  ) as Record<Ramo, Valores>;
+  if (inicial?.ramo && inicial.especificos) {
+    especificos[inicial.ramo] = { ...especificos[inicial.ramo], ...inicial.especificos };
+  }
   return {
     ramo: inicial?.ramo ?? "autos",
-    generales: { ...inicial?.generales },
+    generales: { ...vacios(camposGenerales), ...inicial?.generales },
     especificos,
-    caratula: inicial?.caratula ?? null,
     expediente: null,
   };
 }
@@ -140,11 +139,20 @@ export function PolizaForm({
   inicial,
   aseguradoras,
   extrayendo = false,
+  caratula = null,
+  onReiniciar,
 }: {
   inicial?: PolizaFormInicial;
   aseguradoras: Opcion[];
   /** El OCR está leyendo un documento; el formulario se reemplaza por un skeleton. */
   extrayendo?: boolean;
+  /**
+   * PDF subido en el panel de Captura inteligente. No tiene campo propio: se guarda
+   * como carátula de la póliza al pulsar "Guardar".
+   */
+  caratula?: File | null;
+  /** "Limpiar" o "Capturar otra": el contenedor también debe descartar el documento leído. */
+  onReiniciar?: () => void;
 }) {
   const [errorGeneral, setErrorGeneral] = React.useState<string | null>(null);
   const [exito, setExito] = React.useState<Exito | null>(null);
@@ -161,23 +169,16 @@ export function PolizaForm({
         values.especificos[values.ramo],
         aseguradoras.map((a) => a.value)
       );
-      const erroresArchivo: Partial<Record<TipoArchivo, string>> = {};
-      for (const tipo of TIPOS_ARCHIVO) {
-        const archivo = values[tipo];
-        const error = archivo ? await validarArchivo(tipo, archivo) : null;
-        if (error) erroresArchivo[tipo] = error;
-      }
-      if (Object.keys(errores).length === 0 && Object.keys(erroresArchivo).length === 0) {
-        return { values, errors: {} };
-      }
+      const errorExpediente = values.expediente
+        ? await validarArchivo("expediente", values.expediente)
+        : null;
+      if (Object.keys(errores).length === 0 && !errorExpediente) return { values, errors: {} };
 
       const errors: Record<string, unknown> & {
         generales: Record<string, unknown>;
         especificos: Record<string, unknown>;
       } = { generales: {}, especificos: {} };
-      for (const [tipo, message] of Object.entries(erroresArchivo)) {
-        errors[tipo] = { type: "validate", message };
-      }
+      if (errorExpediente) errors.expediente = { type: "validate", message: errorExpediente };
       const porRamo: Record<string, unknown> = {};
       for (const [nombre, message] of Object.entries(errores)) {
         const destino = NOMBRES_GENERALES.has(nombre) ? errors.generales : porRamo;
@@ -227,10 +228,17 @@ export function PolizaForm({
     reset(valoresIniciales());
     setVigorManual(false);
     limpiarAvisos();
+    onReiniciar?.();
   }
 
   const onSubmit = handleSubmit(async (values) => {
     limpiarAvisos();
+    const errorCaratula = caratula ? await validarArchivo("caratula", caratula) : null;
+    if (errorCaratula) {
+      setErrorGeneral(`Carátula: ${errorCaratula}`);
+      return;
+    }
+
     const res = await guardarPoliza({
       ramo: values.ramo,
       generales: values.generales,
@@ -239,8 +247,9 @@ export function PolizaForm({
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
       const archivos: Exito["archivos"] = {};
+      const porTipo: Record<TipoArchivo, File | null> = { caratula, expediente: values.expediente };
       for (const tipo of TIPOS_ARCHIVO) {
-        const archivo = values[tipo];
+        const archivo = porTipo[tipo];
         if (!archivo) continue;
         setSubiendo(tipo);
         archivos[tipo] = await subirArchivo(res.poliza.id, tipo, archivo);
@@ -259,7 +268,7 @@ export function PolizaForm({
   const totalErrores =
     Object.keys(errors.generales ?? {}).length +
     Object.keys(errors.especificos?.[ramo] ?? {}).length +
-    TIPOS_ARCHIVO.filter((t) => errors[t]).length;
+    (errors.expediente ? 1 : 0);
 
   function renderGeneral(campo: CampoDef) {
     const esImpreso = campo.name === "numeroImpreso";
@@ -399,39 +408,37 @@ export function PolizaForm({
               ))}
 
               <FormSection titulo="Documentos">
-                {TIPOS_ARCHIVO.map((tipo) => (
-                  <Controller
-                    key={tipo}
-                    name={tipo}
-                    control={control}
-                    render={({ field, fieldState }) => (
-                      <div className="space-y-2">
-                        <Label htmlFor={`campo-${tipo}`} className="text-xs">
-                          {ARCHIVOS[tipo].etiqueta}
-                        </Label>
-                        <ArchivoInput
-                          tipo={tipo}
-                          id={`campo-${tipo}`}
-                          value={field.value}
-                          onChange={(archivo) => {
-                            field.onChange(archivo);
-                            limpiarAvisos();
-                          }}
-                          onBlur={field.onBlur}
-                          disabled={bloqueado}
-                          invalid={fieldState.invalid}
-                          describedBy={`campo-${tipo}-hint`}
-                        />
-                        <p
-                          id={`campo-${tipo}-hint`}
-                          className={cn("text-xs", fieldState.error ? "text-destructive" : "text-muted-foreground")}
-                        >
-                          {fieldState.error?.message ?? AYUDA_ARCHIVO[tipo]}
-                        </p>
-                      </div>
-                    )}
-                  />
-                ))}
+                <Controller
+                  name="expediente"
+                  control={control}
+                  render={({ field, fieldState }) => (
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="campo-expediente" className="text-xs">
+                        {ARCHIVOS.expediente.etiqueta}
+                      </Label>
+                      <ArchivoInput
+                        tipo="expediente"
+                        id="campo-expediente"
+                        value={field.value}
+                        onChange={(archivo) => {
+                          field.onChange(archivo);
+                          limpiarAvisos();
+                        }}
+                        onBlur={field.onBlur}
+                        disabled={bloqueado}
+                        invalid={fieldState.invalid}
+                        describedBy="campo-expediente-hint"
+                      />
+                      <p
+                        id="campo-expediente-hint"
+                        className={cn("text-xs", fieldState.error ? "text-destructive" : "text-muted-foreground")}
+                      >
+                        {fieldState.error?.message ??
+                          "Opcional. Solo se guarda como respaldo; no se analiza con IA."}
+                      </p>
+                    </div>
+                  )}
+                />
               </FormSection>
             </CardContent>
           </fieldset>
