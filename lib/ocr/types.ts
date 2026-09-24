@@ -2,6 +2,13 @@ import type { AseguradoValores } from "@/lib/polizas/asegurados";
 import type { Ramo } from "@/lib/polizas/ramos";
 import type { Valores } from "@/lib/polizas/validacion";
 
+/**
+ * Contexto opcional de la lectura. "gmm_colectivo": el documento es un formato de
+ * negociación u orden de emisión de GMM Colectivo que complementa la carátula.
+ */
+export const CONTEXTOS_OCR = ["gmm_colectivo"] as const;
+export type ContextoOcr = (typeof CONTEXTOS_OCR)[number];
+
 export const OCR_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 
 export const OCR_TIPOS_PERMITIDOS = [

@@ -36,7 +36,26 @@ export const FORMAS_PAGO = [
 ] as const;
 export type FormaPago = (typeof FORMAS_PAGO)[number]["value"];
 
-export type CampoTipo = "text" | "number" | "currency" | "percent" | "date" | "select" | "email" | "tel";
+export type CampoTipo =
+  | "text"
+  | "textarea"
+  | "number"
+  | "currency"
+  | "percent"
+  | "date"
+  | "select"
+  | "email"
+  | "tel";
+
+/** Longitud máxima de un campo de texto largo (textarea); el resto admite 500. */
+export const MAX_TEXTO_LARGO = 4000;
+export const maxLongitud = (campo: CampoDef) => (campo.type === "textarea" ? MAX_TEXTO_LARGO : 500);
+
+/**
+ * Ramos cuyos asegurados se manejan con un censo poblacional externo:
+ * no se capturan nombre por nombre.
+ */
+export const RAMOS_CON_CENSO: readonly Ramo[] = ["gmm_colectivo"];
 
 export type Opcion = { value: string; label: string };
 
@@ -129,6 +148,19 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
   gmm_colectivo: [
     { titulo: "Condiciones del plan", campos: CONDICIONES_GMM },
     { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
+    {
+      titulo: "Subgrupo",
+      campos: [
+        {
+          name: "condicionesSubgrupo",
+          label: "Condiciones del Subgrupo / Reglas",
+          type: "textarea",
+          wide: true,
+          placeholder: "Suma asegurada, deducible, coaseguro y coberturas principales de cada subgrupo",
+          hint: "Resumen de las reglas del plan; la IA lo llena desde el formato de negociación u orden de emisión.",
+        },
+      ],
+    },
   ],
   vida_individual: [
     {

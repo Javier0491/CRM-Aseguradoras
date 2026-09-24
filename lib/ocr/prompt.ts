@@ -1,4 +1,23 @@
-export function construirSystemPrompt(aseguradoras: readonly string[]) {
+import type { ContextoOcr } from "@/lib/ocr/types";
+
+// Instrucciones adicionales cuando el documento es de negociación de GMM Colectivo.
+const CONTEXTO_GMM_COLECTIVO = `
+
+CONTEXTO: DOCUMENTO DE NEGOCIACIÓN DE GMM COLECTIVO
+Este documento NO es una carátula: es un Formato de Negociación o una Orden de Emisión de una póliza
+de Gastos Médicos Mayores Colectivo, que complementa a la carátula porque trae el detalle del plan.
+- El ramo es "GMM Colectivo".
+- Busca los datos de la EMPRESA contratante (razón social en "cliente" y su RFC en "rfcCliente"),
+  el número de póliza, la aseguradora y las fechas de vigencia, si aparecen.
+- condicionesSubgrupo: aquí SÍ debes resumir (es la única excepción a "no resumes"). Escribe un
+  resumen claro de las reglas del plan: Suma Asegurada, Deducible, Coaseguro (y su tope) y las
+  Coberturas principales. Si hay varios subgrupos o categorías (p. ej. directivos y empleados),
+  usa una línea por subgrupo con sus reglas. Usa solo lo que está impreso; no inventes montos.
+- Llena también los campos de condiciones del plan (sumaAsegurada, deducible, coaseguro,
+  topeCoaseguro, nivelHospitalario) con los valores del subgrupo principal, si aparecen.
+- asegurados_lista debe ir vacío: los asegurados se manejan con un censo aparte.`;
+
+export function construirSystemPrompt(aseguradoras: readonly string[], contexto?: ContextoOcr) {
   return `Eres un motor de extracción de datos para PJ MAGNUS, una promotoría de seguros en México.
 Recibirás la carátula de una póliza de seguro (PDF o imagen). Tu única tarea es transcribir sus datos
 al esquema JSON indicado. No conversas, no resumes y no explicas.
@@ -64,6 +83,8 @@ las siguientes opciones: "Autos", "GMM Individual", "GMM Colectivo", "Vida Indiv
 - Otros: cualquier otro seguro, o cuando el documento no permita decidir con certeza.
 
 ASEGURADOS
+- En GMM Colectivo NO extraigas asegurados: devuelve asegurados_lista vacío (se manejan con un censo
+  poblacional aparte).
 - Si la póliza tiene una tabla o lista de asegurados (muy común en Gastos Médicos Mayores), extrae a
   cada persona en el arreglo asegurados_lista, en el orden en que aparecen.
 - Asigna correctamente a cada uno: Parentesco (Titular, Conyuge, Padre, Madre, Hijo, Otro), Edad,
@@ -79,8 +100,12 @@ CAMPOS ESPECÍFICOS
 - Para campos con valores permitidos, usa exactamente uno de ellos o null si ninguno coincide.
 - Montos y porcentajes como números (deducible 5% → 5; suma asegurada $1,500,000 → 1500000).
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
+- condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma
+  asegurada, deducible, coaseguro y coberturas principales), solo con lo impreso.
 
 ADVERTENCIAS
 Lista breve en español de datos que el usuario debe revisar: campos ilegibles, valores ambiguos,
-varias opciones posibles, montos que no cuadran o datos que parecen no corresponder.`;
+varias opciones posibles, montos que no cuadran o datos que parecen no corresponder.${
+    contexto === "gmm_colectivo" ? CONTEXTO_GMM_COLECTIVO : ""
+  }`;
 }

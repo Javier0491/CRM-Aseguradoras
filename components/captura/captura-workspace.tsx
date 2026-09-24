@@ -3,9 +3,13 @@
 import * as React from "react";
 
 import { OcrDropzone } from "@/components/captura/ocr-dropzone";
-import { PolizaForm, type PolizaFormInicial } from "@/components/captura/poliza-form";
+import {
+  PolizaForm,
+  type PolizaFormHandle,
+  type PolizaFormInicial,
+} from "@/components/captura/poliza-form";
 import type { ExtraccionPoliza } from "@/lib/ocr/types";
-import type { Opcion } from "@/lib/polizas/ramos";
+import type { Opcion, Ramo } from "@/lib/polizas/ramos";
 
 const normalizar = (s: string) =>
   s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
@@ -36,6 +40,10 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
   const [caratula, setCaratula] = React.useState<File | null>(null);
   // Cambiar `ronda` remonta el panel de captura para dejarlo vacío.
   const [ronda, setRonda] = React.useState(0);
+  // Ramo seleccionado en el formulario: GMM Colectivo habilita el segundo documento.
+  const [ramo, setRamo] = React.useState<Ramo>("autos");
+  const [leyendoComplemento, setLeyendoComplemento] = React.useState(false);
+  const formRef = React.useRef<PolizaFormHandle>(null);
 
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -56,16 +64,32 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
             }));
           }}
         />
+        {ramo === "gmm_colectivo" && (
+          <div className="mt-4">
+            <OcrDropzone
+              key={`complemento-${ronda}`}
+              contexto="gmm_colectivo"
+              titulo="Subir Formato de Negociación / Orden de Emisión (Opcional)"
+              descripcion="Complementa la carátula: la IA toma la empresa contratante, la póliza, las vigencias y resume las reglas del plan en Condiciones del Subgrupo."
+              onProcesando={setLeyendoComplemento}
+              // Se integra a lo ya capturado en lugar de reemplazar el formulario.
+              onAplicar={(datos) => formRef.current?.aplicarComplemento(aValoresIniciales(datos, aseguradoras))}
+            />
+          </div>
+        )}
       </div>
       <PolizaForm
         key={prellenado.version}
         inicial={prellenado.inicial}
         aseguradoras={aseguradoras}
-        extrayendo={extrayendo}
+        ref={formRef}
+        extrayendo={extrayendo || leyendoComplemento}
+        onRamoChange={setRamo}
         caratula={caratula}
         onReiniciar={() => {
           setCaratula(null);
           setExtrayendo(false);
+          setLeyendoComplemento(false);
           setRonda((r) => r + 1);
         }}
       />

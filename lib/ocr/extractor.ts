@@ -5,13 +5,13 @@ import OpenAI from "openai";
 import { normalizarExtraccion } from "@/lib/ocr/normalizar";
 import { construirSystemPrompt } from "@/lib/ocr/prompt";
 import { construirEsquemaExtraccion } from "@/lib/ocr/schema";
-import type { ExtraccionPoliza } from "@/lib/ocr/types";
+import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 
 /** Contrato de cualquier motor de extracción de carátulas. */
 export interface ExtractorPoliza {
   proveedor: string;
   modelo: string;
-  extraer(archivo: File, aseguradoras: readonly string[]): Promise<ExtraccionPoliza>;
+  extraer(archivo: File, aseguradoras: readonly string[], contexto?: ContextoOcr): Promise<ExtraccionPoliza>;
 }
 
 /** La extracción no está disponible por configuración (p. ej. falta la API key). */
@@ -28,7 +28,7 @@ function crearExtractorOpenAI(apiKey: string, modelo: string): ExtractorPoliza {
   return {
     proveedor: "openai",
     modelo,
-    async extraer(archivo, aseguradoras) {
+    async extraer(archivo, aseguradoras, contexto) {
       const base64 = Buffer.from(await archivo.arrayBuffer()).toString("base64");
       const dataUrl = `data:${archivo.type};base64,${base64}`;
 
@@ -43,12 +43,18 @@ function crearExtractorOpenAI(apiKey: string, modelo: string): ExtractorPoliza {
         max_output_tokens: 3000,
         // No conservar en OpenAI las carátulas (contienen datos personales).
         store: false,
-        instructions: construirSystemPrompt(aseguradoras),
+        instructions: construirSystemPrompt(aseguradoras, contexto),
         input: [
           {
             role: "user",
             content: [
-              { type: "input_text", text: "Extrae los datos de esta carátula de póliza." },
+              {
+                type: "input_text",
+                text:
+                  contexto === "gmm_colectivo"
+                    ? "Extrae los datos de este formato de negociación u orden de emisión de GMM Colectivo."
+                    : "Extrae los datos de esta carátula de póliza.",
+              },
               documento,
             ],
           },
@@ -78,7 +84,7 @@ function crearExtractorOpenAI(apiKey: string, modelo: string): ExtractorPoliza {
       } catch {
         throw new OcrRespuestaInvalidaError("El modelo devolvió un JSON inválido.");
       }
-      return normalizarExtraccion(json, aseguradoras);
+      return normalizarExtraccion(json, aseguradoras, contexto);
     },
   };
 }

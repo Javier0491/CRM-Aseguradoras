@@ -15,8 +15,10 @@ import {
   OcrRespuestaInvalidaError,
 } from "@/lib/ocr/extractor";
 import {
+  CONTEXTOS_OCR,
   OCR_MAX_BYTES,
   OCR_TIPOS_PERMITIDOS,
+  type ContextoOcr,
   type OcrRespuesta,
 } from "@/lib/ocr/types";
 
@@ -57,8 +59,8 @@ function errorDeExtraccion(e: unknown) {
 
 /**
  * POST /api/ocr
- * Recibe un `multipart/form-data` con el campo `file` (PDF o imagen) y
- * devuelve los datos de la carátula extraídos con IA.
+ * Recibe un `multipart/form-data` con el campo `file` (PDF o imagen) y, opcionalmente,
+ * `contexto` (ver CONTEXTOS_OCR). Devuelve los datos extraídos con IA.
  */
 export async function POST(request: Request) {
   if (!(await getCurrentUser())) return error("No autenticado.", 401);
@@ -83,6 +85,13 @@ export async function POST(request: Request) {
     return error("El archivo excede el límite de 10 MB.", 413);
   }
 
+  // Contexto opcional: p. ej. "gmm_colectivo" para un formato de negociación.
+  const contextoRaw = formData.get("contexto");
+  const contexto = contextoRaw === null || contextoRaw === "" ? undefined : contextoRaw;
+  if (contexto !== undefined && !(CONTEXTOS_OCR as readonly unknown[]).includes(contexto)) {
+    return error("Contexto de lectura no válido.", 400);
+  }
+
   try {
     const extractor = getExtractor();
     // La IA solo puede elegir entre las aseguradoras registradas.
@@ -90,7 +99,7 @@ export async function POST(request: Request) {
       await db.aseguradora.findMany({ select: { nombre: true }, orderBy: { nombre: "asc" } })
     ).map((a) => a.nombre);
 
-    const datos = await extractor.extraer(archivo, aseguradoras);
+    const datos = await extractor.extraer(archivo, aseguradoras, contexto as ContextoOcr | undefined);
     return Response.json({
       ok: true,
       archivo: { nombre: archivo.name, tipo: archivo.type, bytes: archivo.size },

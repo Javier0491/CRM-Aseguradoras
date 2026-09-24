@@ -1,9 +1,11 @@
 // Convierte la salida del modelo en valores listos para el formulario.
 // La salida se trata como no confiable: se valida con las mismas reglas del formulario.
-import type { ExtraccionPoliza } from "@/lib/ocr/types";
+import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 import {
   camposGenerales,
+  maxLongitud,
   RAMOS,
+  RAMOS_CON_CENSO,
   ramoLabels,
   seccionesPorRamo,
   type CampoDef,
@@ -40,6 +42,7 @@ function aTexto(campo: CampoDef, valor: unknown): string | null {
   if (typeof valor !== "string") return null;
   let v = valor.trim();
   if (!v) return null;
+  if (campo.type === "textarea") return v.slice(0, maxLongitud(campo));
   if (campo.name === "rfcCliente" || campo.name === "rfc") v = normalizarRfc(v);
   if (campo.type === "tel") v = normalizarTelefono(v);
   if (campo.type === "email") v = v.toLowerCase();
@@ -122,14 +125,24 @@ function extraerAsegurados(fuente: unknown, advertencias: string[]): AseguradoVa
   return lista;
 }
 
-export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string[]): ExtraccionPoliza {
+export function normalizarExtraccion(
+  raw: unknown,
+  aseguradoras: readonly string[],
+  contexto?: ContextoOcr
+): ExtraccionPoliza {
   const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
 
   const advertencias = Array.isArray(obj.advertencias)
     ? obj.advertencias.filter((a): a is string => typeof a === "string" && a.trim() !== "").map((a) => a.trim().slice(0, 300)).slice(0, 15)
     : [];
 
-  const ramo = typeof obj.ramo === "string" ? ramoDesdeEtiqueta(obj.ramo) : null;
+  // Un documento de negociación de GMM Colectivo pertenece a ese ramo aunque la IA dude.
+  const ramo =
+    contexto === "gmm_colectivo"
+      ? "gmm_colectivo"
+      : typeof obj.ramo === "string"
+        ? ramoDesdeEtiqueta(obj.ramo)
+        : null;
   if (ramo === "otros") {
     advertencias.push('La IA clasificó la póliza como "Otros": confirma el ramo antes de guardar.');
   }
@@ -171,7 +184,9 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
 
   if (!ramo) advertencias.push("No se pudo determinar el ramo; selecciónalo manualmente.");
 
-  const asegurados = extraerAsegurados(obj.asegurados_lista, advertencias);
+  // En los ramos con censo los asegurados no se capturan uno por uno.
+  const asegurados =
+    ramo && RAMOS_CON_CENSO.includes(ramo) ? [] : extraerAsegurados(obj.asegurados_lista, advertencias);
 
   return { ramo, generales, especificos, referenciaPago, asegurados, advertencias };
 }

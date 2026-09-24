@@ -26,6 +26,7 @@ import { formatFecha, formatMoneda } from "@/lib/format";
 import {
   OCR_MAX_BYTES,
   OCR_TIPOS_PERMITIDOS,
+  type ContextoOcr,
   type ExtraccionPoliza,
   type OcrRespuesta,
 } from "@/lib/ocr/types";
@@ -56,7 +57,14 @@ export function OcrDropzone({
   onAplicar,
   onProcesando,
   onLimpiar,
+  titulo = "Captura inteligente",
+  descripcion = "Sube la carátula de la póliza y la IA extraerá los datos clave.",
+  contexto,
 }: {
+  titulo?: string;
+  descripcion?: string;
+  /** Contexto de la lectura para la IA (p. ej. formato de negociación de GMM Colectivo). */
+  contexto?: ContextoOcr;
   /** Se invoca en cuanto termina la extracción para prellenar el formulario. */
   onAplicar: (datos: ExtraccionPoliza, archivo: File) => void;
   onProcesando?: (procesando: boolean) => void;
@@ -106,6 +114,7 @@ export function OcrDropzone({
     try {
       const body = new FormData();
       body.append("file", archivo);
+      if (contexto) body.append("contexto", contexto);
       const res = await fetch("/api/ocr", {
         method: "POST",
         body,
@@ -161,11 +170,9 @@ export function OcrDropzone({
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="size-4 text-primary" />
-          Captura inteligente
+          {titulo}
         </CardTitle>
-        <CardDescription>
-          Sube la carátula de la póliza y la IA extraerá los datos clave.
-        </CardDescription>
+        <CardDescription>{descripcion}</CardDescription>
         {archivo && (
           <CardAction>
             <Button variant="ghost" size="sm" onClick={limpiar}>
@@ -393,7 +400,7 @@ function ResultadoExtraccion({
 function ResultadoSkeleton() {
   return (
     <div className="space-y-2" aria-live="polite" aria-busy="true">
-      <p className="text-xs text-muted-foreground">Leyendo la carátula con IA; puede tardar hasta un minuto…</p>
+      <p className="text-xs text-muted-foreground">Leyendo el documento con IA; puede tardar hasta un minuto…</p>
       <div className="divide-y rounded-lg border">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-3">

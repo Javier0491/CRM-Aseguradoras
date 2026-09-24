@@ -9,6 +9,7 @@ import {
   useFormState,
   useWatch,
   type Control,
+  type UseFormSetValue,
   type FieldErrors,
   type Resolver,
 } from "react-hook-form";
@@ -53,6 +54,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
@@ -72,6 +75,7 @@ import {
   camposGenerales,
   normalizarOpcion,
   RAMOS,
+  RAMOS_CON_CENSO,
   ramoLabels,
   seccionesPorRamo,
   type CampoDef,
@@ -88,6 +92,19 @@ export type PolizaFormInicial = {
   especificos?: Valores;
   asegurados?: AseguradoValores[];
 };
+
+/** Acciones del formulario disponibles para el contenedor (vía `ref`). */
+export type PolizaFormHandle = {
+  /**
+   * Complementa la captura con los datos de un segundo documento (formato de negociación u
+   * orden de emisión). Solo llena campos vacíos, salvo "Condiciones del Subgrupo", que se
+   * toma siempre del documento porque es su fuente.
+   */
+  aplicarComplemento: (datos: PolizaFormInicial) => void;
+};
+
+/** Campos del complemento que reemplazan lo capturado en lugar de solo llenar vacíos. */
+const CAMPOS_DEL_COMPLEMENTO = new Set(["condicionesSubgrupo"]);
 
 type Exito = Extract<GuardarPolizaResultado, { ok: true }> & {
   /** Resultado de la subida de cada archivo adjuntado. */
@@ -163,7 +180,12 @@ export function PolizaForm({
   extrayendo = false,
   caratula = null,
   onReiniciar,
+  onRamoChange,
+  ref,
 }: {
+  /** Avisa al contenedor el ramo seleccionado (p. ej. para mostrar el segundo documento). */
+  onRamoChange?: (ramo: Ramo) => void;
+  ref?: React.Ref<PolizaFormHandle>;
   inicial?: PolizaFormInicial;
   aseguradoras: Opcion[];
   /** El OCR está leyendo un documento; el formulario se reemplaza por un skeleton. */
@@ -195,7 +217,10 @@ export function PolizaForm({
         values.especificos[values.ramo],
         aseguradoras.map((a) => a.value)
       );
-      const erroresAsegurados = validarAsegurados(values.asegurados);
+      // En los ramos con censo la lista no se usa, así que no se valida.
+      const erroresAsegurados = RAMOS_CON_CENSO.includes(values.ramo)
+        ? {}
+        : validarAsegurados(values.asegurados);
       const errorExpediente = values.expediente
         ? await validarArchivo("expediente", values.expediente)
         : null;
@@ -250,6 +275,38 @@ export function PolizaForm({
   const ramo = useWatch({ control, name: "ramo" });
   const secciones = seccionesPorRamo[ramo];
   const RamoIcon = iconosRamo[ramo];
+  const conCenso = RAMOS_CON_CENSO.includes(ramo);
+
+  React.useEffect(() => {
+    onRamoChange?.(ramo);
+  }, [ramo, onRamoChange]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      aplicarComplemento(datos) {
+        const opciones = { shouldDirty: true, shouldValidate: submitCount > 0 };
+        const actuales = getValues();
+        const destino = datos.ramo ?? actuales.ramo;
+        if (datos.ramo && datos.ramo !== actuales.ramo) setValue("ramo", datos.ramo, opciones);
+
+        for (const [nombre, valor] of Object.entries(datos.generales ?? {})) {
+          if (valor && !actuales.generales[nombre]?.trim()) {
+            setValue(`generales.${nombre}`, valor, opciones);
+          }
+        }
+        for (const [nombre, valor] of Object.entries(datos.especificos ?? {})) {
+          const vacio = !actuales.especificos[destino]?.[nombre]?.trim();
+          if (valor && (vacio || CAMPOS_DEL_COMPLEMENTO.has(nombre))) {
+            setValue(`especificos.${destino}.${nombre}`, valor, opciones);
+          }
+        }
+        setErrorGeneral(null);
+        setExito(null);
+      },
+    }),
+    [getValues, setValue, submitCount]
+  );
 
   const generalesDefs = React.useMemo(
     () =>
@@ -289,7 +346,8 @@ export function PolizaForm({
       ramo: values.ramo,
       generales: values.generales,
       especificos: values.especificos[values.ramo],
-      asegurados: values.asegurados,
+      // En los ramos con censo los asegurados no se capturan uno por uno.
+      asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
     });
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
@@ -427,7 +485,20 @@ export function PolizaForm({
 
               <FormSection titulo="Contratante">{camposContratante.map(renderGeneral)}</FormSection>
 
-              <AseguradosFieldArray control={control} disabled={bloqueado} onCambio={limpiarAvisos} />
+              {conCenso ? (
+                <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
+                  En {ramoLabels[ramo]} los asegurados se manejan con un censo poblacional externo; las
+                  reglas de cada subgrupo se capturan en &quot;Condiciones del Subgrupo&quot;.
+                </p>
+              ) : (
+                <AseguradosFieldArray
+                  control={control}
+                  setValue={setValue}
+                  validar={submitCount > 0}
+                  disabled={bloqueado}
+                  onCambio={limpiarAvisos}
+                />
+              )}
 
               {secciones.map((seccion) => (
                 <FormSection
@@ -648,7 +719,23 @@ function Campo({
   const pista = ayuda ?? campo.hint;
 
   let control: React.ReactNode;
-  if (campo.type === "select") {
+  if (campo.type === "textarea") {
+    control = (
+      <Textarea
+        id={id}
+        ref={inputRef as React.Ref<HTMLTextAreaElement>}
+        placeholder={campo.placeholder}
+        value={valor}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        disabled={disabled}
+        rows={5}
+        aria-invalid={invalid}
+        aria-describedby={error ? errorId : pista ? `${id}-hint` : undefined}
+        className="min-h-28"
+      />
+    );
+  } else if (campo.type === "select") {
     const opciones = (campo.options ?? []).map(normalizarOpcion);
     control = (
       <Select value={valor} onValueChange={onChange} disabled={disabled}>
@@ -736,15 +823,37 @@ function Campo({
 /** Lista dinámica de asegurados (useFieldArray): editar, agregar y eliminar. */
 function AseguradosFieldArray({
   control,
+  setValue,
+  validar,
   disabled,
   onCambio,
 }: {
   control: Control<FormValues>;
+  setValue: UseFormSetValue<FormValues>;
+  /** Revalidar al cambiar valores (tras el primer intento de guardar). */
+  validar: boolean;
   disabled?: boolean;
   onCambio: () => void;
 }) {
   const { fields, append, remove } = useFieldArray({ control, name: "asegurados" });
   const errorLista = useFormState({ control, name: "asegurados" }).errors.asegurados?.root?.message;
+  const contratante = (useWatch({ control, name: "generales.cliente" }) ?? "").replace(/\s+/g, " ").trim();
+  const asegurados = useWatch({ control, name: "asegurados" });
+
+  // El switch no guarda estado propio: está activo mientras el asegurado sea el contratante
+  // como titular. Si alguien edita el nombre o el parentesco, se apaga solo.
+  const esContratante = (i: number) =>
+    contratante !== "" &&
+    asegurados?.[i]?.parentesco === "Titular" &&
+    asegurados[i].nombre.replace(/\s+/g, " ").trim().toLowerCase() === contratante.toLowerCase();
+
+  function marcarContratante(i: number, activo: boolean) {
+    const opciones = { shouldDirty: true, shouldValidate: validar };
+    // Al desactivar se deshace lo que hizo la casilla.
+    setValue(`asegurados.${i}.nombre`, activo ? contratante : "", opciones);
+    setValue(`asegurados.${i}.parentesco`, activo ? "Titular" : "", opciones);
+    onCambio();
+  }
 
   return (
     <section className="space-y-4">
@@ -781,8 +890,22 @@ function AseguradosFieldArray({
       <div className="space-y-3">
         {fields.map((field, i) => (
           <div key={field.id} className="rounded-lg border bg-background/60 p-4">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex items-center gap-3">
               <span className="text-xs font-medium text-muted-foreground">Asegurado {i + 1}</span>
+              <div
+                className="ml-auto flex items-center gap-2"
+                title={contratante ? undefined : "Captura primero el nombre del contratante"}
+              >
+                <Switch
+                  id={`asegurado-${i}-contratante`}
+                  checked={esContratante(i)}
+                  onCheckedChange={(activo) => marcarContratante(i, activo)}
+                  disabled={disabled || !contratante}
+                />
+                <Label htmlFor={`asegurado-${i}-contratante`} className="text-xs font-normal">
+                  Contratante asegurado
+                </Label>
+              </div>
               <Button
                 type="button"
                 variant="ghost"

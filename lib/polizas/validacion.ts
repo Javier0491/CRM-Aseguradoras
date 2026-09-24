@@ -3,6 +3,7 @@ import { sanitizarAsegurados, type AseguradoValores } from "@/lib/polizas/asegur
 import {
   camposGenerales,
   FORMAS_PAGO,
+  maxLongitud,
   RAMOS,
   seccionesPorRamo,
   type CampoDef,
@@ -42,6 +43,8 @@ function esFechaValida(v: string) {
 export function validarCampo(campo: CampoDef, valor: string | undefined): string | null {
   const v = valor?.trim() ?? "";
   if (!v) return campo.required ? "Campo obligatorio" : null;
+
+  if (v.length > maxLongitud(campo)) return `Máximo ${maxLongitud(campo)} caracteres`;
 
   switch (campo.type) {
     case "number":
@@ -135,11 +138,11 @@ export function sanitizarPolizaInput(raw: unknown): PolizaInput | null {
     if (typeof fuente !== "object" || fuente === null) return null;
     const src = fuente as Record<string, unknown>;
     const out: Valores = {};
-    for (const { name } of campos) {
-      const v = src[name];
+    for (const campo of campos) {
+      const v = src[campo.name];
       if (v === undefined || v === null) continue;
       if (typeof v !== "string") return null;
-      out[name] = v.trim().slice(0, 500);
+      out[campo.name] = v.trim().slice(0, maxLongitud(campo));
     }
     return out;
   };
