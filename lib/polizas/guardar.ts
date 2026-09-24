@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
+import { validarAsegurados } from "@/lib/polizas/asegurados";
 import { seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
 import { generarRecibos } from "@/lib/polizas/recibos";
 import {
@@ -26,10 +27,12 @@ export type GuardarPolizaResultado =
 
 const RAMO_DB = {
   autos: "AUTOS",
-  gastos_medicos: "GASTOS_MEDICOS",
+  gmm_individual: "GMM_INDIVIDUAL",
+  gmm_colectivo: "GMM_COLECTIVO",
   vida_individual: "VIDA_INDIVIDUAL",
   vida_grupo: "VIDA_GRUPO",
   danos: "DANOS",
+  rc_profesional: "RC_PROFESIONAL",
   hogar: "HOGAR",
   otros: "OTROS",
 } as const satisfies Record<Ramo, string>;
@@ -58,10 +61,13 @@ function datosRamo(ramo: Ramo, especificos: Valores): Prisma.InputJsonObject {
 export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
   const input = sanitizarPolizaInput(raw);
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
-  const { ramo, generales: g, especificos } = input;
+  const { ramo, generales: g, especificos, asegurados } = input;
 
   const aseguradoras = await db.aseguradora.findMany({ select: { id: true } });
-  const errores = validarPoliza(ramo, g, especificos, aseguradoras.map((a) => a.id));
+  const errores = {
+    ...validarPoliza(ramo, g, especificos, aseguradoras.map((a) => a.id)),
+    ...validarAsegurados(asegurados),
+  };
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 
   const numeroImpreso = g.numeroImpreso.trim().toUpperCase();
@@ -110,6 +116,17 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
           prima_total: parseNumero(g.primaTotal).toFixed(2),
           forma_pago: g.formaPago as FormaPago,
           datos_ramo: datosRamo(ramo, especificos),
+          asegurados: {
+            create: asegurados.map((a, orden) => ({
+              orden,
+              nombre: a.nombre.replace(/\s+/g, " "),
+              parentesco: a.parentesco,
+              edad: a.edad ? Number(a.edad) : null,
+              sexo: a.sexo || null,
+              fecha_nacimiento: a.fecha_nacimiento || null,
+              antiguedad: a.antiguedad || null,
+            })),
+          },
           recibos: {
             create: recibos.map((r) => ({
               numero: r.numero,

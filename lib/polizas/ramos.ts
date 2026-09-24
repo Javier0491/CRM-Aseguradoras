@@ -4,10 +4,12 @@
 
 export const RAMOS = [
   "autos",
-  "gastos_medicos",
+  "gmm_individual",
+  "gmm_colectivo",
   "vida_individual",
   "vida_grupo",
   "danos",
+  "rc_profesional",
   "hogar",
   "otros",
 ] as const;
@@ -16,10 +18,12 @@ export type Ramo = (typeof RAMOS)[number];
 // Estas etiquetas son también las opciones con las que la IA clasifica el ramo.
 export const ramoLabels: Record<Ramo, string> = {
   autos: "Autos",
-  gastos_medicos: "Gastos Médicos",
+  gmm_individual: "GMM Individual",
+  gmm_colectivo: "GMM Colectivo",
   vida_individual: "Vida Individual",
   vida_grupo: "Vida Grupo",
   danos: "Daños",
+  rc_profesional: "RC Profesional",
   hogar: "Hogar",
   otros: "Otros",
 };
@@ -77,6 +81,19 @@ export const camposGenerales: CampoDef[] = [
   { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: FORMAS_PAGO.map(({ value, label }) => ({ value, label })) },
 ];
 
+// Comunes a GMM Individual y Colectivo.
+const CONDICIONES_GMM: CampoDef[] = [
+  { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
+  { name: "deducible", label: "Deducible", type: "currency", required: true, placeholder: "0.00" },
+  { name: "coaseguro", label: "Coaseguro", type: "percent", required: true, placeholder: "Ej. 10" },
+  { name: "topeCoaseguro", label: "Tope de coaseguro", type: "currency", placeholder: "0.00" },
+  { name: "nivelHospitalario", label: "Nivel hospitalario", type: "select", required: true, options: ["Esencial", "Estándar", "Plus", "Premium"] },
+];
+const COBERTURAS_GMM: CampoDef[] = [
+  { name: "maternidad", label: "Cobertura de maternidad", type: "select", options: ["Sí", "No"] },
+  { name: "emergenciaExtranjero", label: "Emergencia en el extranjero", type: "select", options: ["Sí", "No"] },
+];
+
 export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
   autos: [
     {
@@ -99,27 +116,19 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
       ],
     },
   ],
-  gastos_medicos: [
+  gmm_individual: [
     {
       titulo: "Condiciones del plan",
       campos: [
-        { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
-        { name: "deducible", label: "Deducible", type: "currency", required: true, placeholder: "0.00" },
-        { name: "coaseguro", label: "Coaseguro", type: "percent", required: true, placeholder: "Ej. 10" },
-        { name: "topeCoaseguro", label: "Tope de coaseguro", type: "currency", placeholder: "0.00" },
-        { name: "nivelHospitalario", label: "Nivel hospitalario", type: "select", required: true, options: ["Esencial", "Estándar", "Plus", "Premium"] },
-        { name: "tipoPlan", label: "Tipo de plan", type: "select", required: true, options: ["Individual", "Familiar", "Colectivo"] },
+        ...CONDICIONES_GMM,
+        { name: "tipoPlan", label: "Tipo de plan", type: "select", required: true, options: ["Individual", "Familiar"] },
       ],
     },
-    {
-      titulo: "Asegurados",
-      campos: [
-        { name: "numeroAsegurados", label: "Número de asegurados", type: "number", required: true, placeholder: "Ej. 1" },
-        { name: "titular", label: "Asegurado titular", type: "text", required: true, placeholder: "Nombre completo" },
-        { name: "maternidad", label: "Cobertura de maternidad", type: "select", options: ["Sí", "No"] },
-        { name: "emergenciaExtranjero", label: "Emergencia en el extranjero", type: "select", options: ["Sí", "No"] },
-      ],
-    },
+    { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
+  ],
+  gmm_colectivo: [
+    { titulo: "Condiciones del plan", campos: CONDICIONES_GMM },
+    { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
   ],
   vida_individual: [
     {
@@ -171,6 +180,18 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
         { name: "valorContenidos", label: "Valor de contenidos", type: "currency", required: true, placeholder: "0.00" },
         { name: "coberturaPrincipal", label: "Cobertura principal", type: "select", required: true, options: ["Incendio todo riesgo", "Paquete empresarial", "Responsabilidad Civil General", "Transporte de mercancías"] },
         { name: "sumaRC", label: "Suma asegurada RC", type: "currency", placeholder: "0.00" },
+      ],
+    },
+  ],
+  rc_profesional: [
+    {
+      titulo: "Cobertura",
+      campos: [
+        { name: "profesion", label: "Profesión / Actividad", type: "text", required: true, placeholder: "Ej. Médico cirujano" },
+        { name: "cedulaProfesional", label: "Cédula profesional", type: "text", placeholder: "Ej. 1234567" },
+        { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
+        { name: "deducible", label: "Deducible", type: "currency", placeholder: "0.00" },
+        { name: "coberturaTerritorial", label: "Cobertura territorial", type: "select", options: ["Nacional", "Extranjero", "Mundial"] },
       ],
     },
   ],

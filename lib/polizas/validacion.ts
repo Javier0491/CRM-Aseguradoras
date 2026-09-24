@@ -1,4 +1,5 @@
 // Validación compartida por el formulario (cliente) y la Server Action (servidor).
+import { sanitizarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
 import {
   camposGenerales,
   FORMAS_PAGO,
@@ -114,7 +115,12 @@ export function validarPoliza(
   return errores;
 }
 
-export type PolizaInput = { ramo: Ramo; generales: Valores; especificos: Valores };
+export type PolizaInput = {
+  ramo: Ramo;
+  generales: Valores;
+  especificos: Valores;
+  asegurados: AseguradoValores[];
+};
 
 /**
  * Normaliza un payload no confiable: solo conserva los campos definidos,
@@ -122,7 +128,7 @@ export type PolizaInput = { ramo: Ramo; generales: Valores; especificos: Valores
  */
 export function sanitizarPolizaInput(raw: unknown): PolizaInput | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const { ramo, generales, especificos } = raw as Record<string, unknown>;
+  const { ramo, generales, especificos, asegurados } = raw as Record<string, unknown>;
   if (typeof ramo !== "string" || !(RAMOS as readonly string[]).includes(ramo)) return null;
 
   const tomar = (fuente: unknown, campos: CampoDef[]): Valores | null => {
@@ -141,7 +147,8 @@ export function sanitizarPolizaInput(raw: unknown): PolizaInput | null {
   const r = ramo as Ramo;
   const g = tomar(generales, camposGenerales);
   const e = tomar(especificos, seccionesPorRamo[r].flatMap((s) => s.campos));
-  return g && e ? { ramo: r, generales: g, especificos: e } : null;
+  const a = sanitizarAsegurados(asegurados);
+  return g && e && a ? { ramo: r, generales: g, especificos: e, asegurados: a } : null;
 }
 
 export const mesesPorFormaPago = Object.fromEntries(

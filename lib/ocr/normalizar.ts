@@ -9,6 +9,14 @@ import {
   type CampoDef,
   type Ramo,
 } from "@/lib/polizas/ramos";
+import {
+  aseguradoVacio,
+  MAX_ASEGURADOS,
+  normalizarParentesco,
+  SEXOS,
+  validarAsegurados,
+  type AseguradoValores,
+} from "@/lib/polizas/asegurados";
 import { extraerPolizaVigor, extraerPolizaVigorDeReferencia } from "@/lib/polizas/polizaParser";
 import { normalizarRfc, normalizarTelefono, validarCampo, type Valores } from "@/lib/polizas/validacion";
 
@@ -65,6 +73,55 @@ function extraerCampos(
   return out;
 }
 
+/** Lista de asegurados de la IA, en el formato del formulario. */
+function extraerAsegurados(fuente: unknown, advertencias: string[]): AseguradoValores[] {
+  if (!Array.isArray(fuente)) return [];
+  const lista: AseguradoValores[] = [];
+  for (const item of fuente.slice(0, MAX_ASEGURADOS)) {
+    if (typeof item !== "object" || item === null) continue;
+    const src = item as Record<string, unknown>;
+    const texto = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 200) : "");
+
+    const nombre = texto(src.nombre).replace(/\s+/g, " ");
+    if (!nombre) continue;
+    const a = aseguradoVacio();
+    a.nombre = nombre;
+
+    const parentesco = normalizarParentesco(texto(src.parentesco));
+    a.parentesco = parentesco ?? "Otro";
+    if (!parentesco) {
+      advertencias.push(`Asegurado ${nombre}: parentesco "${texto(src.parentesco)}" no reconocido; se marcó como Otro.`);
+    }
+
+    if (typeof src.edad === "number" && Number.isInteger(src.edad) && src.edad >= 0 && src.edad <= 120) {
+      a.edad = String(src.edad);
+    } else if (src.edad !== null && src.edad !== undefined) {
+      advertencias.push(`Asegurado ${nombre}: se descartó la edad "${String(src.edad)}".`);
+    }
+    const sexo = texto(src.sexo);
+    if ((SEXOS as readonly string[]).includes(sexo)) a.sexo = sexo;
+    a.fecha_nacimiento = texto(src.fecha_nacimiento);
+    a.antiguedad = texto(src.antiguedad).slice(0, 50);
+    lista.push(a);
+  }
+
+  // Lo que no pase la validación se precarga igual y se avisa, como con los demás campos.
+  const errores = validarAsegurados(lista);
+  for (const clave of Object.keys(errores)) {
+    const [, i, campo] = clave.split(".");
+    if (campo === "fecha_nacimiento") {
+      advertencias.push(`Asegurado ${lista[Number(i)].nombre}: se descartó la fecha de nacimiento "${lista[Number(i)].fecha_nacimiento}".`);
+      lista[Number(i)].fecha_nacimiento = "";
+    } else if (campo === "parentesco") {
+      advertencias.push(`Asegurado ${lista[Number(i)].nombre}: ${minuscula(errores[clave])}.`);
+    }
+  }
+  if (fuente.length > MAX_ASEGURADOS) {
+    advertencias.push(`La carátula lista más de ${MAX_ASEGURADOS} asegurados; solo se tomaron los primeros.`);
+  }
+  return lista;
+}
+
 export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string[]): ExtraccionPoliza {
   const obj = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
 
@@ -114,5 +171,7 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
 
   if (!ramo) advertencias.push("No se pudo determinar el ramo; selecciónalo manualmente.");
 
-  return { ramo, generales, especificos, referenciaPago, advertencias };
+  const asegurados = extraerAsegurados(obj.asegurados_lista, advertencias);
+
+  return { ramo, generales, especificos, referenciaPago, asegurados, advertencias };
 }

@@ -20,6 +20,7 @@ function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): Pol
     ramo: datos.ramo ?? undefined,
     generales: { ...datos.generales, aseguradora: aseguradora?.value ?? "" },
     especificos: datos.especificos,
+    asegurados: datos.asegurados,
   };
 }
 

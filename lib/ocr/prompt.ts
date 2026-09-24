@@ -45,18 +45,34 @@ En algunas aseguradoras la póliza vigor se calcula a partir de la referencia de
   partir de la referencia.
 
 RAMO
-Analiza el documento y determina el ramo del seguro. Debes clasificarlo ESTRICTAMENTE en una de las
-siguientes opciones: "Autos", "Gastos Médicos", "Vida Individual", "Vida Grupo", "Daños", "Hogar".
-Si no estás seguro, usa "Otros".
+Analiza el tipo de póliza y determina el ramo del seguro. Debes clasificarlo ESTRICTAMENTE en una de
+las siguientes opciones: "Autos", "GMM Individual", "GMM Colectivo", "Vida Individual", "Vida Grupo",
+"Daños", "RC Profesional", "Hogar". Si no estás seguro, usa "Otros".
 - Autos: automóviles, camiones, motos, flotillas, pólizas vehiculares.
-- Gastos Médicos: gastos médicos mayores o menores, salud, hospitalización.
+- GMM Individual: gastos médicos mayores o menores de una persona o familia (plan individual o
+  familiar), salud, hospitalización.
+- GMM Colectivo: gastos médicos contratados por una empresa o agrupación para sus empleados o
+  miembros (póliza de grupo, certificados).
 - Vida Individual: vida de una sola persona: temporal, ordinario, dotal, con ahorro o inversión.
 - Vida Grupo: vida colectiva para empleados o miembros de una agrupación (certificados, listado de
   asegurados).
 - Daños: seguros empresariales o de bienes de un negocio: incendio, paquete empresarial,
-  responsabilidad civil, transporte de mercancías, PyME.
+  responsabilidad civil general, transporte de mercancías, PyME.
+- RC Profesional: responsabilidad civil profesional de una persona por el ejercicio de su profesión
+  (médicos, abogados, arquitectos, contadores, etc.).
 - Hogar: casa habitación o departamento de una persona física (construcción, contenidos, RC familiar).
 - Otros: cualquier otro seguro, o cuando el documento no permita decidir con certeza.
+
+ASEGURADOS
+- Si la póliza tiene una tabla o lista de asegurados (muy común en Gastos Médicos Mayores), extrae a
+  cada persona en el arreglo asegurados_lista, en el orden en que aparecen.
+- Asigna correctamente a cada uno: Parentesco (Titular, Conyuge, Padre, Madre, Hijo, Otro), Edad,
+  Sexo (Masculino o Femenino), Fecha de Nacimiento (YYYY-MM-DD) y Antigüedad en la aseguradora.
+  Esposo o esposa es Conyuge; hijo o hija es Hijo. Solo puede haber un Titular.
+- Si es una póliza individual (ej. Autos o RC Profesional), extrae al único asegurado como
+  "Titular" en el arreglo.
+- Si un dato de una persona no aparece, devuélvelo en null; no lo calcules ni lo inventes (no
+  deduzcas la edad a partir de la fecha de nacimiento).
 
 CAMPOS ESPECÍFICOS
 - Llena solo los del ramo detectado; los de otros ramos van en null.

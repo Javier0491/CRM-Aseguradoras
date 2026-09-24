@@ -5,10 +5,12 @@ import { diasDesdeHoy, formatFecha } from "@/lib/format";
 
 export const ramoLabel: Record<Ramo, string> = {
   AUTOS: "Autos",
-  GASTOS_MEDICOS: "Gastos Médicos",
+  GMM_INDIVIDUAL: "GMM Individual",
+  GMM_COLECTIVO: "GMM Colectivo",
   VIDA_INDIVIDUAL: "Vida Individual",
   VIDA_GRUPO: "Vida Grupo",
   DANOS: "Daños",
+  RC_PROFESIONAL: "RC Profesional",
   HOGAR: "Hogar",
   OTROS: "Otros",
 };

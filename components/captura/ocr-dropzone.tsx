@@ -324,6 +324,13 @@ function ResultadoExtraccion({
       valor: datos.generales[c.name] ? mostrarValor(c.name, datos.generales[c.name]) : undefined,
     })),
     { campo: "referenciaPago", label: "Referencia de pago", valor: datos.referenciaPago ?? undefined },
+    {
+      campo: "asegurados",
+      label: "Asegurados",
+      valor: datos.asegurados.length
+        ? datos.asegurados.map((a) => `${a.nombre} (${a.parentesco})`).join(", ")
+        : undefined,
+    },
   ];
   const detectados = filas.filter((f) => f.valor).length;
   const especificos = Object.keys(datos.especificos).length;

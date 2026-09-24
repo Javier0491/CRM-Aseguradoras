@@ -12,10 +12,12 @@ datasource db {
 
 enum Ramo {
   AUTOS
-  GASTOS_MEDICOS
+  GMM_INDIVIDUAL
+  GMM_COLECTIVO
   VIDA_INDIVIDUAL
   VIDA_GRUPO
   DANOS
+  RC_PROFESIONAL
   HOGAR
   OTROS
 }
@@ -103,6 +105,7 @@ model Poliza {
   // Restrict: borrar una aseguradora no debe arrastrar la cartera de pólizas.
   aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Restrict)
   recibos     Recibo[]
+  asegurados  Asegurado[]
 
   @@index([polizaVigor])
   @@index([cliente_id])
@@ -127,4 +130,27 @@ model Recibo {
   @@index([fecha_vencimiento])
   @@index([estado, fecha_vencimiento])
   @@map("recibos")
+}
+
+// Personas aseguradas por la póliza (varias en GMM; en Autos o RC, solo el titular).
+model Asegurado {
+  id               String  @id @default(cuid())
+  poliza_id        String
+  // Posición en la lista de la carátula.
+  orden            Int     @default(0)
+  nombre           String
+  // Titular, Conyuge, Padre, Madre, Hijo u Otro (lib/polizas/asegurados.ts).
+  parentesco       String
+  edad             Int?
+  // Masculino o Femenino.
+  sexo             String?
+  // YYYY-MM-DD.
+  fecha_nacimiento String?
+  // Antigüedad en la aseguradora, tal como aparece en la carátula.
+  antiguedad       String?
+
+  poliza Poliza @relation(fields: [poliza_id], references: [id], onDelete: Cascade)
+
+  @@index([poliza_id])
+  @@map("asegurados")
 }

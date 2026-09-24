@@ -1,5 +1,6 @@
 // Esquema JSON (modo estricto) que la IA debe devolver, generado a partir de las
 // mismas definiciones de campos del formulario para que nunca se desincronicen.
+import { PARENTESCOS, SEXOS } from "@/lib/polizas/asegurados";
 import {
   camposGenerales,
   normalizarOpcion,
@@ -88,6 +89,36 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
         ...objeto(camposEspecificos(), aseguradoras),
         description: "Campos del ramo detectado; los de otros ramos van en null.",
       },
+      asegurados_lista: {
+        type: "array",
+        description:
+          "Personas aseguradas en el orden de la carátula. En pólizas de una sola persona " +
+          "(Autos, RC), un único elemento con parentesco Titular.",
+        items: {
+          type: "object",
+          properties: {
+            nombre: { type: "string", description: "Nombre completo del asegurado." },
+            parentesco: {
+              type: "string",
+              enum: [...PARENTESCOS],
+              description: "Relación con el titular. Otro si no corresponde a ninguna opción.",
+            },
+            edad: { type: ["integer", "null"], description: "Edad en años. null si no aparece." },
+            sexo: { type: ["string", "null"], enum: [...SEXOS, null], description: "null si no aparece." },
+            fecha_nacimiento: {
+              type: ["string", "null"],
+              description: "Fecha de nacimiento en formato YYYY-MM-DD. null si no aparece.",
+            },
+            antiguedad: {
+              type: ["string", "null"],
+              description:
+                "Antigüedad del asegurado en la aseguradora: fecha en YYYY-MM-DD o el texto impreso. null si no aparece.",
+            },
+          },
+          required: ["nombre", "parentesco", "edad", "sexo", "fecha_nacimiento", "antiguedad"],
+          additionalProperties: false,
+        },
+      },
       referenciaPago: {
         type: ["string", "null"],
         description:
@@ -100,7 +131,7 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
         description: "Observaciones breves en español para que el usuario revise.",
       },
     },
-    required: ["ramo", "generales", "especificos", "referenciaPago", "advertencias"],
+    required: ["ramo", "generales", "especificos", "asegurados_lista", "referenciaPago", "advertencias"],
     additionalProperties: false,
   };
 }

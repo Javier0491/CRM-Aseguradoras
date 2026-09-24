@@ -105,6 +105,18 @@ export async function getPolizaDetalle(id: string) {
       expediente_subido_at: true,
       cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
       aseguradora: { select: { nombre: true, color_hex: true } },
+      asegurados: {
+        orderBy: { orden: "asc" },
+        select: {
+          id: true,
+          nombre: true,
+          parentesco: true,
+          edad: true,
+          sexo: true,
+          fecha_nacimiento: true,
+          antiguedad: true,
+        },
+      },
       recibos: {
         orderBy: { numero: "asc" },
         select: { id: true, numero: true, monto: true, fecha_vencimiento: true, estado: true },

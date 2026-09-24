@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { ARCHIVOS, formatBytes, TIPOS_ARCHIVO, type TipoArchivo } from "@/lib/archivos/config";
 import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
+import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +90,44 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
                 ))}
               </dl>
             </CardContent>
+          </Card>
+
+          <Card className="gap-0 py-0">
+            <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+              <CardTitle className="text-base">Asegurados · {poliza.asegurados.length}</CardTitle>
+            </CardHeader>
+            {poliza.asegurados.length === 0 ? (
+              <p className="px-5 py-4 text-sm text-muted-foreground">Sin asegurados registrados.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-5">Nombre</TableHead>
+                    <TableHead>Parentesco</TableHead>
+                    <TableHead>Sexo</TableHead>
+                    <TableHead className="text-right">Edad</TableHead>
+                    <TableHead>Nacimiento</TableHead>
+                    <TableHead className="pr-5">Antigüedad</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {poliza.asegurados.map((a) => (
+                    <TableRow key={a.id}>
+                      <TableCell className="pl-5 font-medium">{a.nombre}</TableCell>
+                      <TableCell>
+                        {parentescoLabels[a.parentesco as Parentesco] ?? a.parentesco}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{a.sexo ?? "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{a.edad ?? "—"}</TableCell>
+                      <TableCell className="tabular-nums">
+                        {a.fecha_nacimiento ? formatFecha(`${a.fecha_nacimiento}T00:00:00Z`) : "—"}
+                      </TableCell>
+                      <TableCell className="pr-5 text-muted-foreground">{a.antiguedad ?? "—"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </Card>
 
           <Card className="gap-0 py-0">

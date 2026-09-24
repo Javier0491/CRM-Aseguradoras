@@ -5,7 +5,10 @@ import Link from "next/link";
 import {
   Controller,
   useForm,
+  useFieldArray,
+  useFormState,
   useWatch,
+  type Control,
   type FieldErrors,
   type Resolver,
 } from "react-hook-form";
@@ -20,8 +23,12 @@ import {
   Loader2,
   RotateCcw,
   Save,
+  Scale,
+  Trash2,
+  UserPlus,
   Shapes,
   ShieldCheck,
+  Stethoscope,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -52,6 +59,14 @@ import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib
 import { subirArchivo } from "@/lib/archivos/subir";
 import { guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
+import {
+  aseguradoVacio,
+  PARENTESCOS,
+  parentescoLabels,
+  SEXOS,
+  validarAsegurados,
+  type AseguradoValores,
+} from "@/lib/polizas/asegurados";
 import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import {
   camposGenerales,
@@ -71,6 +86,7 @@ export type PolizaFormInicial = {
   generales?: Valores;
   /** Campos específicos del ramo inicial. */
   especificos?: Valores;
+  asegurados?: AseguradoValores[];
 };
 
 type Exito = Extract<GuardarPolizaResultado, { ok: true }> & {
@@ -83,16 +99,19 @@ type FormValues = {
   generales: Valores;
   // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
   especificos: Record<Ramo, Valores>;
+  asegurados: AseguradoValores[];
   /** Expediente de respaldo; se sube a Storage después de guardar la póliza. */
   expediente: File | null;
 };
 
 const iconosRamo: Record<Ramo, LucideIcon> = {
   autos: Car,
-  gastos_medicos: HeartPulse,
+  gmm_individual: HeartPulse,
+  gmm_colectivo: Stethoscope,
   vida_individual: ShieldCheck,
   vida_grupo: Users,
   danos: Briefcase,
+  rc_profesional: Scale,
   hogar: House,
   otros: Shapes,
 };
@@ -124,12 +143,15 @@ function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
     ramo: inicial?.ramo ?? "autos",
     generales: { ...vacios(camposGenerales), ...inicial?.generales },
     especificos,
+    asegurados: (inicial?.asegurados ?? []).map((a) => ({ ...aseguradoVacio(), ...a })),
     expediente: null,
   };
 }
 
-/** Ruta del campo dentro del formulario para un error plano de `validarPoliza`. */
+/** Ruta del campo dentro del formulario para un error plano de la validación. */
 function rutaCampo(nombre: string, ramo: Ramo) {
+  // Los errores de asegurados ya vienen con su ruta ("asegurados.2.nombre").
+  if (nombre.startsWith("asegurados.")) return nombre as `asegurados.${number}.${keyof AseguradoValores}`;
   return NOMBRES_GENERALES.has(nombre)
     ? (`generales.${nombre}` as const)
     : (`especificos.${ramo}.${nombre}` as const);
@@ -173,10 +195,17 @@ export function PolizaForm({
         values.especificos[values.ramo],
         aseguradoras.map((a) => a.value)
       );
+      const erroresAsegurados = validarAsegurados(values.asegurados);
       const errorExpediente = values.expediente
         ? await validarArchivo("expediente", values.expediente)
         : null;
-      if (Object.keys(errores).length === 0 && !errorExpediente) return { values, errors: {} };
+      if (
+        Object.keys(errores).length === 0 &&
+        Object.keys(erroresAsegurados).length === 0 &&
+        !errorExpediente
+      ) {
+        return { values, errors: {} };
+      }
 
       const errors: Record<string, unknown> & {
         generales: Record<string, unknown>;
@@ -189,6 +218,19 @@ export function PolizaForm({
         destino[nombre] = { type: "validate", message };
       }
       errors.especificos[values.ramo] = porRamo;
+      // "asegurados.2.nombre" → errors.asegurados[2].nombre
+      const porAsegurado: Record<string, unknown>[] = [];
+      for (const [ruta, message] of Object.entries(erroresAsegurados)) {
+        const [, indice, campo] = ruta.split(".");
+        if (campo === undefined) continue;
+        (porAsegurado[Number(indice)] ??= {})[campo] = { type: "validate", message };
+      }
+      if (porAsegurado.length > 0) errors.asegurados = porAsegurado;
+      if (erroresAsegurados.asegurados) {
+        errors.asegurados = Object.assign(porAsegurado, {
+          root: { type: "validate", message: erroresAsegurados.asegurados },
+        });
+      }
       return { values: {}, errors: errors as FieldErrors<FormValues> };
     },
     [aseguradoras]
@@ -247,6 +289,7 @@ export function PolizaForm({
       ramo: values.ramo,
       generales: values.generales,
       especificos: values.especificos[values.ramo],
+      asegurados: values.asegurados,
     });
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
@@ -272,6 +315,9 @@ export function PolizaForm({
   const totalErrores =
     Object.keys(errors.generales ?? {}).length +
     Object.keys(errors.especificos?.[ramo] ?? {}).length +
+    (Array.isArray(errors.asegurados)
+      ? errors.asegurados.reduce((n, e) => n + (e ? Object.keys(e).length : 0), 0)
+      : 0) +
     (errors.expediente ? 1 : 0);
 
   function renderGeneral(campo: CampoDef) {
@@ -380,6 +426,8 @@ export function PolizaForm({
               <FormSection titulo="Póliza">{camposPoliza.map(renderGeneral)}</FormSection>
 
               <FormSection titulo="Contratante">{camposContratante.map(renderGeneral)}</FormSection>
+
+              <AseguradosFieldArray control={control} disabled={bloqueado} onCambio={limpiarAvisos} />
 
               {secciones.map((seccion) => (
                 <FormSection
@@ -684,3 +732,117 @@ function Campo({
     </div>
   );
 }
+
+/** Lista dinámica de asegurados (useFieldArray): editar, agregar y eliminar. */
+function AseguradosFieldArray({
+  control,
+  disabled,
+  onCambio,
+}: {
+  control: Control<FormValues>;
+  disabled?: boolean;
+  onCambio: () => void;
+}) {
+  const { fields, append, remove } = useFieldArray({ control, name: "asegurados" });
+  const errorLista = useFormState({ control, name: "asegurados" }).errors.asegurados?.root?.message;
+
+  return (
+    <section className="space-y-4">
+      <div className="flex items-center gap-3">
+        <h3 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+          Asegurados
+        </h3>
+        <span className="rounded border px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums">
+          {fields.length}
+        </span>
+        <Separator className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={() => {
+            // El primero se propone como titular.
+            append(aseguradoVacio(fields.length === 0 ? "Titular" : ""));
+            onCambio();
+          }}
+        >
+          <UserPlus /> Agregar asegurado
+        </Button>
+      </div>
+
+      {fields.length === 0 && (
+        <p className="rounded-lg border border-dashed px-4 py-3 text-xs text-muted-foreground">
+          Sin asegurados. La IA los llena desde la carátula; también puedes agregarlos manualmente.
+        </p>
+      )}
+      {errorLista && <p className="text-xs text-destructive">{errorLista}</p>}
+
+      <div className="space-y-3">
+        {fields.map((field, i) => (
+          <div key={field.id} className="rounded-lg border bg-background/60 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-xs font-medium text-muted-foreground">Asegurado {i + 1}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-destructive"
+                aria-label={`Eliminar asegurado ${i + 1}`}
+                disabled={disabled}
+                onClick={() => {
+                  remove(i);
+                  onCambio();
+                }}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+            <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+              {CAMPOS_ASEGURADO_UI.map((def) => (
+                <Controller
+                  key={def.campo}
+                  name={`asegurados.${i}.${def.campo}`}
+                  control={control}
+                  render={({ field: f, fieldState }) => (
+                    <Campo
+                      campo={{ ...def.definicion, name: `asegurado-${i}-${def.campo}` }}
+                      valor={f.value ?? ""}
+                      error={fieldState.error?.message}
+                      disabled={disabled}
+                      inputRef={f.ref}
+                      onBlur={f.onBlur}
+                      onChange={(v) => {
+                        f.onChange(v);
+                        onCambio();
+                      }}
+                    />
+                  )}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+// Campos de cada asegurado, reutilizando el componente <Campo> del formulario.
+const CAMPOS_ASEGURADO_UI: { campo: keyof AseguradoValores; definicion: CampoDef }[] = [
+  { campo: "nombre", definicion: { name: "nombre", label: "Nombre completo", type: "text", required: true, wide: true, placeholder: "Nombre y apellidos" } },
+  {
+    campo: "parentesco",
+    definicion: {
+      name: "parentesco",
+      label: "Parentesco",
+      type: "select",
+      required: true,
+      options: PARENTESCOS.map((p) => ({ value: p, label: parentescoLabels[p] })),
+    },
+  },
+  { campo: "sexo", definicion: { name: "sexo", label: "Sexo", type: "select", options: [...SEXOS] } },
+  { campo: "edad", definicion: { name: "edad", label: "Edad", type: "number", placeholder: "Años" } },
+  { campo: "fecha_nacimiento", definicion: { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date" } },
+  { campo: "antiguedad", definicion: { name: "antiguedad", label: "Antigüedad", type: "text", placeholder: "Ej. 2015-03-01" } },
+];

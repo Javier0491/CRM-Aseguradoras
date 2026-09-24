@@ -1,3 +1,4 @@
+import type { AseguradoValores } from "@/lib/polizas/asegurados";
 import type { Ramo } from "@/lib/polizas/ramos";
 import type { Valores } from "@/lib/polizas/validacion";
 
@@ -25,6 +26,8 @@ export type ExtraccionPoliza = {
    * póliza, de aquí se calcula la póliza vigor.
    */
   referenciaPago: string | null;
+  /** Personas aseguradas detectadas, en el orden de la carátula. */
+  asegurados: AseguradoValores[];
   /** Observaciones para que el usuario revise (datos ambiguos, ilegibles, etc.). */
   advertencias: string[];
 };
