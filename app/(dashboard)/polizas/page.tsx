@@ -173,10 +173,10 @@ export default async function PolizasPage() {
                     return (
                       <TableRow key={p.id}>
                         <TableCell className="pl-5">
-                          <p className="font-mono text-xs">{p.numero_poliza_original}</p>
-                          {p.numero_poliza_vigor && (
+                          <p className="font-mono text-xs">{p.numeroImpreso}</p>
+                          {p.polizaVigor && (
                             <p className="font-mono text-[11px] text-muted-foreground">
-                              vigor: {p.numero_poliza_vigor}
+                              vigor: {p.polizaVigor}
                             </p>
                           )}
                         </TableCell>
@@ -227,7 +227,7 @@ export default async function PolizasPage() {
                     return (
                       <TableRow key={r.id}>
                         <TableCell className="pl-5 font-mono text-xs">
-                          {r.poliza.numero_poliza_original}
+                          {r.poliza.numeroImpreso}
                         </TableCell>
                         <TableCell className="text-muted-foreground tabular-nums">
                           {r.numero}/{r.poliza._count.recibos}

@@ -64,29 +64,34 @@ model Aseguradora {
 }
 
 model Poliza {
-  id                     String    @id @default(cuid())
-  // Número tal como aparece en la carátula (lo captura el OCR).
-  numero_poliza_original String    @unique
-  // Número vigente cuando la aseguradora lo reasigna en sus sistemas (SAP, MetLife, etc.).
-  numero_poliza_vigor    String?   @unique
-  ramo                   Ramo
-  cliente_id             String
-  aseguradora_id         String
-  vigencia_inicio        DateTime  @db.Date
-  vigencia_fin           DateTime  @db.Date
+  id              String    @id @default(cuid())
+  // Lectura cruda del número tal como aparece en la carátula (lo captura el OCR).
+  numeroImpreso   String    @unique @map("numero_poliza_original")
+  // Póliza raíz: clave exacta de cobranza, derivada de numeroImpreso con
+  // extraerPolizaVigor() (lib/polizas/polizaParser.ts). No es única: las
+  // renovaciones (-01, -02, ...) comparten la misma póliza raíz.
+  polizaVigor     String?   @map("numero_poliza_vigor")
+  ramo            Ramo
+  cliente_id      String
+  aseguradora_id  String
+  vigencia_inicio DateTime  @db.Date
+  vigencia_fin    DateTime  @db.Date
   // Prima de toda la vigencia capturada; se reparte entre los recibos.
-  prima_total            Decimal   @db.Decimal(14, 2)
-  forma_pago             FormaPago
+  prima_total     Decimal   @db.Decimal(14, 2)
+  forma_pago      FormaPago
   // Campos específicos del ramo (vehículo, suma asegurada, beneficiario, etc.).
-  datos_ramo             Json      @default("{}")
-  created_at             DateTime  @default(now())
+  datos_ramo      Json      @default("{}")
+  created_at      DateTime  @default(now())
 
-  cliente     Cliente     @relation(fields: [cliente_id], references: [id])
-  aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id])
+  cliente     Cliente     @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
+  // Restrict: borrar una aseguradora no debe arrastrar la cartera de pólizas.
+  aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Restrict)
   recibos     Recibo[]
 
+  @@index([polizaVigor])
   @@index([cliente_id])
   @@index([aseguradora_id])
+  @@index([vigencia_fin])
   @@index([created_at])
   @@map("polizas")
 }
@@ -100,9 +105,10 @@ model Recibo {
   fecha_vencimiento DateTime     @db.Date
   estado            EstadoRecibo @default(PENDIENTE)
 
-  poliza Poliza @relation(fields: [poliza_id], references: [id])
+  poliza Poliza @relation(fields: [poliza_id], references: [id], onDelete: Cascade)
 
   @@unique([poliza_id, numero])
+  @@index([fecha_vencimiento])
   @@index([estado, fecha_vencimiento])
   @@map("recibos")
 }

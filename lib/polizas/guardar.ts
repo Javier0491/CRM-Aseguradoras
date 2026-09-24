@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
+import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import { generarRecibos } from "@/lib/polizas/recibos";
 import {
   mesesPorFormaPago,
@@ -95,7 +96,8 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
       // 2. Crear la póliza con sus recibos (3.) en la misma transacción.
       const poliza = await tx.poliza.create({
         data: {
-          numero_poliza_original: numeroPoliza,
+          numeroImpreso: numeroPoliza,
+          polizaVigor: extraerPolizaVigor(numeroPoliza),
           ramo: RAMO_DB[ramo],
           cliente_id: cliente.id,
           aseguradora_id: g.aseguradora,
@@ -113,7 +115,7 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
             })),
           },
         },
-        select: { id: true, numero_poliza_original: true },
+        select: { id: true, numeroImpreso: true },
       });
 
       return { cliente: { nombre: cliente.nombre, nuevo: !existente }, poliza };
@@ -121,12 +123,12 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
 
     return {
       ok: true,
-      poliza: { id: resultado.poliza.id, numero: resultado.poliza.numero_poliza_original },
+      poliza: { id: resultado.poliza.id, numero: resultado.poliza.numeroImpreso },
       recibos: recibos.length,
       cliente: resultado.cliente,
     };
   } catch (e) {
-    // El único único alcanzable al crear es numero_poliza_original.
+    // El único único alcanzable al crear es numeroImpreso.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return {
         ok: false,

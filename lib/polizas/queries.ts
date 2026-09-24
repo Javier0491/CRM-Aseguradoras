@@ -24,8 +24,8 @@ export async function getPolizasListado() {
       take: LIMITE_LISTADO,
       select: {
         id: true,
-        numero_poliza_original: true,
-        numero_poliza_vigor: true,
+        numeroImpreso: true,
+        polizaVigor: true,
         ramo: true,
         vigencia_inicio: true,
         vigencia_fin: true,
@@ -56,7 +56,7 @@ export async function getRecibosListado() {
         estado: true,
         poliza: {
           select: {
-            numero_poliza_original: true,
+            numeroImpreso: true,
             _count: { select: { recibos: true } },
             cliente: { select: { nombre: true } },
             aseguradora: { select: { nombre: true, color_hex: true } },
