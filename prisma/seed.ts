@@ -19,6 +19,9 @@ const aseguradoras = [
   { nombre: "HDI", color_hex: "#006B3F" },
   { nombre: "Seguros Monterrey", color_hex: "#00529B" },
   { nombre: "Zurich", color_hex: "#2167AE" },
+  // Chubb es negro en su marca; se usa gris para que se distinga sobre el fondo oscuro.
+  { nombre: "Chubb", color_hex: "#8C8C8C" },
+  { nombre: "ABA Seguros", color_hex: "#003DA5" },
 ];
 
 async function main() {

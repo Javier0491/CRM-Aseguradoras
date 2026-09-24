@@ -3,6 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import {
+  Controller,
+  useForm,
+  useWatch,
+  type FieldErrors,
+  type Resolver,
+} from "react-hook-form";
+import {
   AlertCircle,
   ArrowRight,
   Briefcase,
@@ -35,8 +42,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import { guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
+import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import {
   camposGenerales,
   normalizarOpcion,
@@ -59,6 +68,13 @@ export type PolizaFormInicial = {
 
 type Exito = Extract<GuardarPolizaResultado, { ok: true }>;
 
+type FormValues = {
+  ramo: Ramo;
+  generales: Valores;
+  // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
+  especificos: Record<Ramo, Valores>;
+};
+
 const iconosRamo: Record<Ramo, LucideIcon> = {
   autos: Car,
   gastos_medicos: HeartPulse,
@@ -66,102 +82,183 @@ const iconosRamo: Record<Ramo, LucideIcon> = {
   empresarial: Briefcase,
 };
 
-const vacioPorRamo = (): Record<Ramo, Valores> => ({
-  autos: {},
-  gastos_medicos: {},
-  vida: {},
-  empresarial: {},
-});
+// Los datos generales se agrupan en dos bloques; el orden de cada lista es el de pantalla.
+const CAMPOS_POLIZA = [
+  "aseguradora",
+  "formaPago",
+  "numeroImpreso",
+  "polizaVigor",
+  "vigenciaInicio",
+  "vigenciaFin",
+  "primaTotal",
+];
+const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
 
-function sinClave(obj: Errores, clave: string) {
-  if (!(clave in obj)) return obj;
-  const copia = { ...obj };
-  delete copia[clave];
-  return copia;
+function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
+  const especificos: Record<Ramo, Valores> = {
+    autos: {},
+    gastos_medicos: {},
+    vida: {},
+    empresarial: {},
+  };
+  if (inicial?.ramo && inicial.especificos) especificos[inicial.ramo] = { ...inicial.especificos };
+  return {
+    ramo: inicial?.ramo ?? "autos",
+    generales: { ...inicial?.generales },
+    especificos,
+  };
+}
+
+/** Ruta del campo dentro del formulario para un error plano de `validarPoliza`. */
+function rutaCampo(nombre: string, ramo: Ramo) {
+  return NOMBRES_GENERALES.has(nombre)
+    ? (`generales.${nombre}` as const)
+    : (`especificos.${ramo}.${nombre}` as const);
 }
 
 export function PolizaForm({
   inicial,
   aseguradoras,
+  extrayendo = false,
 }: {
   inicial?: PolizaFormInicial;
   aseguradoras: Opcion[];
+  /** El OCR está leyendo un documento; el formulario se reemplaza por un skeleton. */
+  extrayendo?: boolean;
 }) {
-  const [ramo, setRamo] = React.useState<Ramo>(inicial?.ramo ?? "autos");
-  const [generales, setGenerales] = React.useState<Valores>(inicial?.generales ?? {});
-  // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
-  const [especificos, setEspecificos] = React.useState(() => {
-    const base = vacioPorRamo();
-    if (inicial?.ramo && inicial.especificos) base[inicial.ramo] = { ...inicial.especificos };
-    return base;
-  });
-  const [errores, setErrores] = React.useState<Errores>({});
   const [errorGeneral, setErrorGeneral] = React.useState<string | null>(null);
   const [exito, setExito] = React.useState<Exito | null>(null);
-  const [guardando, startGuardado] = React.useTransition();
+  // Si el usuario corrige a mano la póliza vigor, deja de recalcularse desde el número impreso.
+  const [vigorManual, setVigorManual] = React.useState(false);
+
+  // La validación es la misma que aplica la Server Action (lib/polizas/validacion.ts).
+  const resolver = React.useCallback<Resolver<FormValues>>(
+    async (values) => {
+      const errores = validarPoliza(
+        values.ramo,
+        values.generales,
+        values.especificos[values.ramo],
+        aseguradoras.map((a) => a.value)
+      );
+      if (Object.keys(errores).length === 0) return { values, errors: {} };
+
+      const errors: Record<string, Record<string, unknown>> = { generales: {}, especificos: {} };
+      const porRamo: Record<string, unknown> = {};
+      for (const [nombre, message] of Object.entries(errores)) {
+        const destino = NOMBRES_GENERALES.has(nombre) ? errors.generales : porRamo;
+        destino[nombre] = { type: "validate", message };
+      }
+      errors.especificos[values.ramo] = porRamo;
+      return { values: {}, errors: errors as FieldErrors<FormValues> };
+    },
+    [aseguradoras]
+  );
+
+  const {
+    control,
+    handleSubmit,
+    reset,
+    setError,
+    setValue,
+    getValues,
+    clearErrors,
+    formState: { errors, isSubmitting, submitCount },
+  } = useForm<FormValues>({ defaultValues: valoresIniciales(inicial), resolver });
+
+  const ramo = useWatch({ control, name: "ramo" });
+  const secciones = seccionesPorRamo[ramo];
+  const RamoIcon = iconosRamo[ramo];
 
   const generalesDefs = React.useMemo(
     () =>
       camposGenerales.map((c) => (c.name === "aseguradora" ? { ...c, options: aseguradoras } : c)),
     [aseguradoras]
   );
-  const secciones = seccionesPorRamo[ramo];
-  const RamoIcon = iconosRamo[ramo];
+  const camposPoliza = CAMPOS_POLIZA.map((n) => generalesDefs.find((c) => c.name === n)!);
+  const camposContratante = generalesDefs.filter((c) => !CAMPOS_POLIZA.includes(c.name));
 
-  function limpiarEstado(name?: string) {
-    if (name) setErrores((prev) => sinClave(prev, name));
+  function limpiarAvisos() {
     setErrorGeneral(null);
     setExito(null);
   }
 
-  function setGeneral(name: string, value: string) {
-    setGenerales((prev) => ({ ...prev, [name]: value }));
-    limpiarEstado(name);
-  }
-
-  function setEspecifico(name: string, value: string) {
-    setEspecificos((prev) => ({ ...prev, [ramo]: { ...prev[ramo], [name]: value } }));
-    limpiarEstado(name);
-  }
-
-  function cambiarRamo(nuevo: string) {
-    setRamo(nuevo as Ramo);
-    setErrores({});
-    limpiarEstado();
-  }
-
-  function reiniciar() {
-    setGenerales({});
-    setEspecificos(vacioPorRamo());
-    setErrores({});
-    limpiarEstado();
-  }
-
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const locales = validarPoliza(
-      ramo,
-      generales,
-      especificos[ramo],
-      aseguradoras.map((a) => a.value)
-    );
-    setErrores(locales);
-    setErrorGeneral(null);
-    setExito(null);
-    if (Object.keys(locales).length > 0) return;
-
-    startGuardado(async () => {
-      const res = await guardarPoliza({ ramo, generales, especificos: especificos[ramo] });
-      if (res.ok) {
-        setExito(res);
-      } else {
-        setErrores(res.errores ?? {});
-        setErrorGeneral(res.error ?? null);
-      }
+  function actualizarVigor(numeroImpreso: string) {
+    setValue("generales.polizaVigor", extraerPolizaVigor(numeroImpreso), {
+      shouldValidate: submitCount > 0,
     });
   }
 
-  const totalErrores = Object.keys(errores).length;
+  function reiniciar() {
+    reset(valoresIniciales());
+    setVigorManual(false);
+    limpiarAvisos();
+  }
+
+  const onSubmit = handleSubmit(async (values) => {
+    limpiarAvisos();
+    const res = await guardarPoliza({
+      ramo: values.ramo,
+      generales: values.generales,
+      especificos: values.especificos[values.ramo],
+    });
+    if (res.ok) {
+      setExito(res);
+      return;
+    }
+    setErrorGeneral(res.error ?? null);
+    for (const [nombre, message] of Object.entries(res.errores ?? ({} as Errores))) {
+      setError(rutaCampo(nombre, values.ramo), { type: "server", message });
+    }
+  });
+
+  const bloqueado = isSubmitting || extrayendo;
+  const totalErrores =
+    Object.keys(errors.generales ?? {}).length +
+    Object.keys(errors.especificos?.[ramo] ?? {}).length;
+
+  function renderGeneral(campo: CampoDef) {
+    const esImpreso = campo.name === "numeroImpreso";
+    const esVigor = campo.name === "polizaVigor";
+
+    return (
+      <Controller
+        key={campo.name}
+        name={`generales.${campo.name}`}
+        control={control}
+        render={({ field, fieldState }) => (
+          <Campo
+            campo={campo}
+            valor={field.value ?? ""}
+            error={fieldState.error?.message}
+            disabled={bloqueado}
+            inputRef={field.ref}
+            onBlur={field.onBlur}
+            destacado={esVigor}
+            ayuda={
+              esVigor && vigorManual ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVigorManual(false);
+                    actualizarVigor(getValues("generales.numeroImpreso") ?? "");
+                  }}
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  <RotateCcw className="size-3" /> Recalcular desde el número impreso
+                </button>
+              ) : undefined
+            }
+            onChange={(v) => {
+              field.onChange(v);
+              limpiarAvisos();
+              if (esImpreso && !vigorManual) actualizarVigor(v);
+              if (esVigor) setVigorManual(true);
+            }}
+          />
+        )}
+      />
+    );
+  }
 
   return (
     <Card className="gap-0 py-0">
@@ -169,69 +266,95 @@ export function PolizaForm({
         <CardHeader className="border-b px-6 py-5 [.border-b]:pb-5">
           <CardTitle className="text-base">Nueva póliza</CardTitle>
           <CardDescription>
-            Los campos del formulario se adaptan al ramo seleccionado.
+            Revisa los datos extraídos antes de guardar; todos los campos son editables.
           </CardDescription>
         </CardHeader>
 
-        <fieldset disabled={guardando} className="contents">
-          <CardContent className="space-y-8 px-6 py-6">
-            <div className="grid gap-4 rounded-lg border bg-background/60 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
-              <div className="space-y-2">
-                <Label htmlFor="ramo">Ramo / Producto</Label>
-                <Select value={ramo} onValueChange={cambiarRamo} disabled={guardando}>
-                  <SelectTrigger id="ramo" className="w-full bg-card sm:max-w-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RAMOS.map((r) => {
-                      const Icon = iconosRamo[r];
-                      return (
-                        <SelectItem key={r} value={r}>
-                          <Icon /> {ramoLabels[r]}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <div className="flex size-8 items-center justify-center rounded-md border bg-card text-primary">
-                  <RamoIcon className="size-4" />
-                </div>
-                {secciones.reduce((n, s) => n + s.campos.length, 0)} campos específicos de{" "}
-                {ramoLabels[ramo]}
-              </div>
-            </div>
-
-            <FormSection titulo="Datos generales">
-              {generalesDefs.map((campo) => (
-                <Campo
-                  key={campo.name}
-                  campo={campo}
-                  valor={generales[campo.name] ?? ""}
-                  error={errores[campo.name]}
-                  disabled={guardando}
-                  onChange={(v) => setGeneral(campo.name, v)}
-                />
-              ))}
-            </FormSection>
-
-            {secciones.map((seccion) => (
-              <FormSection key={`${ramo}-${seccion.titulo}`} titulo={seccion.titulo} badge={ramoLabels[ramo]}>
-                {seccion.campos.map((campo) => (
-                  <Campo
-                    key={`${ramo}-${campo.name}`}
-                    campo={campo}
-                    valor={especificos[ramo][campo.name] ?? ""}
-                    error={errores[campo.name]}
-                    disabled={guardando}
-                    onChange={(v) => setEspecifico(campo.name, v)}
-                  />
-                ))}
-              </FormSection>
-            ))}
+        {extrayendo ? (
+          <CardContent className="px-6 py-6">
+            <ExtrayendoSkeleton />
           </CardContent>
-        </fieldset>
+        ) : (
+          <fieldset disabled={isSubmitting} className="contents">
+            <CardContent className="space-y-8 px-6 py-6">
+              <div className="grid gap-4 rounded-lg border bg-background/60 p-4 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="space-y-2">
+                  <Label htmlFor="ramo">Ramo / Producto</Label>
+                  <Controller
+                    name="ramo"
+                    control={control}
+                    render={({ field }) => (
+                      <Select
+                        value={field.value}
+                        onValueChange={(v) => {
+                          field.onChange(v);
+                          clearErrors();
+                          limpiarAvisos();
+                        }}
+                        disabled={bloqueado}
+                      >
+                        <SelectTrigger id="ramo" className="w-full bg-card sm:max-w-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RAMOS.map((r) => {
+                            const Icon = iconosRamo[r];
+                            return (
+                              <SelectItem key={r} value={r}>
+                                <Icon /> {ramoLabels[r]}
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <div className="flex size-8 items-center justify-center rounded-md border bg-card text-primary">
+                    <RamoIcon className="size-4" />
+                  </div>
+                  {secciones.reduce((n, s) => n + s.campos.length, 0)} campos específicos de{" "}
+                  {ramoLabels[ramo]}
+                </div>
+              </div>
+
+              <FormSection titulo="Póliza">{camposPoliza.map(renderGeneral)}</FormSection>
+
+              <FormSection titulo="Contratante">{camposContratante.map(renderGeneral)}</FormSection>
+
+              {secciones.map((seccion) => (
+                <FormSection
+                  key={`${ramo}-${seccion.titulo}`}
+                  titulo={seccion.titulo}
+                  badge={ramoLabels[ramo]}
+                >
+                  {seccion.campos.map((campo) => (
+                    <Controller
+                      key={`${ramo}-${campo.name}`}
+                      name={`especificos.${ramo}.${campo.name}`}
+                      control={control}
+                      render={({ field, fieldState }) => (
+                        <Campo
+                          campo={campo}
+                          valor={field.value ?? ""}
+                          error={fieldState.error?.message}
+                          disabled={bloqueado}
+                          inputRef={field.ref}
+                          onBlur={field.onBlur}
+                          onChange={(v) => {
+                            field.onChange(v);
+                            limpiarAvisos();
+                          }}
+                        />
+                      )}
+                    />
+                  ))}
+                </FormSection>
+              ))}
+            </CardContent>
+          </fieldset>
+        )}
 
         {exito && (
           <div className="mx-6 mb-6 flex flex-wrap items-center gap-3 rounded-lg border border-success/30 bg-success/10 px-4 py-3 text-sm">
@@ -270,12 +393,12 @@ export function PolizaForm({
               </span>
             )}
           </div>
-          <Button type="button" variant="ghost" onClick={reiniciar} disabled={guardando}>
+          <Button type="button" variant="ghost" onClick={reiniciar} disabled={bloqueado}>
             <RotateCcw /> Limpiar
           </Button>
-          <Button type="submit" disabled={guardando || exito !== null}>
-            {guardando ? <Loader2 className="animate-spin" /> : <Save />}
-            {guardando ? "Guardando…" : "Guardar póliza"}
+          <Button type="submit" disabled={bloqueado || exito !== null}>
+            {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />}
+            {isSubmitting ? "Guardando…" : "Guardar póliza"}
           </Button>
         </CardFooter>
       </form>
@@ -310,35 +433,74 @@ function FormSection({
   );
 }
 
+function ExtrayendoSkeleton() {
+  return (
+    <div className="space-y-6" aria-live="polite" aria-busy="true">
+      <p className="flex items-center gap-2 text-sm font-medium text-primary">
+        <Loader2 className="size-4 animate-spin" />
+        Extrayendo datos con IA...
+      </p>
+      <div className="grid gap-x-4 gap-y-5 sm:grid-cols-2">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={i} className="space-y-2">
+            <Skeleton className="h-3.5 w-24" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const tipoInput: Partial<Record<CampoDef["type"], string>> = {
   date: "date",
   email: "email",
   tel: "tel",
 };
 
+const CAMPOS_CLAVE = new Set(["numeroImpreso", "polizaVigor"]);
+
 function Campo({
   campo,
   valor,
   error,
   disabled,
+  destacado,
+  ayuda,
+  inputRef,
+  onBlur,
   onChange,
 }: {
   campo: CampoDef;
   valor: string;
   error?: string;
   disabled?: boolean;
+  /** Resalta el campo con el acento corporativo. */
+  destacado?: boolean;
+  /** Reemplaza al `hint` del campo. */
+  ayuda?: React.ReactNode;
+  inputRef?: React.Ref<HTMLInputElement & HTMLButtonElement>;
+  onBlur?: () => void;
   onChange: (value: string) => void;
 }) {
   const id = `campo-${campo.name}`;
   const errorId = `${id}-error`;
   const invalid = Boolean(error);
+  const pista = ayuda ?? campo.hint;
 
   let control: React.ReactNode;
   if (campo.type === "select") {
     const opciones = (campo.options ?? []).map(normalizarOpcion);
     control = (
       <Select value={valor} onValueChange={onChange} disabled={disabled}>
-        <SelectTrigger id={id} aria-invalid={invalid} aria-describedby={error ? errorId : undefined} className="w-full">
+        <SelectTrigger
+          id={id}
+          ref={inputRef}
+          onBlur={onBlur}
+          aria-invalid={invalid}
+          aria-describedby={error ? errorId : undefined}
+          className="w-full"
+        >
           <SelectValue placeholder={opciones.length ? "Selecciona…" : "Sin opciones disponibles"} />
         </SelectTrigger>
         <SelectContent>
@@ -361,18 +523,24 @@ function Campo({
         )}
         <Input
           id={id}
+          ref={inputRef}
           type={tipoInput[campo.type] ?? "text"}
           inputMode={numerico ? "decimal" : campo.type === "tel" ? "tel" : undefined}
           placeholder={campo.placeholder}
           value={valor}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+          disabled={disabled}
+          autoComplete={CAMPOS_CLAVE.has(campo.name) ? "off" : undefined}
           aria-invalid={invalid}
-          aria-describedby={error ? errorId : campo.hint ? `${id}-hint` : undefined}
+          aria-describedby={error ? errorId : pista ? `${id}-hint` : undefined}
           className={cn(
             numerico && "tabular-nums",
             campo.type === "currency" && "pl-7",
             campo.type === "percent" && "pr-8",
-            (campo.name === "rfc" || campo.name === "rfcCliente") && "uppercase"
+            (campo.name === "rfc" || campo.name === "rfcCliente") && "uppercase",
+            CAMPOS_CLAVE.has(campo.name) && "font-mono uppercase",
+            destacado && "border-primary/40"
           )}
         />
         {campo.type === "percent" && (
@@ -396,9 +564,9 @@ function Campo({
           {error}
         </p>
       ) : (
-        campo.hint && (
+        pista && (
           <p id={`${id}-hint`} className="text-xs text-muted-foreground">
-            {campo.hint}
+            {pista}
           </p>
         )
       )}

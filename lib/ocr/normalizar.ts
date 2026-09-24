@@ -8,6 +8,7 @@ import {
   type CampoDef,
   type Ramo,
 } from "@/lib/polizas/ramos";
+import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import { normalizarRfc, normalizarTelefono, validarCampo, type Valores } from "@/lib/polizas/validacion";
 
 const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
@@ -65,10 +66,15 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
     ? (obj.ramo as Ramo)
     : null;
 
-  const generalesDefs = camposGenerales.map((c) =>
-    c.name === "aseguradora" ? { ...c, options: aseguradoras } : c
-  );
+  const generalesDefs = camposGenerales
+    .filter((c) => !c.derivado)
+    .map((c) => (c.name === "aseguradora" ? { ...c, options: aseguradoras } : c));
   const generales = extraerCampos(obj.generales, generalesDefs, advertencias);
+  // La póliza vigor no la lee la IA: se deriva del número impreso para el cruce de cobranza.
+  if (generales.numeroImpreso) {
+    generales.numeroImpreso = generales.numeroImpreso.toUpperCase();
+    generales.polizaVigor = extraerPolizaVigor(generales.numeroImpreso);
+  }
 
   const especificos = ramo
     ? extraerCampos(obj.especificos, seccionesPorRamo[ramo].flatMap((s) => s.campos), advertencias)

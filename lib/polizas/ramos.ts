@@ -35,6 +35,8 @@ export type CampoDef = {
   hint?: string;
   /** Ocupa las dos columnas del grid. */
   wide?: boolean;
+  /** Se calcula a partir de otro campo: la IA no lo extrae. */
+  derivado?: boolean;
 };
 
 export type SeccionDef = {
@@ -55,7 +57,8 @@ export const camposGenerales: CampoDef[] = [
   { name: "telefono", label: "Teléfono", type: "tel", required: true, placeholder: "10 dígitos" },
   { name: "email", label: "Correo electrónico", type: "email", required: true, placeholder: "cliente@correo.mx", wide: true },
   { name: "aseguradora", label: "Aseguradora", type: "select", required: true, options: [] },
-  { name: "numeroPoliza", label: "Número de póliza", type: "text", required: true, placeholder: "Ej. QUA-AU-7710452" },
+  { name: "numeroImpreso", label: "Número impreso", type: "text", required: true, placeholder: "Ej. AUT-987654-03", hint: "Tal como aparece en la carátula." },
+  { name: "polizaVigor", label: "Póliza vigor", type: "text", required: true, placeholder: "Ej. 987654", hint: "Clave de cobranza; se calcula desde el número impreso.", derivado: true },
   { name: "vigenciaInicio", label: "Inicio de vigencia", type: "date", required: true },
   { name: "vigenciaFin", label: "Fin de vigencia", type: "date", required: true },
   { name: "primaTotal", label: "Prima total", type: "currency", required: true, placeholder: "0.00", hint: "Prima de toda la vigencia; se reparte entre los recibos." },

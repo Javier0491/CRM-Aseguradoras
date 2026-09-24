@@ -29,11 +29,13 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
     version: number;
     inicial?: PolizaFormInicial;
   }>({ version: 0 });
+  const [extrayendo, setExtrayendo] = React.useState(false);
 
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
       <div className="xl:sticky xl:top-20">
         <OcrDropzone
+          onProcesando={setExtrayendo}
           onAplicar={(datos) =>
             setPrellenado((p) => ({
               version: p.version + 1,
@@ -46,6 +48,7 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
         key={prellenado.version}
         inicial={prellenado.inicial}
         aseguradoras={aseguradoras}
+        extrayendo={extrayendo}
       />
     </div>
   );

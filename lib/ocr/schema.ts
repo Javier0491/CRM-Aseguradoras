@@ -80,7 +80,7 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
         enum: [...RAMOS, null],
         description: "Ramo del seguro según la carátula. null si no es posible determinarlo.",
       },
-      generales: objeto(camposGenerales, aseguradoras),
+      generales: objeto(camposGenerales.filter((c) => !c.derivado), aseguradoras),
       especificos: {
         ...objeto(camposEspecificos(), aseguradoras),
         description: "Campos del ramo detectado; los de otros ramos van en null.",

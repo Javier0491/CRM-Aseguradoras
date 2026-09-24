@@ -20,7 +20,7 @@ CAMPOS GENERALES
 - aseguradora: identifícala por logotipo o razón social y usa EXACTAMENTE uno de estos valores:
   ${aseguradoras.map((a) => `"${a}"`).join(", ")}.
   Si es otra compañía, devuelve null y escribe su nombre en "advertencias".
-- numeroPoliza: tal como aparece impreso, incluyendo guiones o prefijos. No incluyas el número de
+- numeroImpreso: el número de póliza tal como aparece impreso, incluyendo guiones o prefijos. No incluyas el número de
   endoso, de inciso ni de recibo.
 - vigenciaInicio / vigenciaFin: fechas "desde" y "hasta" de la vigencia, en formato YYYY-MM-DD.
   Interpreta las fechas en formato mexicano (día/mes/año). Ignora las horas.

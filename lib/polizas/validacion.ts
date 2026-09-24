@@ -14,6 +14,7 @@ export type Errores = Record<string, string>;
 const RFC = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const POLIZA_VIGOR = /^[A-Z0-9]+$/;
 const MAX_ANIOS_VIGENCIA = 30;
 
 export const normalizarRfc = (v: string) => v.replace(/[\s-]/g, "").toUpperCase();
@@ -68,6 +69,9 @@ export function validarCampo(campo: CampoDef, valor: string | undefined): string
       break;
   }
 
+  if (campo.name === "polizaVigor" && !POLIZA_VIGOR.test(v.toUpperCase())) {
+    return "Solo letras y números, sin guiones ni espacios";
+  }
   if (campo.name === "serie" && v.length !== 17) return "El VIN debe tener 17 caracteres";
   if ((campo.name === "rfc" || campo.name === "rfcCliente") && !RFC.test(normalizarRfc(v))) {
     return "RFC con formato inválido";

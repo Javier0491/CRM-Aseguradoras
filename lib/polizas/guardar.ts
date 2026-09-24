@@ -3,7 +3,6 @@ import "server-only";
 import { db } from "@/lib/db";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
-import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import { generarRecibos } from "@/lib/polizas/recibos";
 import {
   mesesPorFormaPago,
@@ -62,7 +61,9 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
   const errores = validarPoliza(ramo, g, especificos, aseguradoras.map((a) => a.id));
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 
-  const numeroPoliza = g.numeroPoliza.trim().toUpperCase();
+  const numeroImpreso = g.numeroImpreso.trim().toUpperCase();
+  // Se respeta la póliza vigor validada por el usuario (puede haberla corregido a mano).
+  const polizaVigor = g.polizaVigor.trim().toUpperCase();
   const rfc = normalizarRfc(g.rfcCliente);
   const nombre = g.cliente.replace(/\s+/g, " ").trim();
   const recibos = generarRecibos({
@@ -96,8 +97,8 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
       // 2. Crear la póliza con sus recibos (3.) en la misma transacción.
       const poliza = await tx.poliza.create({
         data: {
-          numeroImpreso: numeroPoliza,
-          polizaVigor: extraerPolizaVigor(numeroPoliza),
+          numeroImpreso,
+          polizaVigor,
           ramo: RAMO_DB[ramo],
           cliente_id: cliente.id,
           aseguradora_id: g.aseguradora,
@@ -132,7 +133,7 @@ export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResult
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return {
         ok: false,
-        errores: { numeroPoliza: `Ya existe una póliza con el número ${numeroPoliza}` },
+        errores: { numeroImpreso: `Ya existe una póliza con el número ${numeroImpreso}` },
       };
     }
     console.error("[guardarPoliza]", e);

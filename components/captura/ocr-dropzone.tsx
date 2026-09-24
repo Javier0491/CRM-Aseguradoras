@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   FileText,
   Loader2,
+  RotateCcw,
   Sparkles,
   UploadCloud,
   X,
@@ -53,8 +54,11 @@ function validarArchivo(archivo: File): string | null {
 
 export function OcrDropzone({
   onAplicar,
+  onProcesando,
 }: {
+  /** Se invoca en cuanto termina la extracción para prellenar el formulario. */
   onAplicar: (datos: ExtraccionPoliza) => void;
+  onProcesando?: (procesando: boolean) => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -94,6 +98,7 @@ export function OcrDropzone({
     abortRef.current = controller;
     actualizarPreview(archivo);
     setEstado({ status: "procesando", archivo });
+    onProcesando?.(true);
 
     try {
       const body = new FormData();
@@ -114,6 +119,7 @@ export function OcrDropzone({
         datos: json.datos,
         modelo: json.modelo,
       });
+      onAplicar(json.datos);
     } catch (e) {
       if (controller.signal.aborted) return;
       console.error(e);
@@ -122,11 +128,16 @@ export function OcrDropzone({
         archivo,
         mensaje: "No se pudo contactar al servicio de extracción.",
       });
+    } finally {
+      // Una petición abortada por otra más reciente no debe apagar el indicador.
+      if (abortRef.current === controller) onProcesando?.(false);
     }
   }
 
   function limpiar() {
     abortRef.current?.abort();
+    abortRef.current = null;
+    onProcesando?.(false);
     actualizarPreview(null);
     setEstado({ status: "idle" });
     if (inputRef.current) inputRef.current.value = "";
@@ -354,8 +365,11 @@ function ResultadoExtraccion({
           </ul>
         </div>
       )}
-      <Button className="w-full" onClick={onAplicar}>
-        <Sparkles /> Aplicar al formulario
+      <p className="flex items-center gap-1.5 text-xs text-success">
+        <CheckCircle2 className="size-3.5" /> Datos aplicados al formulario.
+      </p>
+      <Button variant="outline" size="sm" className="w-full" onClick={onAplicar}>
+        <RotateCcw /> Volver a aplicar
       </Button>
       <p className="text-center text-[11px] text-muted-foreground">
         La IA puede equivocarse: verifica los datos contra la carátula antes de guardar.

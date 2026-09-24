@@ -10,6 +10,7 @@
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:seed": "prisma db seed",
     "db:studio": "prisma studio"
   },
   "dependencies": {
@@ -25,6 +26,7 @@
     "radix-ui": "^1.6.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-hook-form": "^7.88.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
