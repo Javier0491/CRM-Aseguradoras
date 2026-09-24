@@ -27,8 +27,11 @@ export const metadata: Metadata = {
 const ramoLabel: Record<Ramo, string> = {
   AUTOS: "Autos",
   GASTOS_MEDICOS: "Gastos Médicos",
-  VIDA: "Vida",
-  EMPRESARIAL: "Empresarial",
+  VIDA_INDIVIDUAL: "Vida Individual",
+  VIDA_GRUPO: "Vida Grupo",
+  DANOS: "Daños",
+  HOGAR: "Hogar",
+  OTROS: "Otros",
 };
 
 const formaPagoLabel: Record<FormaPago, string> = {

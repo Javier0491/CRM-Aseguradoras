@@ -16,10 +16,13 @@ import {
   Car,
   CheckCircle2,
   HeartPulse,
+  House,
   Loader2,
   RotateCcw,
   Save,
+  Shapes,
   ShieldCheck,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
@@ -78,8 +81,11 @@ type FormValues = {
 const iconosRamo: Record<Ramo, LucideIcon> = {
   autos: Car,
   gastos_medicos: HeartPulse,
-  vida: ShieldCheck,
-  empresarial: Briefcase,
+  vida_individual: ShieldCheck,
+  vida_grupo: Users,
+  danos: Briefcase,
+  hogar: House,
+  otros: Shapes,
 };
 
 // Los datos generales se agrupan en dos bloques; el orden de cada lista es el de pantalla.
@@ -95,12 +101,7 @@ const CAMPOS_POLIZA = [
 const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
 
 function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
-  const especificos: Record<Ramo, Valores> = {
-    autos: {},
-    gastos_medicos: {},
-    vida: {},
-    empresarial: {},
-  };
+  const especificos = Object.fromEntries(RAMOS.map((r) => [r, {}])) as Record<Ramo, Valores>;
   if (inicial?.ramo && inicial.especificos) especificos[inicial.ramo] = { ...inicial.especificos };
   return {
     ramo: inicial?.ramo ?? "autos",

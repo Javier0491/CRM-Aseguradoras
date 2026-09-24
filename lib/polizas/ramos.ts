@@ -2,14 +2,26 @@
 // El formulario de captura se genera a partir de esta configuración, de modo
 // que agregar un campo o un ramo nuevo no requiere tocar la UI.
 
-export const RAMOS = ["autos", "gastos_medicos", "vida", "empresarial"] as const;
+export const RAMOS = [
+  "autos",
+  "gastos_medicos",
+  "vida_individual",
+  "vida_grupo",
+  "danos",
+  "hogar",
+  "otros",
+] as const;
 export type Ramo = (typeof RAMOS)[number];
 
+// Estas etiquetas son también las opciones con las que la IA clasifica el ramo.
 export const ramoLabels: Record<Ramo, string> = {
   autos: "Autos",
   gastos_medicos: "Gastos Médicos",
-  vida: "Vida",
-  empresarial: "Empresarial",
+  vida_individual: "Vida Individual",
+  vida_grupo: "Vida Grupo",
+  danos: "Daños",
+  hogar: "Hogar",
+  otros: "Otros",
 };
 
 export const FORMAS_PAGO = [
@@ -109,7 +121,7 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
       ],
     },
   ],
-  vida: [
+  vida_individual: [
     {
       titulo: "Plan",
       campos: [
@@ -130,7 +142,19 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
       ],
     },
   ],
-  empresarial: [
+  vida_grupo: [
+    {
+      titulo: "Colectivo",
+      campos: [
+        { name: "numeroAsegurados", label: "Número de asegurados", type: "number", required: true, placeholder: "Ej. 120" },
+        { name: "reglaSuma", label: "Regla de suma asegurada", type: "select", required: true, options: ["Uniforme", "Múltiplo de sueldo", "Por categoría"] },
+        { name: "sumaAsegurada", label: "Suma asegurada por asegurado", type: "currency", required: true, placeholder: "0.00", hint: "Si varía por asegurado, captura el promedio." },
+        { name: "moneda", label: "Moneda", type: "select", required: true, options: ["MXN", "USD", "UDIS"] },
+        { name: "coberturasAdicionales", label: "Coberturas adicionales", type: "text", placeholder: "Ej. Invalidez, muerte accidental", wide: true },
+      ],
+    },
+  ],
+  danos: [
     {
       titulo: "Empresa",
       campos: [
@@ -147,6 +171,34 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
         { name: "valorContenidos", label: "Valor de contenidos", type: "currency", required: true, placeholder: "0.00" },
         { name: "coberturaPrincipal", label: "Cobertura principal", type: "select", required: true, options: ["Incendio todo riesgo", "Paquete empresarial", "Responsabilidad Civil General", "Transporte de mercancías"] },
         { name: "sumaRC", label: "Suma asegurada RC", type: "currency", placeholder: "0.00" },
+      ],
+    },
+  ],
+  hogar: [
+    {
+      titulo: "Inmueble",
+      campos: [
+        { name: "domicilioRiesgo", label: "Domicilio del riesgo", type: "text", required: true, placeholder: "Calle, número, colonia, municipio", wide: true },
+        { name: "tipoVivienda", label: "Tipo de vivienda", type: "select", required: true, options: ["Casa", "Departamento", "Casa en condominio"] },
+        { name: "usoVivienda", label: "Uso", type: "select", required: true, options: ["Habitada por el propietario", "Rentada a terceros", "Casa de descanso"] },
+      ],
+    },
+    {
+      titulo: "Coberturas",
+      campos: [
+        { name: "valorConstruccion", label: "Valor de la construcción", type: "currency", required: true, placeholder: "0.00" },
+        { name: "valorContenidos", label: "Valor de contenidos", type: "currency", required: true, placeholder: "0.00" },
+        { name: "sumaRC", label: "Suma asegurada RC familiar", type: "currency", placeholder: "0.00" },
+        { name: "deducibleInmueble", label: "Deducible", type: "percent", placeholder: "Ej. 2" },
+      ],
+    },
+  ],
+  otros: [
+    {
+      titulo: "Detalle",
+      campos: [
+        { name: "descripcionRiesgo", label: "Tipo de seguro / riesgo cubierto", type: "text", required: true, placeholder: "Ej. Seguro de mascotas", wide: true },
+        { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", placeholder: "0.00" },
       ],
     },
   ],

@@ -30,10 +30,18 @@ CAMPOS GENERALES
 - formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL.
 
 RAMO
-- autos: automóviles, camiones, motos, flotillas, pólizas vehiculares.
-- gastos_medicos: gastos médicos mayores o menores, salud, hospitalización.
-- vida: vida individual o grupo, temporal, ordinario, dotal, con ahorro o inversión.
-- empresarial: daños, incendio, paquete empresarial, responsabilidad civil, transporte, PyME.
+Analiza el documento y determina el ramo del seguro. Debes clasificarlo ESTRICTAMENTE en una de las
+siguientes opciones: "Autos", "Gastos Médicos", "Vida Individual", "Vida Grupo", "Daños", "Hogar".
+Si no estás seguro, usa "Otros".
+- Autos: automóviles, camiones, motos, flotillas, pólizas vehiculares.
+- Gastos Médicos: gastos médicos mayores o menores, salud, hospitalización.
+- Vida Individual: vida de una sola persona: temporal, ordinario, dotal, con ahorro o inversión.
+- Vida Grupo: vida colectiva para empleados o miembros de una agrupación (certificados, listado de
+  asegurados).
+- Daños: seguros empresariales o de bienes de un negocio: incendio, paquete empresarial,
+  responsabilidad civil, transporte de mercancías, PyME.
+- Hogar: casa habitación o departamento de una persona física (construcción, contenidos, RC familiar).
+- Otros: cualquier otro seguro, o cuando el documento no permita decidir con certeza.
 
 CAMPOS ESPECÍFICOS
 - Llena solo los del ramo detectado; los de otros ramos van en null.

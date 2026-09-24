@@ -13,8 +13,11 @@ datasource db {
 enum Ramo {
   AUTOS
   GASTOS_MEDICOS
-  VIDA
-  EMPRESARIAL
+  VIDA_INDIVIDUAL
+  VIDA_GRUPO
+  DANOS
+  HOGAR
+  OTROS
 }
 
 enum FormaPago {

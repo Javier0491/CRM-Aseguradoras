@@ -55,20 +55,23 @@ function objeto(campos: CampoDef[], aseguradoras: readonly string[]): JsonSchema
   };
 }
 
-/** Todos los campos específicos de todos los ramos (sin duplicar nombres compartidos). */
+/**
+ * Todos los campos específicos de todos los ramos, sin duplicar nombres compartidos.
+ * Un nombre compartido debe tener el mismo tipo en todos los ramos que lo usan.
+ */
 function camposEspecificos(): CampoDef[] {
-  const porNombre = new Map<string, CampoDef>();
+  const porNombre = new Map<string, { campo: CampoDef; ramos: string[] }>();
   for (const ramo of RAMOS) {
     for (const campo of seccionesPorRamo[ramo].flatMap((s) => s.campos)) {
-      if (!porNombre.has(campo.name)) {
-        porNombre.set(campo.name, {
-          ...campo,
-          label: `${campo.label} (${ramoLabels[ramo]})`,
-        });
-      }
+      const previo = porNombre.get(campo.name);
+      if (previo) previo.ramos.push(ramoLabels[ramo]);
+      else porNombre.set(campo.name, { campo, ramos: [ramoLabels[ramo]] });
     }
   }
-  return [...porNombre.values()];
+  return [...porNombre.values()].map(({ campo, ramos }) => ({
+    ...campo,
+    label: `${campo.label} (${ramos.join(", ")})`,
+  }));
 }
 
 export function construirEsquemaExtraccion(aseguradoras: readonly string[]): JsonSchema {
@@ -76,9 +79,9 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
     type: "object",
     properties: {
       ramo: {
-        type: ["string", "null"],
-        enum: [...RAMOS, null],
-        description: "Ramo del seguro según la carátula. null si no es posible determinarlo.",
+        type: "string",
+        enum: RAMOS.map((r) => ramoLabels[r]),
+        description: 'Ramo del seguro según el contenido del documento. "Otros" si no hay certeza.',
       },
       generales: objeto(camposGenerales.filter((c) => !c.derivado), aseguradoras),
       especificos: {

@@ -27,8 +27,11 @@ export type GuardarPolizaResultado =
 const RAMO_DB = {
   autos: "AUTOS",
   gastos_medicos: "GASTOS_MEDICOS",
-  vida: "VIDA",
-  empresarial: "EMPRESARIAL",
+  vida_individual: "VIDA_INDIVIDUAL",
+  vida_grupo: "VIDA_GRUPO",
+  danos: "DANOS",
+  hogar: "HOGAR",
+  otros: "OTROS",
 } as const satisfies Record<Ramo, string>;
 
 /** RFC genéricos del SAT: compartidos por muchas personas, no identifican al cliente. */

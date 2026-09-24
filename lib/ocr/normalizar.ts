@@ -4,6 +4,7 @@ import type { ExtraccionPoliza } from "@/lib/ocr/types";
 import {
   camposGenerales,
   RAMOS,
+  ramoLabels,
   seccionesPorRamo,
   type CampoDef,
   type Ramo,
@@ -12,6 +13,15 @@ import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import { normalizarRfc, normalizarTelefono, validarCampo, type Valores } from "@/lib/polizas/validacion";
 
 const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+const clave = (s: string) =>
+  s.normalize("NFD").replace(/\p{Diacritic}/gu, "").replace(/[\s_]+/g, " ").trim().toLowerCase();
+
+/** La IA responde con la etiqueta ("Vida Grupo"); se acepta también la clave interna. */
+function ramoDesdeEtiqueta(valor: string): Ramo | null {
+  const buscado = clave(valor);
+  return RAMOS.find((r) => clave(ramoLabels[r]) === buscado || clave(r) === buscado) ?? null;
+}
 
 function aTexto(campo: CampoDef, valor: unknown): string | null {
   if (valor === null || valor === undefined) return null;
@@ -62,9 +72,10 @@ export function normalizarExtraccion(raw: unknown, aseguradoras: readonly string
     ? obj.advertencias.filter((a): a is string => typeof a === "string" && a.trim() !== "").map((a) => a.trim().slice(0, 300)).slice(0, 15)
     : [];
 
-  const ramo = typeof obj.ramo === "string" && (RAMOS as readonly string[]).includes(obj.ramo)
-    ? (obj.ramo as Ramo)
-    : null;
+  const ramo = typeof obj.ramo === "string" ? ramoDesdeEtiqueta(obj.ramo) : null;
+  if (ramo === "otros") {
+    advertencias.push('La IA clasificó la póliza como "Otros": confirma el ramo antes de guardar.');
+  }
 
   const generalesDefs = camposGenerales
     .filter((c) => !c.derivado)
