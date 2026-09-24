@@ -6,6 +6,7 @@ import {
   maxLongitud,
   RAMOS,
   RAMOS_CON_CENSO,
+  valorSugerido,
   ramoLabels,
   seccionesPorRamo,
   type CampoDef,
@@ -46,6 +47,7 @@ function aTexto(campo: CampoDef, valor: unknown): string | null {
   if (campo.name === "rfcCliente" || campo.name === "rfc") v = normalizarRfc(v);
   if (campo.type === "tel") v = normalizarTelefono(v);
   if (campo.type === "email") v = v.toLowerCase();
+  if (campo.sugerencias) v = valorSugerido(campo, v);
   return v.slice(0, 500);
 }
 
@@ -62,7 +64,11 @@ function extraerCampos(
     if (v === null) continue;
 
     const error = validarCampo(campo, v);
-    if (!error) {
+    if (!error && campo.sugerencias && !campo.sugerencias.includes(v)) {
+      // Se conserva como texto libre, pero se pide revisarla.
+      out[campo.name] = v;
+      advertencias.push(`${campo.label}: "${v}" no está en el catálogo de la promotoría; verifícala.`);
+    } else if (!error) {
       out[campo.name] = v;
     } else if (campo.type === "select" || campo.type === "date") {
       // Un valor fuera de catálogo o una fecha imposible no se puede precargar.

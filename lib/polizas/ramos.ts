@@ -1,4 +1,6 @@
 // Catálogos y definición de campos por ramo.
+import { REDES_MEDICAS, TODAS_LAS_REDES } from "@/lib/polizas/redes-medicas";
+
 // El formulario de captura se genera a partir de esta configuración, de modo
 // que agregar un campo o un ramo nuevo no requiere tocar la UI.
 
@@ -88,7 +90,24 @@ export type CampoDef = {
   wide?: boolean;
   /** Se calcula a partir de otro campo: la IA no lo extrae. */
   derivado?: boolean;
+  /**
+   * Solo "text": valores sugeridos que se ofrecen al escribir, sin impedir texto libre.
+   * Un valor que coincide con una sugerencia (sin importar mayúsculas ni acentos) se
+   * guarda con la forma de la sugerencia.
+   */
+  sugerencias?: readonly string[];
+  /** Sugerencias según la aseguradora seleccionada (el formulario filtra con ellas). */
+  sugerenciasPorAseguradora?: Readonly<Record<string, readonly string[]>>;
 };
+
+const sinAcentos = (s: string) =>
+  s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+
+/** Forma canónica de un valor si coincide con una sugerencia del campo; si no, el valor tal cual. */
+export function valorSugerido(campo: CampoDef, valor: string): string {
+  const buscado = sinAcentos(valor);
+  return campo.sugerencias?.find((s) => sinAcentos(s) === buscado) ?? valor;
+}
 
 export type SeccionDef = {
   titulo: string;
@@ -116,13 +135,28 @@ export const camposGenerales: CampoDef[] = [
   { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: FORMAS_PAGO.map(({ value, label }) => ({ value, label })) },
 ];
 
+/**
+ * Nivel hospitalario de GMM según el catálogo de redes médicas de la promotoría
+ * (lib/polizas/redes-medicas.ts). Admite texto libre si la red no está en el catálogo.
+ */
+const RED_MEDICA: CampoDef = {
+  name: "redMedica",
+  label: "Red médica / Nivel hospitalario",
+  type: "text",
+  required: true,
+  placeholder: "Ej. Ejecutivo",
+  sugerencias: TODAS_LAS_REDES,
+  sugerenciasPorAseguradora: REDES_MEDICAS,
+  hint: "Según la aseguradora; ej. \"Red Médica: Ejecutivo\" → Ejecutivo.",
+};
+
 // Comunes a GMM Individual y Colectivo.
 const CONDICIONES_GMM: CampoDef[] = [
   { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
   { name: "deducible", label: "Deducible", type: "currency", required: true, placeholder: "0.00" },
   { name: "coaseguro", label: "Coaseguro", type: "percent", required: true, placeholder: "Ej. 10" },
   { name: "topeCoaseguro", label: "Tope de coaseguro", type: "currency", placeholder: "0.00" },
-  { name: "nivelHospitalario", label: "Nivel hospitalario", type: "select", required: true, options: ["Esencial", "Estándar", "Plus", "Premium"] },
+  RED_MEDICA,
 ];
 const COBERTURAS_GMM: CampoDef[] = [
   { name: "maternidad", label: "Cobertura de maternidad", type: "select", options: ["Sí", "No"] },
@@ -150,7 +184,7 @@ const CONDICIONES_GMM_COLECTIVO: CampoDef[] = [
   { name: "coaseguro", label: "Coaseguro", type: "percent", required: true, placeholder: "Ej. 10" },
   { name: "topeCoaseguroValor", label: "Tope de coaseguro", type: "number", placeholder: "Ej. 30" },
   { name: "topeCoaseguroUnidad", label: "Unidad del tope de coaseguro", type: "select", options: UNIDADES_MONTO },
-  { name: "nivelHospitalario", label: "Nivel hospitalario", type: "select", required: true, options: ["Esencial", "Estándar", "Plus", "Premium"] },
+  RED_MEDICA,
 ];
 
 export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {

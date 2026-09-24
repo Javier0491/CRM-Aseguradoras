@@ -1,4 +1,5 @@
 import type { ContextoOcr } from "@/lib/ocr/types";
+import { catalogoRedesTexto } from "@/lib/polizas/redes-medicas";
 
 // Instrucciones adicionales cuando el documento es de negociación de GMM Colectivo.
 const CONTEXTO_GMM_COLECTIVO = `
@@ -20,7 +21,7 @@ de Gastos Médicos Mayores Colectivo, que complementa a la carátula porque trae
   · deducibleValor + deducibleUnidad: "3 U.M.A.M." → 3 y "UMAM".
   · coaseguro: "10%" → 10.
   · topeCoaseguroValor + topeCoaseguroUnidad: igual que los montos anteriores, si hay tope.
-  · nivelHospitalario: solo si coincide con uno de los valores permitidos; si no, null.
+  · redMedica: la red médica o nivel hospitalario del subgrupo principal (ver RED MÉDICA).
   U.M.A.M., UMAM, UMA mensual o "Unidades de Medida y Actualización mensuales" son "UMAM".
 - Coberturas adicionales según las reglas del subgrupo principal: maternidad, emergenciaExtranjero
   y correccionVista son "Sí" si el subgrupo la incluye, "No" si la excluye expresamente y null si
@@ -110,10 +111,20 @@ CAMPOS ESPECÍFICOS
 - Para campos con valores permitidos, usa exactamente uno de ellos o null si ninguno coincide.
 - Montos y porcentajes como números (deducible 5% → 5; suma asegurada $1,500,000 → 1500000).
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
+- redMedica (GMM Individual y Colectivo): ver RED MÉDICA.
 - condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma
   asegurada, deducible, coaseguro y coberturas principales), solo con lo impreso.
 - Campos "…Valor" y "…Unidad" (GMM Colectivo): la cantidad como número y su unidad por separado
   (MXN, UMAM o USD), tal como vienen en el subgrupo principal.
+
+RED MÉDICA (NIVEL HOSPITALARIO) DE GASTOS MÉDICOS
+Catálogo oficial de la promotoría por aseguradora:
+${catalogoRedesTexto()}
+- Si el documento menciona una de estas redes (p. ej. "Red Médica: Ejecutivo", "Nivel hospitalario:
+  Platino", "Plan: Serie 400"), asígnala a redMedica escrita EXACTAMENTE como en el catálogo, sin la
+  etiqueta ("Red Médica:", "Nivel:"): "Red Médica: Ejecutivo" → "Ejecutivo"; "Red Alta" → "Red Alta".
+- Prefiere las redes de la aseguradora de la póliza. Si el documento usa un nombre que no está en el
+  catálogo, transcríbelo tal cual y anótalo en "advertencias". Si no aparece, devuelve null.
 
 ADVERTENCIAS
 Lista breve en español de datos que el usuario debe revisar: campos ilegibles, valores ambiguos,

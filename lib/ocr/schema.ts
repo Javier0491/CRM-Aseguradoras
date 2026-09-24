@@ -19,6 +19,14 @@ function describir(campo: CampoDef) {
   if (campo.type === "currency") partes.push("Número en MXN sin símbolo ni separadores de miles.");
   if (campo.type === "percent") partes.push("Número entre 0 y 100, sin el símbolo %.");
   if (campo.type === "tel") partes.push("Solo dígitos; 10 dígitos para México.");
+  if (campo.sugerenciasPorAseguradora) {
+    partes.push(
+      "Usa exactamente un nombre del catálogo de redes médicas de la aseguradora (ver instrucciones); " +
+        "si el documento usa otro, transcríbelo tal cual."
+    );
+  } else if (campo.sugerencias?.length) {
+    partes.push(`Valores habituales: ${campo.sugerencias.join(", ")}; si el documento usa otro, transcríbelo tal cual.`);
+  }
   partes.push("null si no aparece o es ilegible.");
   return partes.join(" ");
 }

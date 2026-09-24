@@ -71,6 +71,7 @@ import {
   type AseguradoValores,
 } from "@/lib/polizas/asegurados";
 import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
+import { redesDeAseguradora } from "@/lib/polizas/redes-medicas";
 import {
   camposGenerales,
   normalizarOpcion,
@@ -285,6 +286,8 @@ export function PolizaForm({
   const secciones = seccionesPorRamo[ramo];
   const RamoIcon = iconosRamo[ramo];
   const conCenso = RAMOS_CON_CENSO.includes(ramo);
+  const aseguradoraId = useWatch({ control, name: "generales.aseguradora" });
+  const nombreAseguradora = aseguradoras.find((a) => a.value === aseguradoraId)?.label;
 
   React.useEffect(() => {
     onRamoChange?.(ramo);
@@ -529,6 +532,12 @@ export function PolizaForm({
                       render={({ field, fieldState }) => (
                         <Campo
                           campo={campo}
+                          // Las redes médicas se sugieren según la aseguradora elegida.
+                          sugerencias={
+                            campo.sugerenciasPorAseguradora
+                              ? (redesDeAseguradora(nombreAseguradora) ?? campo.sugerencias)
+                              : campo.sugerencias
+                          }
                           valor={field.value ?? ""}
                           error={fieldState.error?.message}
                           disabled={bloqueado}
@@ -712,11 +721,14 @@ function Campo({
   disabled,
   destacado,
   ayuda,
+  sugerencias = campo.sugerencias,
   inputRef,
   onBlur,
   onChange,
 }: {
   campo: CampoDef;
+  /** Reemplaza a `campo.sugerencias` (p. ej. filtradas por aseguradora). */
+  sugerencias?: readonly string[];
   valor: string;
   error?: string;
   disabled?: boolean;
@@ -792,7 +804,8 @@ function Campo({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           disabled={disabled}
-          autoComplete={CAMPOS_CLAVE.has(campo.name) ? "off" : undefined}
+          autoComplete={CAMPOS_CLAVE.has(campo.name) || sugerencias ? "off" : undefined}
+          list={sugerencias ? `${id}-sugerencias` : undefined}
           aria-invalid={invalid}
           aria-describedby={error ? errorId : pista ? `${id}-hint` : undefined}
           className={cn(
@@ -808,6 +821,13 @@ function Campo({
           <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
             %
           </span>
+        )}
+        {sugerencias && (
+          <datalist id={`${id}-sugerencias`}>
+            {sugerencias.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
         )}
       </div>
     );

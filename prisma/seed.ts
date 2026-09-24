@@ -22,14 +22,20 @@ const aseguradoras = [
   // Chubb es negro en su marca; se usa gris para que se distinga sobre el fondo oscuro.
   { nombre: "Chubb", color_hex: "#8C8C8C" },
   { nombre: "ABA Seguros", color_hex: "#003DA5" },
+  // Gastos Médicos (catálogo de redes médicas, lib/polizas/redes-medicas.ts).
+  // Colores aproximados de cada marca; ajústalos si no coinciden.
+  { nombre: "Plan Seguro", color_hex: "#0B5CAB" },
+  { nombre: "BX+", color_hex: "#E4002B" },
+  { nombre: "Bupa", color_hex: "#0079C8" },
 ];
 
 async function main() {
   // Upsert por nombre (único): el seed es idempotente y puede ejecutarse varias veces.
+  // En las existentes solo se actualiza el color: no se toca el estado de su integración.
   for (const a of aseguradoras) {
     await db.aseguradora.upsert({
       where: { nombre: a.nombre },
-      update: { color_hex: a.color_hex, estado_api: "INACTIVA" },
+      update: { color_hex: a.color_hex },
       create: { ...a, estado_api: "INACTIVA" },
     });
   }
