@@ -1,16 +1,21 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import {
   ArrowDownRight,
   ArrowUpRight,
-  Download,
+  BarChart3,
+  CalendarCheck,
   FileText,
   HandCoins,
   Landmark,
+  ReceiptText,
   RefreshCcw,
   type LucideIcon,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
+import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
+import { ProduccionChart } from "@/components/dashboard/produccion-chart";
+import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,76 +29,37 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  formatFecha,
-  formatMoneda,
-  formatNumero,
-  formatPorcentaje,
-} from "@/lib/format";
-import {
-  metricas,
-  recibosConciliados,
-  type EstatusConciliacion,
-  type Metrica,
-} from "@/lib/mock-data";
+import { esPeriodo, PERIODO_PREDETERMINADO } from "@/lib/dashboard/periodos";
+import { DIAS_PROXIMOS_VENCIMIENTOS, getDashboard } from "@/lib/dashboard/queries";
+import { diasDesdeHoy, formatFecha, formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Dashboard",
 };
 
-const iconosMetrica: Record<string, LucideIcon> = {
-  primas: Landmark,
-  comisiones: HandCoins,
-  polizas: FileText,
-  renovacion: RefreshCcw,
+type MetricCardProps = {
+  titulo: string;
+  icono: LucideIcon;
+  /** Valor ya formateado; null cuando no hay datos para calcularlo. */
+  valor: string | null;
+  /** Variación porcentual contra el mismo tramo del periodo anterior; null si no aplica. */
+  variacion: number | null;
+  detalle: string;
 };
 
-const estatusConfig: Record<
-  EstatusConciliacion,
-  { label: string; className: string }
-> = {
-  conciliado: {
-    label: "Conciliado",
-    className: "border-success/30 bg-success/10 text-success",
-  },
-  diferencia: {
-    label: "Con diferencia",
-    className: "border-destructive/30 bg-destructive/10 text-destructive",
-  },
-  parcial: {
-    label: "Parcial",
-    className: "border-warning/30 bg-warning/10 text-warning",
-  },
-};
-
-function formatValor(metrica: Metrica) {
-  switch (metrica.formato) {
-    case "moneda":
-      return formatMoneda(metrica.valor);
-    case "porcentaje":
-      return formatPorcentaje(metrica.valor);
-    default:
-      return formatNumero(metrica.valor);
-  }
-}
-
-function MetricCard({ metrica }: { metrica: Metrica }) {
-  const Icon = iconosMetrica[metrica.id] ?? FileText;
-  const positiva = metrica.variacion >= 0;
+function MetricCard({ titulo, icono: Icon, valor, variacion, detalle }: MetricCardProps) {
+  const positiva = (variacion ?? 0) >= 0;
   const Trend = positiva ? ArrowUpRight : ArrowDownRight;
 
   return (
     <Card className="gap-3 py-5">
       <CardHeader className="px-5">
-        <CardDescription className="text-xs font-medium tracking-wide uppercase">
-          {metrica.titulo}
-        </CardDescription>
+        <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
         <CardAction>
           <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary">
             <Icon className="size-4" />
@@ -101,133 +67,236 @@ function MetricCard({ metrica }: { metrica: Metrica }) {
         </CardAction>
       </CardHeader>
       <CardContent className="space-y-2 px-5">
-        <p className="text-2xl font-semibold tracking-tight tabular-nums">
-          {formatValor(metrica)}
+        <p
+          className={cn(
+            "text-2xl font-semibold tracking-tight tabular-nums",
+            valor === null && "text-muted-foreground"
+          )}
+        >
+          {valor ?? "Sin datos"}
         </p>
         <div className="flex items-center gap-2 text-xs">
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 font-medium tabular-nums",
-              positiva ? "text-success" : "text-destructive"
-            )}
-          >
-            <Trend className="size-3.5" />
-            {positiva ? "+" : ""}
-            {formatPorcentaje(metrica.variacion)}
-          </span>
-          <span className="text-muted-foreground">{metrica.detalle}</span>
+          {variacion !== null && (
+            <span
+              className={cn(
+                "inline-flex items-center gap-0.5 font-medium tabular-nums",
+                positiva ? "text-success" : "text-destructive"
+              )}
+            >
+              <Trend className="size-3.5" />
+              {positiva ? "+" : ""}
+              {formatPorcentaje(variacion)}
+            </span>
+          )}
+          <span className="text-muted-foreground">{detalle}</span>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-export default function DashboardPage() {
-  const totalPrima = recibosConciliados.reduce((s, r) => s + r.primaTotal, 0);
-  const totalComision = recibosConciliados.reduce((s, r) => s + r.comision, 0);
+function Vacio({ icono: Icon, titulo, detalle }: { icono: LucideIcon; titulo: string; detalle: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+      <div className="flex size-10 items-center justify-center rounded-full border bg-background text-muted-foreground">
+        <Icon className="size-4" />
+      </div>
+      <p className="text-sm font-medium">{titulo}</p>
+      <p className="max-w-xs text-xs text-muted-foreground">{detalle}</p>
+    </div>
+  );
+}
+
+export default async function DashboardPage({ searchParams }: PageProps<"/">) {
+  const { periodo: periodoParam } = await searchParams;
+  const periodo = esPeriodo(periodoParam) ? periodoParam : PERIODO_PREDETERMINADO;
+  // "…que inician vigencia este mes / en el último trimestre / en el año actual"
+  const enPeriodo = { mes: "este mes", trimestre: "en el último trimestre", anio: "en el año actual" }[periodo];
+
+  const { rango, hoy, totalPolizas, metricas, produccion, recibos, vencimientos } = await getDashboard(periodo);
+  const contraAnterior = "vs. periodo anterior";
+  const { renovacion } = metricas;
+
+  const tarjetas: MetricCardProps[] = [
+    {
+      titulo: "Primas Emitidas",
+      icono: Landmark,
+      valor: formatMoneda(metricas.primas.valor),
+      variacion: metricas.primas.variacion,
+      detalle: metricas.primas.variacion !== null ? contraAnterior : `pólizas que inician vigencia ${enPeriodo}`,
+    },
+    {
+      titulo: "Comisiones Pendientes",
+      icono: HandCoins,
+      valor: metricas.comisiones.valor === null ? null : formatMoneda(metricas.comisiones.valor),
+      variacion: metricas.comisiones.variacion,
+      detalle: "Aún no se registran comisiones",
+    },
+    {
+      titulo: "Pólizas Activas",
+      icono: FileText,
+      valor: formatNumero(metricas.activas.valor),
+      variacion: metricas.activas.variacion,
+      detalle: metricas.activas.variacion !== null ? contraAnterior : "con vigencia en el periodo",
+    },
+    {
+      titulo: "Tasa de Renovación",
+      icono: RefreshCcw,
+      valor: renovacion.tasa === null ? null : formatPorcentaje(renovacion.tasa),
+      variacion: null,
+      detalle:
+        renovacion.tasa === null
+          ? "Sin vencimientos en el periodo"
+          : `${renovacion.renovadas} de ${renovacion.vencidas} ${renovacion.vencidas === 1 ? "vencida" : "vencidas"}`,
+    },
+  ];
 
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Resumen Directivo <Badge variant="outline" className="ml-2 border-warning/30 bg-warning/10 align-middle text-[11px] font-medium text-warning">Datos de ejemplo</Badge>
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight">Resumen Directivo</h1>
           <p className="text-sm text-muted-foreground">
-            Indicadores clave de cartera, cobranza y comisiones.
+            {formatFecha(rango.desde)} – {formatFecha(rango.hasta)} · cartera, producción y cobranza.
           </p>
         </div>
-        <Button>
-          <Download />
-          Exportar reporte
-        </Button>
+        <PeriodoSelector periodo={periodo} />
       </div>
 
-      <section
-        aria-label="Métricas principales"
-        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-      >
-        {metricas.map((m) => (
-          <MetricCard key={m.id} metrica={m} />
+      <section aria-label="Métricas principales" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {tarjetas.map((t) => (
+          <MetricCard key={t.titulo} {...t} />
         ))}
       </section>
 
-      <Card className="gap-0 py-0">
-        <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
-          <CardTitle className="text-base">Últimos Recibos Conciliados</CardTitle>
-          <CardDescription>
-            Pagos aplicados contra estados de cuenta de aseguradoras.
-          </CardDescription>
-          <CardAction>
-            <Button variant="outline" size="sm">
-              Ver conciliación
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="px-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="pl-5">Folio</TableHead>
-                <TableHead>Póliza</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Aseguradora</TableHead>
-                <TableHead>Ramo</TableHead>
-                <TableHead>Fecha de pago</TableHead>
-                <TableHead className="text-right">Prima total</TableHead>
-                <TableHead className="text-right">Comisión</TableHead>
-                <TableHead className="pr-5">Estatus</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recibosConciliados.map((r) => {
-                const estatus = estatusConfig[r.estatus];
-                return (
-                  <TableRow key={r.folio}>
-                    <TableCell className="pl-5 font-mono text-xs text-muted-foreground">
-                      {r.folio}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">{r.poliza}</TableCell>
-                    <TableCell className="max-w-[240px] truncate font-medium">
-                      {r.cliente}
-                    </TableCell>
-                    <TableCell>{r.aseguradora}</TableCell>
-                    <TableCell className="text-muted-foreground">{r.ramo}</TableCell>
-                    <TableCell className="tabular-nums">
-                      {formatFecha(r.fechaPago)}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatMoneda(r.primaTotal)}
-                    </TableCell>
-                    <TableCell className="text-right text-primary tabular-nums">
-                      {formatMoneda(r.comision)}
-                    </TableCell>
-                    <TableCell className="pr-5">
-                      <Badge variant="outline" className={estatus.className}>
-                        {estatus.label}
-                      </Badge>
-                    </TableCell>
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Producción por Aseguradora</CardTitle>
+              <CardDescription>Prima emitida de las pólizas que inician vigencia {enPeriodo}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {produccion.length === 0 ? (
+                <Vacio
+                  icono={BarChart3}
+                  titulo="Sin producción en el periodo"
+                  detalle={
+                    totalPolizas === 0
+                      ? "Aún no hay pólizas registradas. Captura la primera desde Captura Inteligente."
+                      : "Ninguna póliza inicia vigencia en este periodo; prueba con un rango más amplio."
+                  }
+                />
+              ) : (
+                <ProduccionChart datos={produccion} />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="gap-0 py-0">
+            <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+              <CardTitle className="text-base">Últimos Recibos Conciliados</CardTitle>
+              <CardDescription>Recibos con vencimiento en el periodo ya conciliados.</CardDescription>
+              <CardAction>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/conciliacion">Ver conciliación</Link>
+                </Button>
+              </CardAction>
+            </CardHeader>
+            {recibos.length === 0 ? (
+              <Vacio
+                icono={ReceiptText}
+                titulo="No hay recibos conciliados recientemente"
+                detalle="Cuando se concilien pagos contra los estados de cuenta de las aseguradoras aparecerán aquí."
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="pl-5">Póliza</TableHead>
+                    <TableHead>Recibo</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Aseguradora</TableHead>
+                    <TableHead>Ramo</TableHead>
+                    <TableHead>Vencimiento</TableHead>
+                    <TableHead className="pr-5 text-right">Monto</TableHead>
                   </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recibos.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="pl-5 font-mono text-xs">
+                        <Link href={`/polizas/${r.poliza.id}`} className="hover:text-primary hover:underline">
+                          {r.poliza.numeroImpreso}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground tabular-nums">
+                        {r.numero}/{r.poliza._count.recibos}
+                      </TableCell>
+                      <TableCell className="max-w-[220px] truncate font-medium">{r.poliza.cliente.nombre}</TableCell>
+                      <TableCell>
+                        <AseguradoraTag nombre={r.poliza.aseguradora.nombre} color={r.poliza.aseguradora.color_hex} />
+                      </TableCell>
+                      <TableCell>
+                        <RamoBadge ramo={r.poliza.ramo} />
+                      </TableCell>
+                      <TableCell className="tabular-nums">{formatFecha(r.fecha_vencimiento)}</TableCell>
+                      <TableCell className="pr-5 text-right font-medium tabular-nums">
+                        {formatMoneda(Number(r.monto))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </Card>
+        </div>
+
+        <Card className="gap-0 py-0 xl:sticky xl:top-20">
+          <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarCheck className="size-4 text-warning" />
+              Próximos Vencimientos
+            </CardTitle>
+            <CardDescription>Pólizas que vencen en los próximos {DIAS_PROXIMOS_VENCIMIENTOS} días.</CardDescription>
+          </CardHeader>
+          {vencimientos.length === 0 ? (
+            <Vacio
+              icono={CalendarCheck}
+              titulo="Sin vencimientos próximos"
+              detalle={`Ninguna póliza vence en los próximos ${DIAS_PROXIMOS_VENCIMIENTOS} días.`}
+            />
+          ) : (
+            <ul className="divide-y">
+              {vencimientos.map((p) => {
+                const dias = diasDesdeHoy(p.vigencia_fin, hoy);
+                return (
+                  <li key={p.id}>
+                    <Link
+                      href={`/polizas/${p.id}`}
+                      className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-accent/40"
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <p className="truncate text-sm font-medium">{p.cliente.nombre}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                          <RamoBadge ramo={p.ramo} />
+                          <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs tabular-nums">{formatFecha(p.vigencia_fin)}</p>
+                        <p className={cn("text-[11px] font-medium", dias <= 7 ? "text-destructive" : "text-warning")}>
+                          {dias === 0 ? "Vence hoy" : `En ${dias} d`}
+                        </p>
+                      </div>
+                    </Link>
+                  </li>
                 );
               })}
-            </TableBody>
-            <TableFooter>
-              <TableRow className="hover:bg-transparent">
-                <TableCell colSpan={6} className="pl-5 text-muted-foreground">
-                  {recibosConciliados.length} recibos
-                </TableCell>
-                <TableCell className="text-right font-semibold tabular-nums">
-                  {formatMoneda(totalPrima)}
-                </TableCell>
-                <TableCell className="text-right font-semibold text-primary tabular-nums">
-                  {formatMoneda(totalComision)}
-                </TableCell>
-                <TableCell className="pr-5" />
-              </TableRow>
-            </TableFooter>
-          </Table>
-        </CardContent>
-      </Card>
+            </ul>
+          )}
+        </Card>
+      </div>
     </>
   );
 }
