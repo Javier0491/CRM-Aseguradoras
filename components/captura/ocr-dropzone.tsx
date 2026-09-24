@@ -57,7 +57,7 @@ export function OcrDropzone({
   onProcesando,
 }: {
   /** Se invoca en cuanto termina la extracción para prellenar el formulario. */
-  onAplicar: (datos: ExtraccionPoliza) => void;
+  onAplicar: (datos: ExtraccionPoliza, archivo: File) => void;
   onProcesando?: (procesando: boolean) => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -119,7 +119,7 @@ export function OcrDropzone({
         datos: json.datos,
         modelo: json.modelo,
       });
-      onAplicar(json.datos);
+      onAplicar(json.datos, archivo);
     } catch (e) {
       if (controller.signal.aborted) return;
       console.error(e);
@@ -261,7 +261,7 @@ export function OcrDropzone({
           <ResultadoExtraccion
             datos={estado.datos}
             modelo={estado.modelo}
-            onAplicar={() => onAplicar(estado.datos)}
+            onAplicar={() => onAplicar(estado.datos, estado.archivo)}
           />
         )}
       </CardContent>

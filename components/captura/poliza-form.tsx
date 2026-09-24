@@ -46,6 +46,10 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ArchivoInput } from "@/components/archivos/archivo-input";
+import type { VincularArchivoResultado } from "@/lib/archivos/actions";
+import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
+import { subirArchivo } from "@/lib/archivos/subir";
 import { guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
 import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
@@ -67,15 +71,23 @@ export type PolizaFormInicial = {
   generales?: Valores;
   /** Campos específicos del ramo inicial. */
   especificos?: Valores;
+  /** PDF que se leyó con el OCR; se conserva como carátula de la póliza. */
+  caratula?: File;
 };
 
-type Exito = Extract<GuardarPolizaResultado, { ok: true }>;
+type Exito = Extract<GuardarPolizaResultado, { ok: true }> & {
+  /** Resultado de la subida de cada archivo adjuntado. */
+  archivos: Partial<Record<TipoArchivo, VincularArchivoResultado>>;
+};
 
 type FormValues = {
   ramo: Ramo;
   generales: Valores;
   // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
   especificos: Record<Ramo, Valores>;
+  // Archivos que se suben a Storage después de guardar la póliza.
+  caratula: File | null;
+  expediente: File | null;
 };
 
 const iconosRamo: Record<Ramo, LucideIcon> = {
@@ -100,6 +112,11 @@ const CAMPOS_POLIZA = [
 ];
 const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
 
+const AYUDA_ARCHIVO: Record<TipoArchivo, string> = {
+  caratula: "Opcional. Se toma del PDF leído con IA; puedes cambiarlo.",
+  expediente: "Opcional. Solo se guarda como respaldo; no se analiza con IA.",
+};
+
 function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
   const especificos = Object.fromEntries(RAMOS.map((r) => [r, {}])) as Record<Ramo, Valores>;
   if (inicial?.ramo && inicial.especificos) especificos[inicial.ramo] = { ...inicial.especificos };
@@ -107,6 +124,8 @@ function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
     ramo: inicial?.ramo ?? "autos",
     generales: { ...inicial?.generales },
     especificos,
+    caratula: inicial?.caratula ?? null,
+    expediente: null,
   };
 }
 
@@ -131,6 +150,7 @@ export function PolizaForm({
   const [exito, setExito] = React.useState<Exito | null>(null);
   // Si el usuario corrige a mano la póliza vigor, deja de recalcularse desde el número impreso.
   const [vigorManual, setVigorManual] = React.useState(false);
+  const [subiendo, setSubiendo] = React.useState<TipoArchivo | null>(null);
 
   // La validación es la misma que aplica la Server Action (lib/polizas/validacion.ts).
   const resolver = React.useCallback<Resolver<FormValues>>(
@@ -141,9 +161,23 @@ export function PolizaForm({
         values.especificos[values.ramo],
         aseguradoras.map((a) => a.value)
       );
-      if (Object.keys(errores).length === 0) return { values, errors: {} };
+      const erroresArchivo: Partial<Record<TipoArchivo, string>> = {};
+      for (const tipo of TIPOS_ARCHIVO) {
+        const archivo = values[tipo];
+        const error = archivo ? await validarArchivo(tipo, archivo) : null;
+        if (error) erroresArchivo[tipo] = error;
+      }
+      if (Object.keys(errores).length === 0 && Object.keys(erroresArchivo).length === 0) {
+        return { values, errors: {} };
+      }
 
-      const errors: Record<string, Record<string, unknown>> = { generales: {}, especificos: {} };
+      const errors: Record<string, unknown> & {
+        generales: Record<string, unknown>;
+        especificos: Record<string, unknown>;
+      } = { generales: {}, especificos: {} };
+      for (const [tipo, message] of Object.entries(erroresArchivo)) {
+        errors[tipo] = { type: "validate", message };
+      }
       const porRamo: Record<string, unknown> = {};
       for (const [nombre, message] of Object.entries(errores)) {
         const destino = NOMBRES_GENERALES.has(nombre) ? errors.generales : porRamo;
@@ -203,7 +237,16 @@ export function PolizaForm({
       especificos: values.especificos[values.ramo],
     });
     if (res.ok) {
-      setExito(res);
+      // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
+      const archivos: Exito["archivos"] = {};
+      for (const tipo of TIPOS_ARCHIVO) {
+        const archivo = values[tipo];
+        if (!archivo) continue;
+        setSubiendo(tipo);
+        archivos[tipo] = await subirArchivo(res.poliza.id, tipo, archivo);
+      }
+      setSubiendo(null);
+      setExito({ ...res, archivos });
       return;
     }
     setErrorGeneral(res.error ?? null);
@@ -215,7 +258,8 @@ export function PolizaForm({
   const bloqueado = isSubmitting || extrayendo;
   const totalErrores =
     Object.keys(errors.generales ?? {}).length +
-    Object.keys(errors.especificos?.[ramo] ?? {}).length;
+    Object.keys(errors.especificos?.[ramo] ?? {}).length +
+    TIPOS_ARCHIVO.filter((t) => errors[t]).length;
 
   function renderGeneral(campo: CampoDef) {
     const esImpreso = campo.name === "numeroImpreso";
@@ -353,6 +397,42 @@ export function PolizaForm({
                   ))}
                 </FormSection>
               ))}
+
+              <FormSection titulo="Documentos">
+                {TIPOS_ARCHIVO.map((tipo) => (
+                  <Controller
+                    key={tipo}
+                    name={tipo}
+                    control={control}
+                    render={({ field, fieldState }) => (
+                      <div className="space-y-2">
+                        <Label htmlFor={`campo-${tipo}`} className="text-xs">
+                          {ARCHIVOS[tipo].etiqueta}
+                        </Label>
+                        <ArchivoInput
+                          tipo={tipo}
+                          id={`campo-${tipo}`}
+                          value={field.value}
+                          onChange={(archivo) => {
+                            field.onChange(archivo);
+                            limpiarAvisos();
+                          }}
+                          onBlur={field.onBlur}
+                          disabled={bloqueado}
+                          invalid={fieldState.invalid}
+                          describedBy={`campo-${tipo}-hint`}
+                        />
+                        <p
+                          id={`campo-${tipo}-hint`}
+                          className={cn("text-xs", fieldState.error ? "text-destructive" : "text-muted-foreground")}
+                        >
+                          {fieldState.error?.message ?? AYUDA_ARCHIVO[tipo]}
+                        </p>
+                      </div>
+                    )}
+                  />
+                ))}
+              </FormSection>
             </CardContent>
           </fieldset>
         )}
@@ -369,10 +449,25 @@ export function PolizaForm({
                 {exito.cliente.nuevo ? "Cliente nuevo registrado" : "Asignada al cliente existente"}:{" "}
                 {exito.cliente.nombre}
               </p>
+              {TIPOS_ARCHIVO.map((tipo) => {
+                const r = exito.archivos[tipo];
+                if (!r) return null;
+                return r.ok ? (
+                  <p key={tipo} className="text-xs text-muted-foreground">
+                    {ARCHIVOS[tipo].etiqueta} adjunto: {r.archivo.nombre}
+                  </p>
+                ) : (
+                  <p key={tipo} className="mt-1 flex items-center gap-1.5 text-xs text-warning">
+                    <AlertCircle className="size-3.5 shrink-0" />
+                    {ARCHIVOS[tipo].etiqueta}: no se adjuntó ({r.error}). Puedes subirlo desde el
+                    detalle de la póliza.
+                  </p>
+                );
+              })}
             </div>
             <Button asChild size="sm" variant="outline">
-              <Link href="/polizas">
-                Ver pólizas <ArrowRight />
+              <Link href={`/polizas/${exito.poliza.id}`}>
+                Ver póliza <ArrowRight />
               </Link>
             </Button>
             <Button type="button" size="sm" onClick={reiniciar}>
@@ -399,7 +494,11 @@ export function PolizaForm({
           </Button>
           <Button type="submit" disabled={bloqueado || exito !== null}>
             {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />}
-            {isSubmitting ? "Guardando…" : "Guardar póliza"}
+            {subiendo
+              ? `Subiendo ${subiendo === "caratula" ? "carátula" : "expediente"}…`
+              : isSubmitting
+                ? "Guardando…"
+                : "Guardar póliza"}
           </Button>
         </CardFooter>
       </form>

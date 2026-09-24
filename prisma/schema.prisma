@@ -86,6 +86,19 @@ model Poliza {
   datos_ramo      Json      @default("{}")
   created_at      DateTime  @default(now())
 
+  // Archivos de la póliza en Supabase Storage, bucket "expedientes".
+  // Solo se guarda la referencia (ruta dentro del bucket); el archivo vive en Storage.
+  // Carátula en PDF: para consultarla rápido sin descargar el expediente.
+  caratula_path        String?
+  caratula_nombre      String?
+  caratula_bytes       Int?
+  caratula_subido_at   DateTime?
+  // Expediente completo (ZIP) de respaldo.
+  expediente_path      String?
+  expediente_nombre    String?
+  expediente_bytes     Int?
+  expediente_subido_at DateTime?
+
   cliente     Cliente     @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
   // Restrict: borrar una aseguradora no debe arrastrar la cartera de pólizas.
   aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Restrict)

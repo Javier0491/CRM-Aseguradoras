@@ -10,7 +10,11 @@ import type { Opcion } from "@/lib/polizas/ramos";
 const normalizar = (s: string) =>
   s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 
-function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): PolizaFormInicial {
+function aValoresIniciales(
+  datos: ExtraccionPoliza,
+  archivo: File,
+  aseguradoras: Opcion[]
+): PolizaFormInicial {
   // La IA devuelve el nombre de la aseguradora; el formulario necesita su id en BD.
   const nombre = datos.generales.aseguradora;
   const aseguradora = nombre
@@ -20,6 +24,8 @@ function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): Pol
     ramo: datos.ramo ?? undefined,
     generales: { ...datos.generales, aseguradora: aseguradora?.value ?? "" },
     especificos: datos.especificos,
+    // Solo un PDF se conserva como carátula; las imágenes se usan únicamente para el OCR.
+    caratula: archivo.type === "application/pdf" ? archivo : undefined,
   };
 }
 
@@ -36,10 +42,10 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
       <div className="xl:sticky xl:top-20">
         <OcrDropzone
           onProcesando={setExtrayendo}
-          onAplicar={(datos) =>
+          onAplicar={(datos, archivo) =>
             setPrellenado((p) => ({
               version: p.version + 1,
-              inicial: aValoresIniciales(datos, aseguradoras),
+              inicial: aValoresIniciales(datos, archivo, aseguradoras),
             }))
           }
         />

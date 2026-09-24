@@ -1,7 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FilePlus2, FileText, Receipt, Wallet } from "lucide-react";
+import { FilePlus2, FileText, Paperclip, Receipt, Wallet } from "lucide-react";
 
+import {
+  AseguradoraTag,
+  estadoRecibo,
+  formaPagoLabel,
+  ramoLabel,
+  Vencimiento,
+} from "@/components/polizas/poliza-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,67 +21,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { normalizarHex } from "@/lib/color";
-import type { EstadoRecibo, FormaPago, Ramo } from "@/lib/generated/prisma/client";
-import { diasDesdeHoy, formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
+import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { getPolizasListado, getRecibosListado, LIMITE_LISTADO } from "@/lib/polizas/queries";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Pólizas",
 };
-
-const ramoLabel: Record<Ramo, string> = {
-  AUTOS: "Autos",
-  GASTOS_MEDICOS: "Gastos Médicos",
-  VIDA_INDIVIDUAL: "Vida Individual",
-  VIDA_GRUPO: "Vida Grupo",
-  DANOS: "Daños",
-  HOGAR: "Hogar",
-  OTROS: "Otros",
-};
-
-const formaPagoLabel: Record<FormaPago, string> = {
-  ANUAL: "Anual",
-  SEMESTRAL: "Semestral",
-  TRIMESTRAL: "Trimestral",
-  MENSUAL: "Mensual",
-};
-
-const estadoRecibo: Record<EstadoRecibo, { label: string; className: string }> = {
-  PENDIENTE: { label: "Pendiente", className: "border-warning/30 bg-warning/10 text-warning" },
-  PAGADO: { label: "Pagado", className: "border-success/30 bg-success/10 text-success" },
-  CONCILIADO: { label: "Conciliado", className: "border-primary/30 bg-primary/10 text-primary" },
-};
-
-function AseguradoraTag({ nombre, color }: { nombre: string; color: string }) {
-  const hex = normalizarHex(color);
-  return (
-    <span className="inline-flex items-center gap-2">
-      <span
-        aria-hidden
-        className="size-2 shrink-0 rounded-full bg-muted-foreground"
-        style={hex ? { backgroundColor: hex } : undefined}
-      />
-      {nombre}
-    </span>
-  );
-}
-
-function Vencimiento({ fecha, estado, hoy }: { fecha: Date; estado: EstadoRecibo; hoy: string }) {
-  const dias = diasDesdeHoy(fecha, hoy);
-  let nota: React.ReactNode = null;
-  if (estado === "PENDIENTE") {
-    if (dias < 0) nota = <span className="text-destructive">Vencido hace {-dias} d</span>;
-    else if (dias <= 15) nota = <span className="text-warning">{dias === 0 ? "Vence hoy" : `En ${dias} d`}</span>;
-  }
-  return (
-    <div className="flex flex-col">
-      <span className="tabular-nums">{formatFecha(fecha)}</span>
-      {nota && <span className="text-xs">{nota}</span>}
-    </div>
-  );
-}
 
 function SinDatos() {
   return (
@@ -176,7 +129,18 @@ export default async function PolizasPage() {
                     return (
                       <TableRow key={p.id}>
                         <TableCell className="pl-5">
-                          <p className="font-mono text-xs">{p.numeroImpreso}</p>
+                          <Link
+                            href={`/polizas/${p.id}`}
+                            className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary hover:underline"
+                          >
+                            {p.numeroImpreso}
+                            {p.caratula_path && (
+                              <FileText className="size-3 text-primary" aria-label="Con carátula PDF" />
+                            )}
+                            {p.expediente_path && (
+                              <Paperclip className="size-3 text-primary" aria-label="Con expediente ZIP" />
+                            )}
+                          </Link>
                           {p.polizaVigor && (
                             <p className="font-mono text-[11px] text-muted-foreground">
                               vigor: {p.polizaVigor}
@@ -230,7 +194,9 @@ export default async function PolizasPage() {
                     return (
                       <TableRow key={r.id}>
                         <TableCell className="pl-5 font-mono text-xs">
-                          {r.poliza.numeroImpreso}
+                          <Link href={`/polizas/${r.poliza.id}`} className="hover:text-primary hover:underline">
+                            {r.poliza.numeroImpreso}
+                          </Link>
                         </TableCell>
                         <TableCell className="text-muted-foreground tabular-nums">
                           {r.numero}/{r.poliza._count.recibos}

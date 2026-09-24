@@ -26,6 +26,8 @@ export async function getPolizasListado() {
         id: true,
         numeroImpreso: true,
         polizaVigor: true,
+        caratula_path: true,
+        expediente_path: true,
         ramo: true,
         vigencia_inicio: true,
         vigencia_fin: true,
@@ -56,6 +58,7 @@ export async function getRecibosListado() {
         estado: true,
         poliza: {
           select: {
+            id: true,
             numeroImpreso: true,
             _count: { select: { recibos: true } },
             cliente: { select: { nombre: true } },
@@ -76,4 +79,36 @@ export async function getRecibosListado() {
     total,
     pendientes: { cantidad: pendientes._count, monto: Number(pendientes._sum.monto ?? 0) },
   };
+}
+
+export async function getPolizaDetalle(id: string) {
+  await connection();
+  return db.poliza.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      numeroImpreso: true,
+      polizaVigor: true,
+      ramo: true,
+      vigencia_inicio: true,
+      vigencia_fin: true,
+      prima_total: true,
+      forma_pago: true,
+      created_at: true,
+      caratula_path: true,
+      caratula_nombre: true,
+      caratula_bytes: true,
+      caratula_subido_at: true,
+      expediente_path: true,
+      expediente_nombre: true,
+      expediente_bytes: true,
+      expediente_subido_at: true,
+      cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
+      aseguradora: { select: { nombre: true, color_hex: true } },
+      recibos: {
+        orderBy: { numero: "asc" },
+        select: { id: true, numero: true, monto: true, fecha_vencimiento: true, estado: true },
+      },
+    },
+  });
 }
