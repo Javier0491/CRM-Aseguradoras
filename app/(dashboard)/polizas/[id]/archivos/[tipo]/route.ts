@@ -1,15 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { ARCHIVOS, ARCHIVOS_BUCKET, COLUMNAS_ARCHIVO, esTipoArchivo } from "@/lib/archivos/config";
+import { getAlmacen } from "@/lib/archivos/almacen";
+import { ARCHIVOS, COLUMNAS_ARCHIVO, esTipoArchivo } from "@/lib/archivos/config";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-
-// Vigencia corta: el enlace solo debe servir para la consulta que se inicia ahora.
-const VIGENCIA_ENLACE_S = 60;
 
 /**
- * Redirige a una URL firmada de Storage para un archivo de la póliza.
+ * Redirige a una URL firmada de corta vigencia (Supabase o R2) para un archivo de la póliza.
  * Los PDF (carátula, negociación) se abren en el navegador salvo que se pida
  * `?descargar=1`; el expediente ZIP siempre se descarga.
  */
@@ -42,18 +39,16 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/polizas/[id]/arc
   }
 
   const descargar = !ARCHIVOS[tipo].verEnLinea || req.nextUrl.searchParams.get("descargar") === "1";
-  const supabase = await createSupabaseServerClient();
-  const { data, error } = await supabase.storage
-    .from(ARCHIVOS_BUCKET)
-    .createSignedUrl(
+  let url: string;
+  try {
+    url = await getAlmacen().urlDescarga(
       path,
-      VIGENCIA_ENLACE_S,
-      descargar ? { download: nombre ?? `${tipo}.${path.split(".").pop()}` } : undefined
+      descargar ? { descargarComo: nombre ?? `${tipo}.${ARCHIVOS[tipo].extension}` } : undefined
     );
-  if (error || !data) {
-    console.error("[archivos] no se pudo firmar la URL", error);
+  } catch (e) {
+    console.error("[archivos] no se pudo firmar la URL", e);
     return NextResponse.json({ ok: false, error: "No se pudo generar el enlace." }, { status: 502 });
   }
 
-  return NextResponse.redirect(data.signedUrl);
+  return NextResponse.redirect(url);
 }

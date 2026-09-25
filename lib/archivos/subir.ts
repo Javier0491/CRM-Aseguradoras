@@ -1,33 +1,35 @@
-// Subida de archivos de póliza desde el navegador. El archivo va directo a Supabase
-// Storage con la sesión del usuario (sin pasar por el servidor de Next ni su límite de
-// cuerpo), y después una Server Action lo vincula a la póliza.
-import { vincularArchivo, type VincularArchivoResultado } from "@/lib/archivos/actions";
-import { ARCHIVOS, ARCHIVOS_BUCKET, type TipoArchivo } from "@/lib/archivos/config";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+// Subida de archivos de póliza desde el navegador, independiente del proveedor:
+//   1. el servidor valida y firma una URL de subida (prepararSubida),
+//   2. el navegador sube el archivo directo al almacenamiento (Supabase o R2) con PUT,
+//   3. el servidor verifica el objeto y lo vincula a la póliza (vincularArchivo).
+import {
+  prepararSubida,
+  vincularArchivo,
+  type VincularArchivoResultado,
+} from "@/lib/archivos/actions";
+import { ARCHIVOS, type TipoArchivo } from "@/lib/archivos/config";
 
 export async function subirArchivo(
   polizaId: string,
   tipo: TipoArchivo,
   archivo: File
 ): Promise<VincularArchivoResultado> {
-  const def = ARCHIVOS[tipo];
-  const path = `${polizaId}/${crypto.randomUUID()}.${def.extension}`;
-  const storage = createSupabaseBrowserClient().storage.from(ARCHIVOS_BUCKET);
+  const preparada = await prepararSubida(polizaId, tipo, archivo.size);
+  if (!preparada.ok) return preparada;
 
-  // Con un File, supabase-js envía el tipo del propio archivo e ignora `contentType`.
-  // Windows etiqueta los ZIP como "application/x-zip-compressed", que el bucket rechaza,
-  // así que se reetiqueta con el tipo canónico (el contenido ya se validó por su firma).
-  const cuerpo = new Blob([archivo], { type: def.mime });
-  const { error } = await storage.upload(path, cuerpo, { contentType: def.mime, upsert: false });
-  if (error) {
-    console.error("[subirArchivo]", error);
-    return { ok: false, error: "No se pudo subir el archivo a Storage." };
+  // El tipo va con su valor canónico: Windows etiqueta los ZIP como "x-zip-compressed" y la
+  // firma de la URL exige exactamente el tipo con el que se firmó (el contenido ya se validó).
+  const cuerpo = new Blob([archivo], { type: ARCHIVOS[tipo].mime });
+  try {
+    const r = await fetch(preparada.url, { method: "PUT", headers: preparada.headers, body: cuerpo });
+    if (!r.ok) {
+      console.error("[subirArchivo]", r.status, await r.text().catch(() => ""));
+      return { ok: false, error: "No se pudo subir el archivo al almacenamiento." };
+    }
+  } catch (e) {
+    console.error("[subirArchivo]", e);
+    return { ok: false, error: "No se pudo contactar al almacenamiento de archivos." };
   }
 
-  const resultado = await vincularArchivo(polizaId, tipo, path, archivo.name);
-  if (!resultado.ok) {
-    // Sin vínculo el archivo quedaría huérfano; se intenta retirarlo.
-    await storage.remove([path]);
-  }
-  return resultado;
+  return vincularArchivo(polizaId, tipo, preparada.clave, archivo.name);
 }
