@@ -11,6 +11,9 @@ import {
 import type { ExtraccionPoliza } from "@/lib/ocr/types";
 import type { Opcion, Ramo } from "@/lib/polizas/ramos";
 
+/** Primer PDF de los documentos leídos: es el que se guarda como archivo de la póliza. */
+const primerPdf = (archivos: File[]) => archivos.find((a) => a.type === "application/pdf") ?? null;
+
 const normalizar = (s: string) =>
   s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 
@@ -35,8 +38,8 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
     inicial?: PolizaFormInicial;
   }>({ version: 0 });
   const [extrayendo, setExtrayendo] = React.useState(false);
-  // Documento leído por la IA: si es PDF se guarda como carátula de la póliza.
-  // Las imágenes se usan solo para la lectura.
+  // Documentos leídos por la IA: el primer PDF se guarda como carátula de la póliza.
+  // Las imágenes y los demás documentos se usan solo para la lectura.
   const [caratula, setCaratula] = React.useState<File | null>(null);
   // Cambiar `ronda` remonta el panel de captura para dejarlo vacío.
   const [ronda, setRonda] = React.useState(0);
@@ -58,8 +61,8 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
             if (procesando) setCaratula(null);
           }}
           onLimpiar={() => setCaratula(null)}
-          onAplicar={(datos, archivo) => {
-            setCaratula(archivo.type === "application/pdf" ? archivo : null);
+          onAplicar={(datos, archivos) => {
+            setCaratula(primerPdf(archivos));
             setPrellenado((p) => ({
               version: p.version + 1,
               inicial: aValoresIniciales(datos, aseguradoras),
@@ -79,8 +82,8 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
               }}
               onLimpiar={() => setNegociacion(null)}
               // Se integra a lo ya capturado en lugar de reemplazar el formulario.
-              onAplicar={(datos, archivo) => {
-                setNegociacion(archivo.type === "application/pdf" ? archivo : null);
+              onAplicar={(datos, archivos) => {
+                setNegociacion(primerPdf(archivos));
                 formRef.current?.aplicarComplemento(aValoresIniciales(datos, aseguradoras));
               }}
             />

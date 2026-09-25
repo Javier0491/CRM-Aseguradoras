@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   FileText,
   Loader2,
+  Plus,
   RotateCcw,
   Sparkles,
   UploadCloud,
@@ -24,7 +25,9 @@ import {
 } from "@/components/ui/card";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import {
+  OCR_MAX_ARCHIVOS,
   OCR_MAX_BYTES,
+  OCR_MAX_BYTES_TOTAL,
   OCR_TIPOS_PERMITIDOS,
   type ContextoOcr,
   type ExtraccionPoliza,
@@ -35,9 +38,9 @@ import { cn } from "@/lib/utils";
 
 type Estado =
   | { status: "idle" }
-  | { status: "procesando"; archivo: File }
-  | { status: "listo"; archivo: File; datos: ExtraccionPoliza; modelo: string }
-  | { status: "error"; archivo?: File; mensaje: string };
+  | { status: "procesando"; archivos: File[] }
+  | { status: "listo"; archivos: File[]; datos: ExtraccionPoliza; modelo: string }
+  | { status: "error"; archivos: File[]; mensaje: string };
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -45,11 +48,19 @@ function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function validarArchivo(archivo: File): string | null {
-  if (!(OCR_TIPOS_PERMITIDOS as readonly string[]).includes(archivo.type)) {
-    return "Formato no soportado. Usa PDF, PNG, JPG o WEBP.";
+function validarArchivos(archivos: File[]): string | null {
+  if (archivos.length > OCR_MAX_ARCHIVOS) {
+    return `Sube como máximo ${OCR_MAX_ARCHIVOS} documentos a la vez.`;
   }
-  if (archivo.size > OCR_MAX_BYTES) return "El archivo excede el límite de 10 MB.";
+  for (const archivo of archivos) {
+    if (!(OCR_TIPOS_PERMITIDOS as readonly string[]).includes(archivo.type)) {
+      return `"${archivo.name}": formato no soportado. Usa PDF, PNG, JPG o WEBP.`;
+    }
+    if (archivo.size > OCR_MAX_BYTES) return `"${archivo.name}" excede el límite de 10 MB.`;
+  }
+  if (archivos.reduce((s, a) => s + a.size, 0) > OCR_MAX_BYTES_TOTAL) {
+    return "Los documentos exceden en conjunto el límite de 25 MB.";
+  }
   return null;
 }
 
@@ -58,62 +69,68 @@ export function OcrDropzone({
   onProcesando,
   onLimpiar,
   titulo = "Captura inteligente",
-  descripcion = "Sube la carátula de la póliza y la IA extraerá los datos clave.",
+  descripcion = "Sube la carátula de la póliza (y, si hace falta, el recibo u otros documentos) y la IA cruzará los datos clave.",
   contexto,
 }: {
   titulo?: string;
   descripcion?: string;
   /** Contexto de la lectura para la IA (p. ej. formato de negociación de GMM Colectivo). */
   contexto?: ContextoOcr;
-  /** Se invoca en cuanto termina la extracción para prellenar el formulario. */
-  onAplicar: (datos: ExtraccionPoliza, archivo: File) => void;
+  /**
+   * Se invoca en cuanto termina la extracción para prellenar el formulario. `archivos`
+   * son todos los documentos leídos, en el orden en que se subieron.
+   */
+  onAplicar: (datos: ExtraccionPoliza, archivos: File[]) => void;
   onProcesando?: (procesando: boolean) => void;
   /** El usuario descartó el documento con "Limpiar". */
   onLimpiar?: () => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const agregarRef = React.useRef<HTMLInputElement>(null);
   const abortRef = React.useRef<AbortController | null>(null);
-  const previewRef = React.useRef<string | null>(null);
+  const previewsRef = React.useRef<Map<File, string>>(new Map());
   const [arrastrando, setArrastrando] = React.useState(false);
-  const [preview, setPreview] = React.useState<string | null>(null);
+  const [previews, setPreviews] = React.useState<Map<File, string>>(new Map());
   const [estado, setEstado] = React.useState<Estado>({ status: "idle" });
 
-  const actualizarPreview = React.useCallback((archivo: File | null) => {
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-    const url =
-      archivo && archivo.type.startsWith("image/")
-        ? URL.createObjectURL(archivo)
-        : null;
-    previewRef.current = url;
-    setPreview(url);
+  const actualizarPreviews = React.useCallback((archivos: File[]) => {
+    for (const url of previewsRef.current.values()) URL.revokeObjectURL(url);
+    const mapa = new Map(
+      archivos
+        .filter((a) => a.type.startsWith("image/"))
+        .map((a) => [a, URL.createObjectURL(a)] as const)
+    );
+    previewsRef.current = mapa;
+    setPreviews(mapa);
   }, []);
 
   React.useEffect(
     () => () => {
       abortRef.current?.abort();
-      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+      for (const url of previewsRef.current.values()) URL.revokeObjectURL(url);
     },
     []
   );
 
-  async function procesar(archivo: File) {
-    const invalido = validarArchivo(archivo);
+  async function procesar(archivos: File[]) {
+    if (archivos.length === 0) return;
+    const invalido = validarArchivos(archivos);
     if (invalido) {
-      actualizarPreview(null);
-      setEstado({ status: "error", archivo, mensaje: invalido });
+      actualizarPreviews([]);
+      setEstado({ status: "error", archivos, mensaje: invalido });
       return;
     }
 
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
-    actualizarPreview(archivo);
-    setEstado({ status: "procesando", archivo });
+    actualizarPreviews(archivos);
+    setEstado({ status: "procesando", archivos });
     onProcesando?.(true);
 
     try {
       const body = new FormData();
-      body.append("file", archivo);
+      for (const archivo of archivos) body.append("files", archivo);
       if (contexto) body.append("contexto", contexto);
       const res = await fetch("/api/ocr", {
         method: "POST",
@@ -122,22 +139,22 @@ export function OcrDropzone({
       });
       const json = (await res.json()) as OcrRespuesta;
       if (!json.ok) {
-        setEstado({ status: "error", archivo, mensaje: json.error });
+        setEstado({ status: "error", archivos, mensaje: json.error });
         return;
       }
       setEstado({
         status: "listo",
-        archivo,
+        archivos,
         datos: json.datos,
         modelo: json.modelo,
       });
-      onAplicar(json.datos, archivo);
+      onAplicar(json.datos, archivos);
     } catch (e) {
       if (controller.signal.aborted) return;
       console.error(e);
       setEstado({
         status: "error",
-        archivo,
+        archivos,
         mensaje: "No se pudo contactar al servicio de extracción.",
       });
     } finally {
@@ -150,7 +167,7 @@ export function OcrDropzone({
     abortRef.current?.abort();
     abortRef.current = null;
     onProcesando?.(false);
-    actualizarPreview(null);
+    actualizarPreviews([]);
     setEstado({ status: "idle" });
     if (inputRef.current) inputRef.current.value = "";
     onLimpiar?.();
@@ -159,11 +176,12 @@ export function OcrDropzone({
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setArrastrando(false);
-    const archivo = e.dataTransfer.files[0];
-    if (archivo) procesar(archivo);
+    procesar(Array.from(e.dataTransfer.files));
   }
 
-  const archivo = estado.status === "idle" ? undefined : estado.archivo;
+  const archivos = estado.status === "idle" ? [] : estado.archivos;
+  const puedeAgregar =
+    estado.status !== "procesando" && archivos.length > 0 && archivos.length < OCR_MAX_ARCHIVOS;
 
   return (
     <Card className="gap-4">
@@ -173,7 +191,7 @@ export function OcrDropzone({
           {titulo}
         </CardTitle>
         <CardDescription>{descripcion}</CardDescription>
-        {archivo && (
+        {archivos.length > 0 && (
           <CardAction>
             <Button variant="ghost" size="sm" onClick={limpiar}>
               <X /> Limpiar
@@ -186,7 +204,7 @@ export function OcrDropzone({
         <div
           role="button"
           tabIndex={0}
-          aria-label="Subir documento de póliza"
+          aria-label="Subir documentos de póliza"
           onClick={() => inputRef.current?.click()}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -216,46 +234,83 @@ export function OcrDropzone({
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium">
-              {arrastrando ? "Suelta el archivo aquí" : "Arrastra un PDF o imagen, o haz clic para seleccionar"}
+              {arrastrando
+                ? "Suelta los archivos aquí"
+                : "Arrastra uno o varios PDF o imágenes, o haz clic para seleccionar"}
             </p>
             <p className="text-xs text-muted-foreground">
-              PDF, PNG, JPG o WEBP · máximo 10 MB
+              Carátula, recibo, constancia fiscal… · hasta {OCR_MAX_ARCHIVOS} archivos de 10 MB
             </p>
           </div>
           <input
             ref={inputRef}
             type="file"
             accept={OCR_TIPOS_PERMITIDOS.join(",")}
+            multiple
             className="sr-only"
             tabIndex={-1}
             onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) procesar(f);
+              procesar(Array.from(e.target.files ?? []));
+              e.target.value = "";
             }}
           />
         </div>
 
-        {archivo && (
-          <div className="flex items-center gap-3 rounded-lg border bg-background/60 p-3">
-            {preview ? (
-              // eslint-disable-next-line @next/next/no-img-element -- blob URL local
-              <img
-                src={preview}
-                alt=""
-                className="size-12 rounded-md border object-cover"
-              />
-            ) : (
-              <div className="flex size-12 items-center justify-center rounded-md border bg-card">
-                <FileText className="size-5 text-muted-foreground" />
-              </div>
+        {archivos.length > 0 && (
+          <div className="space-y-2">
+            <ul className="divide-y rounded-lg border bg-background/60">
+              {archivos.map((archivo, i) => {
+                const preview = previews.get(archivo);
+                return (
+                  <li key={`${archivo.name}-${i}`} className="flex items-center gap-3 p-3">
+                    {preview ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- blob URL local
+                      <img
+                        src={preview}
+                        alt=""
+                        className="size-10 rounded-md border object-cover"
+                      />
+                    ) : (
+                      <div className="flex size-10 items-center justify-center rounded-md border bg-card">
+                        <FileText className="size-4 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{archivo.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatBytes(archivo.size)}
+                      </p>
+                    </div>
+                    {i === 0 && <EstadoBadge estado={estado} />}
+                  </li>
+                );
+              })}
+            </ul>
+            {puedeAgregar && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full text-muted-foreground"
+                  onClick={() => agregarRef.current?.click()}
+                >
+                  <Plus /> Agregar otro documento y volver a leer
+                </Button>
+                <input
+                  ref={agregarRef}
+                  type="file"
+                  accept={OCR_TIPOS_PERMITIDOS.join(",")}
+                  multiple
+                  className="sr-only"
+                  tabIndex={-1}
+                  onChange={(e) => {
+                    const nuevos = Array.from(e.target.files ?? []);
+                    e.target.value = "";
+                    if (nuevos.length) procesar([...archivos, ...nuevos]);
+                  }}
+                />
+              </>
             )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{archivo.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatBytes(archivo.size)}
-              </p>
-            </div>
-            <EstadoBadge estado={estado} />
           </div>
         )}
 
@@ -272,7 +327,8 @@ export function OcrDropzone({
           <ResultadoExtraccion
             datos={estado.datos}
             modelo={estado.modelo}
-            onAplicar={() => onAplicar(estado.datos, estado.archivo)}
+            documentos={estado.archivos.length}
+            onAplicar={() => onAplicar(estado.datos, estado.archivos)}
           />
         )}
       </CardContent>
@@ -317,10 +373,12 @@ function mostrarValor(campo: string, valor: string) {
 function ResultadoExtraccion({
   datos,
   modelo,
+  documentos,
   onAplicar,
 }: {
   datos: ExtraccionPoliza;
   modelo: string;
+  documentos: number;
   onAplicar: () => void;
 }) {
   const filas = [
@@ -347,6 +405,7 @@ function ResultadoExtraccion({
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
           Datos detectados · {detectados}/{filas.length}
+          {documentos > 1 && ` · ${documentos} documentos`}
         </p>
         <span className="font-mono text-[11px] text-muted-foreground">{modelo}</span>
       </div>
@@ -391,7 +450,7 @@ function ResultadoExtraccion({
         <RotateCcw /> Volver a aplicar
       </Button>
       <p className="text-center text-[11px] text-muted-foreground">
-        La IA puede equivocarse: verifica los datos contra la carátula antes de guardar.
+        La IA puede equivocarse: verifica los datos contra los documentos antes de guardar.
       </p>
     </div>
   );
@@ -400,7 +459,7 @@ function ResultadoExtraccion({
 function ResultadoSkeleton() {
   return (
     <div className="space-y-2" aria-live="polite" aria-busy="true">
-      <p className="text-xs text-muted-foreground">Leyendo el documento con IA; puede tardar hasta un minuto…</p>
+      <p className="text-xs text-muted-foreground">Leyendo los documentos con IA; puede tardar hasta un minuto…</p>
       <div className="divide-y rounded-lg border">
         {Array.from({ length: 8 }).map((_, i) => (
           <div key={i} className="flex items-center gap-3 px-3 py-3">

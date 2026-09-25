@@ -11,7 +11,8 @@ import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 export interface ExtractorPoliza {
   proveedor: string;
   modelo: string;
-  extraer(archivo: File, aseguradoras: readonly string[], contexto?: ContextoOcr): Promise<ExtraccionPoliza>;
+  /** Lee uno o varios documentos de la misma póliza y devuelve una sola extracción. */
+  extraer(archivos: File[], aseguradoras: readonly string[], contexto?: ContextoOcr): Promise<ExtraccionPoliza>;
 }
 
 /** La extracción no está disponible por configuración (p. ej. falta la API key). */
@@ -28,19 +29,27 @@ function crearExtractorOpenAI(apiKey: string, modelo: string): ExtractorPoliza {
   return {
     proveedor: "openai",
     modelo,
-    async extraer(archivo, aseguradoras, contexto) {
-      const base64 = Buffer.from(await archivo.arrayBuffer()).toString("base64");
-      const dataUrl = `data:${archivo.type};base64,${base64}`;
+    async extraer(archivos, aseguradoras, contexto) {
+      const documentos = await Promise.all(
+        archivos.map(async (archivo, i) => {
+          const base64 = Buffer.from(await archivo.arrayBuffer()).toString("base64");
+          const dataUrl = `data:${archivo.type};base64,${base64}`;
+          return archivo.type === "application/pdf"
+            ? ({ type: "input_file", filename: archivo.name || `documento-${i + 1}.pdf`, file_data: dataUrl } as const)
+            : ({ type: "input_image", image_url: dataUrl, detail: "high" } as const);
+        })
+      );
 
-      const documento =
-        archivo.type === "application/pdf"
-          ? ({ type: "input_file", filename: archivo.name || "caratula.pdf", file_data: dataUrl } as const)
-          : ({ type: "input_image", image_url: dataUrl, detail: "high" } as const);
+      const varios = archivos.length > 1;
+      const indicacion =
+        contexto === "gmm_colectivo"
+          ? "Extrae los datos de este formato de negociación u orden de emisión de GMM Colectivo."
+          : "Extrae los datos de esta carátula de póliza.";
 
       const response = await client.responses.create({
         model: modelo,
         temperature: 0,
-        max_output_tokens: 3000,
+        max_output_tokens: 4000,
         // No conservar en OpenAI las carátulas (contienen datos personales).
         store: false,
         instructions: construirSystemPrompt(aseguradoras, contexto),
@@ -50,12 +59,13 @@ function crearExtractorOpenAI(apiKey: string, modelo: string): ExtractorPoliza {
             content: [
               {
                 type: "input_text",
-                text:
-                  contexto === "gmm_colectivo"
-                    ? "Extrae los datos de este formato de negociación u orden de emisión de GMM Colectivo."
-                    : "Extrae los datos de esta carátula de póliza.",
+                text: varios
+                  ? `${indicacion} Recibirás ${archivos.length} documentos de la MISMA póliza (${archivos
+                      .map((a, i) => `${i + 1}. "${a.name}"`)
+                      .join(", ")}); cruza sus datos y devuelve un solo JSON consolidado.`
+                  : indicacion,
               },
-              documento,
+              ...documentos,
             ],
           },
         ],

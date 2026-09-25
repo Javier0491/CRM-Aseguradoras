@@ -9,7 +9,10 @@ import type { Valores } from "@/lib/polizas/validacion";
 export const CONTEXTOS_OCR = ["gmm_colectivo"] as const;
 export type ContextoOcr = (typeof CONTEXTOS_OCR)[number];
 
-export const OCR_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+export const OCR_MAX_BYTES = 10 * 1024 * 1024; // 10 MB por archivo
+/** Documentos que se pueden leer juntos (p. ej. carátula + recibo). */
+export const OCR_MAX_ARCHIVOS = 5;
+export const OCR_MAX_BYTES_TOTAL = 25 * 1024 * 1024; // 25 MB entre todos
 
 export const OCR_TIPOS_PERMITIDOS = [
   "application/pdf",
@@ -42,7 +45,7 @@ export type ExtraccionPoliza = {
 export type OcrRespuesta =
   | {
       ok: true;
-      archivo: { nombre: string; tipo: string; bytes: number };
+      archivos: { nombre: string; tipo: string; bytes: number }[];
       proveedor: string;
       modelo: string;
       procesadoEn: string;
