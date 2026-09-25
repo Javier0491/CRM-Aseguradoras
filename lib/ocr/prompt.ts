@@ -114,8 +114,11 @@ CAMPOS ESPECÍFICOS
 - redMedica (GMM Individual y Colectivo): ver RED MÉDICA.
 - condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma
   asegurada, deducible, coaseguro y coberturas principales), solo con lo impreso.
-- Campos "…Valor" y "…Unidad" (GMM Colectivo): la cantidad como número y su unidad por separado
-  (MXN, UMAM o USD), tal como vienen en el subgrupo principal.
+- Campos "…Valor" y "…Unidad" (GMM Individual y GMM Colectivo: suma asegurada, deducible y tope de
+  coaseguro): la cantidad como número y su unidad por separado, "MXN", "UMAM" o "USD".
+  "2000 U.M.A.M." → 2000 y "UMAM"; "$5,000,000" → 5000000 y "MXN"; "USD 1,000,000" → 1000000 y "USD".
+  U.M.A.M., UMAM, UMA mensual o "Unidades de Medida y Actualización mensuales" son "UMAM".
+  En GMM Colectivo, los valores del subgrupo principal.
 
 RED MÉDICA (NIVEL HOSPITALARIO) DE GASTOS MÉDICOS
 Catálogo oficial de la promotoría por aseguradora:

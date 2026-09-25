@@ -154,13 +154,6 @@ const RED_MEDICA: CampoDef = {
 };
 
 // Comunes a GMM Individual y Colectivo.
-const CONDICIONES_GMM: CampoDef[] = [
-  { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
-  { name: "deducible", label: "Deducible", type: "currency", required: true, placeholder: "0.00" },
-  { name: "coaseguro", label: "Coaseguro", type: "percent", required: true, placeholder: "Ej. 10" },
-  { name: "topeCoaseguro", label: "Tope de coaseguro", type: "currency", placeholder: "0.00" },
-  RED_MEDICA,
-];
 const COBERTURAS_GMM: CampoDef[] = [
   { name: "maternidad", label: "Cobertura de maternidad", type: "select", options: ["Sí", "No"] },
   { name: "emergenciaExtranjero", label: "Emergencia en el extranjero", type: "select", options: ["Sí", "No"] },
@@ -169,7 +162,7 @@ const COBERTURAS_GMM: CampoDef[] = [
 ];
 
 /**
- * Unidades en que los formatos de negociación de GMM Colectivo expresan montos
+ * Unidades en que las pólizas de GMM expresan montos
  * (p. ej. "2000 U.M.A.M." = 2000 Unidades de Medida y Actualización mensuales).
  */
 const UNIDADES_MONTO: Opcion[] = [
@@ -178,8 +171,9 @@ const UNIDADES_MONTO: Opcion[] = [
   { value: "USD", label: "Dólares (USD)" },
 ];
 
-// GMM Colectivo: cada monto es cantidad + unidad, porque suelen venir en UMAM y no en pesos.
-const CONDICIONES_GMM_COLECTIVO: CampoDef[] = [
+// GMM Individual y Colectivo: cada monto es cantidad + unidad, porque suelen venir en UMAM
+// (o en dólares) y no solo en pesos.
+const CONDICIONES_GMM: CampoDef[] = [
   { name: "sumaAseguradaValor", label: "Suma asegurada", type: "number", required: true, placeholder: "Ej. 2000", hint: "Cantidad en la unidad indicada (2000 si es 2000 UMAM)." },
   { name: "sumaAseguradaUnidad", label: "Unidad de la suma asegurada", type: "select", required: true, options: UNIDADES_MONTO },
   { name: "deducibleValor", label: "Deducible", type: "number", required: true, placeholder: "Ej. 3" },
@@ -223,7 +217,7 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
     { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
   ],
   gmm_colectivo: [
-    { titulo: "Condiciones del plan · subgrupo principal", campos: CONDICIONES_GMM_COLECTIVO },
+    { titulo: "Condiciones del plan · subgrupo principal", campos: CONDICIONES_GMM },
     { titulo: "Coberturas adicionales", campos: COBERTURAS_GMM },
     {
       titulo: "Subgrupo",

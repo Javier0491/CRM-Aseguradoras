@@ -29,7 +29,7 @@ import {
   TIPOS_ARCHIVO,
   type TipoArchivo,
 } from "@/lib/archivos/config";
-import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
+import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
 import { ramoDesdeDb, seccionesPorRamo, type CampoDef } from "@/lib/polizas/ramos";
@@ -332,7 +332,16 @@ function DatosRamo({ ramo, datos }: { ramo: string; datos: unknown }) {
     ...secciones.map((s) => ({
       titulo: s.titulo,
       filas: s.campos
-        .map((c) => ({ campo: c, label: c.label, valor: formatearValor(c, valores[c.name]) }))
+        // La unidad se muestra junto a su cantidad ("2,000 UMAM"), no en una fila aparte.
+        .filter((c) => !(c.name.endsWith("Unidad") && conocidos.has(c.name.replace(/Unidad$/, "Valor"))))
+        .map((c) => {
+          const unidad = c.name.endsWith("Valor") ? valores[c.name.replace(/Valor$/, "Unidad")] : undefined;
+          const valor =
+            unidad !== undefined && valores[c.name] !== undefined && valores[c.name] !== ""
+              ? `${formatNumero(Number(valores[c.name]))} ${String(unidad)}`
+              : formatearValor(c, valores[c.name]);
+          return { campo: c, label: c.label, valor };
+        })
         .filter((f) => f.valor),
     })),
     {
