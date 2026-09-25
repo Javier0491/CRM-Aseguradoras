@@ -2,6 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
+import { anioDePoliza, comisionEsperada, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
 import { rangoDePeriodo, type Periodo, type Rango } from "@/lib/dashboard/periodos";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
@@ -56,6 +57,72 @@ async function tasaRenovacion({ desde, hasta }: Rango, hoy: Date) {
     )
   ).length;
   return { tasa: (renovadas / vencidas.length) * 100, vencidas: vencidas.length, renovadas };
+}
+
+/**
+ * Comisión esperada de los recibos PENDIENTES que vencen en el rango, con la misma regla que
+ * la conciliación: % personalizado de la póliza o matriz por aseguradora, ramo y año de la
+ * póliza (contado desde la primera vigencia de su cadena). Los recibos sin % aplicable no
+ * suman y se reportan aparte.
+ */
+async function comisionesPendientes({ desde, hasta }: Rango) {
+  const recibos = await db.recibo.findMany({
+    where: { estado: "PENDIENTE", fecha_vencimiento: { gte: desde, lte: hasta } },
+    select: {
+      monto: true,
+      fecha_vencimiento: true,
+      poliza: {
+        select: {
+          id: true,
+          polizaVigor: true,
+          aseguradora_id: true,
+          ramo: true,
+          vigencia_inicio: true,
+          comision_personalizada_pct: true,
+        },
+      },
+    },
+  });
+  if (recibos.length === 0) return { valor: 0, recibos: 0, sinPorcentaje: 0 };
+
+  const aseguradoras = [...new Set(recibos.map((r) => r.poliza.aseguradora_id))];
+  const vigores = [...new Set(recibos.map((r) => r.poliza.polizaVigor).filter((v): v is string => Boolean(v)))];
+  const [esquemas, cadenas] = await Promise.all([
+    db.esquemaComision.findMany({
+      where: { aseguradora_id: { in: aseguradoras } },
+      select: { aseguradora_id: true, ramo: true, anio_poliza: true, porcentaje: true },
+    }),
+    vigores.length
+      ? db.poliza.groupBy({
+          by: ["aseguradora_id", "polizaVigor"],
+          where: { polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
+          _min: { vigencia_inicio: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const primeraVigencia = new Map(
+    cadenas.map((c) => [`${c.aseguradora_id}|${c.polizaVigor}`, c._min.vigencia_inicio])
+  );
+
+  let valor = 0;
+  let sinPorcentaje = 0;
+  for (const r of recibos) {
+    const p = r.poliza;
+    const inicio = (p.polizaVigor && primeraVigencia.get(`${p.aseguradora_id}|${p.polizaVigor}`)) || p.vigencia_inicio;
+    const porcentaje = resolverPorcentaje(
+      {
+        personalizado: p.comision_personalizada_pct !== null ? Number(p.comision_personalizada_pct) : null,
+        ramo: p.ramo,
+      },
+      anioDePoliza(inicio, r.fecha_vencimiento),
+      esquemas
+        .filter((e) => e.aseguradora_id === p.aseguradora_id)
+        .map((e) => ({ ramo: e.ramo, anio_poliza: e.anio_poliza, porcentaje: Number(e.porcentaje) }))
+    );
+    if (porcentaje) valor += comisionEsperada(Number(r.monto), porcentaje.valor);
+    else sinPorcentaje++;
+  }
+  return { valor: Math.round(valor * 100) / 100, recibos: recibos.length, sinPorcentaje };
 }
 
 async function produccionPorAseguradora({ desde, hasta }: Rango) {
@@ -134,7 +201,7 @@ export async function getDashboard(periodo: Periodo) {
   const hoy = new Date(`${hoyIso}T00:00:00Z`);
   const { actual, anterior } = rangoDePeriodo(periodo, hoyIso);
 
-  const [primas, primasAnt, activas, activasAnt, renovacion, produccion, recibos, vencimientos, totalPolizas] =
+  const [primas, primasAnt, activas, activasAnt, renovacion, produccion, recibos, vencimientos, totalPolizas, pendientes] =
     await Promise.all([
       primasEmitidas(actual),
       primasEmitidas(anterior),
@@ -145,6 +212,7 @@ export async function getDashboard(periodo: Periodo) {
       recibosConciliados(actual),
       proximosVencimientos(hoy),
       db.poliza.count(),
+      comisionesPendientes(actual),
     ]);
 
   return {
@@ -155,8 +223,7 @@ export async function getDashboard(periodo: Periodo) {
       primas: { valor: primas, variacion: variacion(primas, primasAnt) },
       activas: { valor: activas, variacion: variacion(activas, activasAnt) },
       renovacion,
-      // Aún no existe un registro de comisiones: la tarjeta muestra "Sin datos".
-      comisiones: { valor: null as number | null, variacion: null as number | null },
+      comisiones: pendientes,
     },
     produccion,
     recibos,

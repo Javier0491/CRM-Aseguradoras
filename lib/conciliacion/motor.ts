@@ -1,10 +1,6 @@
 import "server-only";
 
-import {
-  anioDePoliza,
-  comisionEsperada,
-  porcentajeDeEsquema,
-} from "@/lib/conciliacion/comisiones";
+import { anioDePoliza, comisionEsperada, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
 import {
   TOLERANCIA_MXN,
   type FilaEstado,
@@ -54,6 +50,8 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       select: { ramo: true, anio_poliza: true, porcentaje: true },
     }),
   ]);
+
+  const esquemasNum = esquemas.map((e) => ({ ...e, porcentaje: Number(e.porcentaje) }));
 
   // Primera vigencia de cada cadena (misma póliza vigor) para calcular el año de la póliza.
   const primeraVigencia = new Map<string, Date>();
@@ -127,21 +125,19 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       recibo: { id: recibo.id, numero: recibo.numero, total: recibo.total, monto },
     };
 
-    // Porcentaje: el personalizado de la póliza manda; si no, la matriz por ramo y año.
     const anio = anioDePoliza(
       primeraVigencia.get(recibo.poliza.polizaVigor ?? recibo.poliza.id) ?? recibo.poliza.vigencia_inicio,
       recibo.fecha_vencimiento
     );
-    let porcentaje: ResultadoMatch["porcentaje"] = null;
-    if (recibo.poliza.comision_personalizada_pct !== null) {
-      porcentaje = { valor: Number(recibo.poliza.comision_personalizada_pct), origen: "personalizado", anio: null };
-    } else {
-      const delRamo = esquemas
-        .filter((e) => e.ramo === recibo.poliza.ramo)
-        .map((e) => ({ anio_poliza: e.anio_poliza, porcentaje: Number(e.porcentaje) }));
-      const aplicado = porcentajeDeEsquema(delRamo, anio);
-      if (aplicado) porcentaje = { valor: aplicado.porcentaje, origen: "esquema", anio };
-    }
+    const porcentaje = resolverPorcentaje(
+      {
+        personalizado:
+          recibo.poliza.comision_personalizada_pct !== null ? Number(recibo.poliza.comision_personalizada_pct) : null,
+        ramo: recibo.poliza.ramo,
+      },
+      anio,
+      esquemasNum
+    );
     if (!porcentaje) {
       return {
         ...conRecibo,

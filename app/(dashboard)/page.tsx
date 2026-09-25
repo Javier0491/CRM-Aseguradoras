@@ -128,9 +128,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     {
       titulo: "Comisiones Pendientes",
       icono: HandCoins,
-      valor: metricas.comisiones.valor === null ? null : formatMoneda(metricas.comisiones.valor),
-      variacion: metricas.comisiones.variacion,
-      detalle: "Aún no se registran comisiones",
+      valor: formatMoneda(metricas.comisiones.valor),
+      variacion: null,
+      detalle:
+        metricas.comisiones.recibos === 0
+          ? `sin recibos pendientes ${enPeriodo}`
+          : `${formatNumero(metricas.comisiones.recibos)} ${metricas.comisiones.recibos === 1 ? "recibo pendiente" : "recibos pendientes"}` +
+            (metricas.comisiones.sinPorcentaje > 0 ? ` · ${metricas.comisiones.sinPorcentaje} sin matriz` : ""),
     },
     {
       titulo: "Pólizas Activas",

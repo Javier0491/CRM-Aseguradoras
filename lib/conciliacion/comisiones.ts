@@ -29,6 +29,25 @@ export function porcentajeDeEsquema(
   return aplicable ? { porcentaje: aplicable.porcentaje, anioAplicado: aplicable.anio_poliza } : null;
 }
 
+export type PorcentajeAplicado = { valor: number; origen: "personalizado" | "esquema"; anio: number | null };
+
+/**
+ * Regla única del porcentaje de comisión de un recibo (la usan la conciliación y el dashboard):
+ * el % personalizado de la póliza manda; si no hay, la matriz de la aseguradora por ramo y año.
+ */
+export function resolverPorcentaje(
+  poliza: { personalizado: number | null; ramo: string },
+  anio: number,
+  esquemasAseguradora: readonly { ramo: string; anio_poliza: number; porcentaje: number }[]
+): PorcentajeAplicado | null {
+  if (poliza.personalizado !== null) return { valor: poliza.personalizado, origen: "personalizado", anio: null };
+  const aplicado = porcentajeDeEsquema(
+    esquemasAseguradora.filter((e) => e.ramo === poliza.ramo),
+    anio
+  );
+  return aplicado ? { valor: aplicado.porcentaje, origen: "esquema", anio } : null;
+}
+
 export const comisionEsperada = (montoRecibo: number, porcentaje: number) =>
   redondear((montoRecibo * porcentaje) / 100);
 

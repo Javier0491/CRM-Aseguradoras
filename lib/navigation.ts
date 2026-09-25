@@ -4,6 +4,7 @@ import {
   FileText,
   LayoutDashboard,
   Mail,
+  Percent,
   PlugZap,
   Scale,
   ScanText,
@@ -29,6 +30,7 @@ export const mainNav: NavItem[] = [
 ];
 
 export const systemNav: NavItem[] = [
+  { title: "Matriz de comisiones", href: "/configuracion/comisiones", icon: Percent },
   { title: "Integraciones", href: "/configuracion/integraciones", icon: PlugZap },
 ];
 
