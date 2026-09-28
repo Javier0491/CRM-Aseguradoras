@@ -139,7 +139,7 @@ export function ConciliacionWorkspace({
   const [filtro, setFiltro] = React.useState<EstatusMatch | "todos">("todos");
   const [confirmar, setConfirmar] = React.useState(false);
   const [aplicando, startAplicar] = React.useTransition();
-  const [aplicados, setAplicados] = React.useState<{ conciliados: number; creados: number } | null>(null);
+  const [aplicados, setAplicados] = React.useState<{ conciliados: number; pagados: number; creados: number } | null>(null);
 
   const hojaActual = archivo ? archivo.hojas[archivo.hoja] : null;
   const encabezados = hojaActual ? (hojaActual.filas[archivo!.encabezado] ?? []) : [];
@@ -212,11 +212,14 @@ export function ConciliacionWorkspace({
       }
       // La tabla se conserva para ver qué se concilió y qué se auto-creó. Si se vuelve a
       // analizar, esos renglones salen como "Ya conciliado".
-      setAplicados({ conciliados: res.conciliados, creados: res.creados });
+      setAplicados({ conciliados: res.conciliados, pagados: res.pagados, creados: res.creados });
     });
   }
 
-  const porAplicar = analisis ? analisis.resumen.conciliado + analisis.resumen.auto_creado : 0;
+  // Todo recibo que el estado de cuenta reporta cobrado avanza en su póliza al aplicar.
+  const porAplicar = analisis
+    ? analisis.resumen.conciliado + analisis.resumen.diferencia + analisis.resumen.auto_creado
+    : 0;
   const visibles = analisis
     ? analisis.resultados.filter((r) => filtro === "todos" || r.estatus === filtro)
     : [];
@@ -370,6 +373,22 @@ export function ConciliacionWorkspace({
                         <li key={`${o.fila}-${o.motivo}`}>
                           {o.fila > 0 ? `Fila ${o.fila}: ` : ""}
                           {o.motivo}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                {conversion.agrupadas.length > 0 && (
+                  <details open>
+                    <summary className="cursor-pointer text-sky-400 hover:text-foreground">
+                      {conversion.agrupadas.length}{" "}
+                      {conversion.agrupadas.length === 1 ? "renglón repetía" : "renglones repetían"} el folio de otro y
+                      se agruparon
+                    </summary>
+                    <ul className="mt-1 list-disc pl-5">
+                      {conversion.agrupadas.slice(0, 20).map((o) => (
+                        <li key={`${o.fila}-${o.motivo}`}>
+                          Fila {o.fila}: {o.motivo}
                         </li>
                       ))}
                     </ul>
@@ -540,14 +559,16 @@ export function ConciliacionWorkspace({
                 <span className="flex items-center gap-1.5 text-success">
                   <CheckCircle2 className="size-4" /> {aplicados.conciliados}{" "}
                   {aplicados.conciliados === 1 ? "recibo conciliado" : "recibos conciliados"}
+                  {aplicados.pagados > 0 &&
+                    `, ${aplicados.pagados} ${aplicados.pagados === 1 ? "pagado" : "pagados"} con diferencia`}
                   {aplicados.creados > 0 &&
                     ` y ${aplicados.creados} ${aplicados.creados === 1 ? "auto-creado" : "auto-creados"}`}
                   .
                 </span>
               ) : (
                 <span className="text-muted-foreground">
-                  Se aplican los renglones en verde y los auto-creados en azul; diferencias, no encontrados y
-                  por revisar no se modifican.
+                  Se aplican los conciliados, los auto-creados y las diferencias (quedan como Pagado para
+                  aclarar la comisión); no encontrados y por revisar no se modifican.
                 </span>
               )}
             </div>
@@ -575,8 +596,15 @@ export function ConciliacionWorkspace({
                   reporta cobrados pero no existían (con monto estimado de la prima)
                 </>
               )}
-              . Se guardará la comisión pagada y el folio de cada uno. Las diferencias, los no encontrados y
-              los renglones por revisar no se modifican.
+              .
+              {(analisis?.resumen.diferencia ?? 0) > 0 && (
+                <>
+                  {" "}Los {analisis?.resumen.diferencia} recibos con diferencia se marcarán como <strong>PAGADOS</strong>:
+                  cobrados, con la comisión por aclarar.
+                </>
+              )}{" "}
+              Se guardará la comisión pagada y el folio de cada uno. Los no encontrados y los renglones por
+              revisar no se modifican.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

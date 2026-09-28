@@ -1,4 +1,5 @@
 // Lectura del estado de cuenta en el navegador (CSV, XLSX, XLS) y mapeo de columnas.
+import { agruparPorFolio, type FilaAgrupada } from "@/lib/conciliacion/agrupar";
 import { leerMonto } from "@/lib/conciliacion/comisiones";
 import { MAX_FILAS_ESTADO, type FilaEstado } from "@/lib/conciliacion/tipos";
 
@@ -185,6 +186,8 @@ export function detectarEstructura(filas: Celda[][]): Estructura {
 export type Conversion = {
   filas: FilaEstado[];
   omitidas: { fila: number; motivo: string }[];
+  /** Renglones que repetían el folio de otro y se unieron a él (ver agruparPorFolio). */
+  agrupadas: FilaAgrupada[];
 };
 
 const MESES: Record<string, number> = {
@@ -233,7 +236,7 @@ function leerFolio(c: Celda): string | null {
 
 /** Convierte las filas de datos (debajo del encabezado) al formato del motor de conciliación. */
 export function construirFilas(filas: Celda[][], encabezado: number, mapeo: Mapeo): Conversion {
-  const resultado: Conversion = { filas: [], omitidas: [] };
+  const resultado: Conversion = { filas: [], omitidas: [], agrupadas: [] };
   if (mapeo.poliza === null || mapeo.comision === null) return resultado;
 
   filas.slice(encabezado + 1).forEach((celdas, i) => {
@@ -268,6 +271,11 @@ export function construirFilas(filas: Celda[][], encabezado: number, mapeo: Mape
       ...(fecha && { fecha }),
     });
   });
+
+  // Un mismo folio no puede generar varios renglones (recibos fantasma).
+  const agrupado = agruparPorFolio(resultado.filas);
+  resultado.filas = agrupado.filas;
+  resultado.agrupadas = agrupado.agrupadas;
 
   if (resultado.filas.length > MAX_FILAS_ESTADO) {
     resultado.omitidas.push({ fila: 0, motivo: `el archivo supera ${MAX_FILAS_ESTADO} renglones` });

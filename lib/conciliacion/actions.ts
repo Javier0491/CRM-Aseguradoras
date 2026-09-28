@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { agruparPorFolio } from "@/lib/conciliacion/agrupar";
 import { aplicarResultados, cruzarEstadoDeCuenta } from "@/lib/conciliacion/motor";
 import { MAX_FILAS_ESTADO, type AnalisisResultado, type FilaEstado } from "@/lib/conciliacion/tipos";
 import { db } from "@/lib/db";
@@ -54,7 +55,8 @@ async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Valid
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe." };
   const filas = sanitizarFilas(rawFilas);
   if (!filas) return { ok: false, error: `El archivo no tiene renglones válidos (máximo ${MAX_FILAS_ESTADO}).` };
-  return { ok: true, aseguradoraId: aseguradora.id, filas };
+  // El navegador ya agrupa los folios repetidos; se repite aquí porque no se confía en él.
+  return { ok: true, aseguradoraId: aseguradora.id, filas: agruparPorFolio(filas).filas };
 }
 
 /** Cruza el estado de cuenta contra la base de datos sin modificar nada. */
@@ -66,14 +68,13 @@ export async function analizarConciliacion(aseguradoraId: string, filas: FilaEst
 }
 
 export type AplicarResultado =
-  | { ok: true; conciliados: number; creados: number }
+  | { ok: true; conciliados: number; pagados: number; creados: number }
   | { ok: false; error: string };
 
 /**
- * Aplica el cruce: marca como CONCILIADOS los recibos con match exacto y crea, ya conciliados,
- * los que el estado de cuenta reporta cobrados pero no existían ("auto_creado"). En ambos se
- * guarda la comisión pagada y el folio del archivo. El cruce se recalcula aquí: no se confía
- * en el resultado que muestra el navegador, que pudo quedar desactualizado.
+ * Aplica el cruce (ver aplicarResultados): concilia los matches exactos, registra como PAGADO
+ * los cobrados con diferencia de comisión y crea los que no existían. El cruce se recalcula
+ * aquí: no se confía en el resultado que muestra el navegador, que pudo quedar desactualizado.
  */
 export async function aplicarConciliacion(aseguradoraId: string, filas: FilaEstado[]): Promise<AplicarResultado> {
   const v = await validar(aseguradoraId, filas);
@@ -81,12 +82,13 @@ export async function aplicarConciliacion(aseguradoraId: string, filas: FilaEsta
 
   const { resultados } = await cruzarEstadoDeCuenta(v.aseguradoraId, v.filas);
   try {
-    const { conciliados, creados } = await aplicarResultados(resultados);
+    const { conciliados, pagados, creados } = await aplicarResultados(resultados);
 
     revalidatePath("/");
-    revalidatePath("/polizas");
+    // Listado y detalle de cada póliza: su avance de recibos cambió.
+    revalidatePath("/polizas", "layout");
     revalidatePath("/conciliacion");
-    return { ok: true, conciliados, creados };
+    return { ok: true, conciliados, pagados, creados };
   } catch (e) {
     // Otro proceso creó el mismo recibo o folio entre el cruce y la escritura: nada se guardó.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

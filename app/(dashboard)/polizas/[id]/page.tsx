@@ -34,6 +34,7 @@ import {
 import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
+import { CAMPOS_LISTA_COBERTURAS, listaDeCoberturas } from "@/lib/polizas/coberturas";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
 import { ramoDesdeDb, seccionesPorRamo, SUMA_ASEGURADA, TEXTO_SUMA_ILIMITADA, type CampoDef } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
@@ -174,6 +175,7 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
           <Card className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Recibos</CardTitle>
+              <AvanceRecibos estados={poliza.recibos.map((r) => r.estado)} />
             </CardHeader>
             <Table>
               <TableHeader>
@@ -342,6 +344,36 @@ function formatearValor(campo: CampoDef | undefined, valor: unknown): string {
   }
 }
 
+/** Avance de cobranza: recibos cobrados (pagados o conciliados) de los de la póliza. */
+function AvanceRecibos({ estados }: { estados: string[] }) {
+  const total = estados.length;
+  if (total === 0) return null;
+  const conciliados = estados.filter((e) => e === "CONCILIADO").length;
+  const cobrados = estados.filter((e) => e !== "PENDIENTE").length;
+  return (
+    <div className="space-y-1.5 pt-1">
+      <p className="text-xs text-muted-foreground">
+        <span className="font-medium text-foreground tabular-nums">
+          {cobrados}/{total}
+        </span>{" "}
+        {cobrados === 1 ? "recibo cobrado" : "recibos cobrados"}
+        {cobrados > conciliados && ` · ${cobrados - conciliados} con comisión por aclarar`}
+      </p>
+      <div
+        className="flex h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="Recibos cobrados"
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={cobrados}
+      >
+        <div className="bg-primary" style={{ width: `${(conciliados / total) * 100}%` }} />
+        <div className="bg-success" style={{ width: `${((cobrados - conciliados) / total) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
 const humanizar = (clave: string) =>
   clave.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
 
@@ -403,6 +435,25 @@ function DatosRamo({ ramo, datos, sumaIlimitada }: { ramo: string; datos: unknow
               <dl className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
                 {b.filas.map((f) => {
                   const largo = f.campo?.type === "textarea";
+                  const coberturas =
+                    f.campo && CAMPOS_LISTA_COBERTURAS.has(f.campo.name) ? listaDeCoberturas(f.valor) : null;
+                  if (coberturas && coberturas.length > 0) {
+                    return (
+                      <div key={f.label} className="min-w-0 sm:col-span-2">
+                        <dt className="text-xs text-muted-foreground">{f.label}</dt>
+                        <dd className="mt-1.5 flex flex-wrap gap-1.5">
+                          {coberturas.map((c) => (
+                            <span
+                              key={c}
+                              className="inline-flex items-center rounded-full border border-primary/20 bg-primary/[0.07] px-2.5 py-0.5 text-xs font-medium text-foreground/90"
+                            >
+                              {c}
+                            </span>
+                          ))}
+                        </dd>
+                      </div>
+                    );
+                  }
                   return (
                     <div key={f.label} className={cn("min-w-0", (largo || f.campo?.wide) && "sm:col-span-2")}>
                       <dt className="text-xs text-muted-foreground">{f.label}</dt>

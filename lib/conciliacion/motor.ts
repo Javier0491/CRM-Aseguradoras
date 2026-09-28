@@ -188,9 +188,12 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       return { ...base, poliza: polizaInfo(recibo.poliza), estatus: "revisar", detalle: `Folio ${fila.folio} repetido en el archivo.` };
     }
 
-    // 2. Por número de recibo, o el más antiguo pendiente de la cadena.
+    // 2. Por número de recibo, o el más antiguo pendiente de la cadena. Un recibo PAGADO (se
+    // aplicó con diferencia) solo se vuelve a tomar si el renglón dice cuál es: sin número, el
+    // renglón podría ser el pago de otro recibo y no debe correr los recibos al reprocesar.
     recibo ??= recibosCadena
       .filter((r) => r.estado !== "CONCILIADO" && !usados.has(r.id))
+      .filter((r) => r.estado === "PENDIENTE" || fila.recibo !== undefined)
       // Un recibo con otro folio es otro recibo, aunque coincida el número.
       .filter((r) => !fila.folio || r.folio === null)
       .filter((r) => fila.recibo === undefined || r.numero === fila.recibo)
@@ -259,7 +262,9 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       comisionEsperada: esperada,
       diferencia,
       estatus: coincide ? "conciliado" : "diferencia",
-      detalle: coincide ? null : diferencia > 0 ? "Pagaron de más." : "Pagaron de menos.",
+      detalle: coincide
+        ? null
+        : `${diferencia > 0 ? "Pagaron de más" : "Pagaron de menos"}; al aplicar queda como Pagado para aclararlo.`,
     };
 
     /** La póliza existe pero no hay un recibo pendiente para este renglón. */
@@ -370,14 +375,21 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
 }
 
 /**
- * Escribe un cruce en una sola transacción: concilia los recibos con match exacto y crea, ya
- * conciliados, los auto-creados. Guarda la comisión pagada y el folio del archivo en ambos.
- * No verifica sesión: quien la invoque (Server Action) debe hacerlo.
+ * Escribe un cruce en una sola transacción. El estado de cuenta es la fuente de la verdad de lo
+ * cobrado, así que todo recibo que reporta avanza en la póliza:
+ * - conciliado: CONCILIADO (cobrado y comisión correcta).
+ * - diferencia: PAGADO (cobrado, pero la comisión no coincide y queda por aclarar).
+ * - auto_creado: se crea ya CONCILIADO.
+ * En todos se guarda la comisión pagada y el folio del archivo. No verifica sesión: quien la
+ * invoque (Server Action) debe hacerlo.
  */
 export async function aplicarResultados(resultados: readonly ResultadoMatch[]) {
   const conciliar = resultados.filter((r) => r.estatus === "conciliado" && r.recibo);
+  const pagar = resultados.filter((r) => r.estatus === "diferencia" && r.recibo);
   const crear = resultados.filter((r) => r.estatus === "auto_creado" && r.nuevoRecibo);
-  if (conciliar.length === 0 && crear.length === 0) return { conciliados: 0, creados: 0 };
+  if (conciliar.length === 0 && pagar.length === 0 && crear.length === 0) {
+    return { conciliados: 0, pagados: 0, creados: 0 };
+  }
 
   const ahora = new Date();
   return db.$transaction(
@@ -396,6 +408,18 @@ export async function aplicarResultados(resultados: readonly ResultadoMatch[]) {
         });
         conciliados += count;
       }
+      let pagados = 0;
+      for (const r of pagar) {
+        const { count } = await tx.recibo.updateMany({
+          where: { id: r.recibo!.id, estado: { not: "CONCILIADO" } },
+          data: {
+            estado: "PAGADO",
+            comision_pagada: r.comisionPagada.toFixed(2),
+            ...(r.folio && { folio: r.folio }),
+          },
+        });
+        pagados += count;
+      }
       const { count: creados } = await tx.recibo.createMany({
         data: crear.map((r) => {
           const n = r.nuevoRecibo!;
@@ -412,7 +436,7 @@ export async function aplicarResultados(resultados: readonly ResultadoMatch[]) {
           };
         }),
       });
-      return { conciliados, creados };
+      return { conciliados, pagados, creados };
     },
     // Un archivo grande actualiza cientos de recibos: más margen que los 5 s por omisión.
     { maxWait: 10_000, timeout: 60_000 }
