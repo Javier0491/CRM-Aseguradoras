@@ -34,25 +34,27 @@ export async function leerArchivoEstado(archivo: File): Promise<Hoja[]> {
   }));
 }
 
-const texto = (c: Celda) => (c === null || c === undefined ? "" : String(c).trim());
+// Espacios normalizados: los encabezados de Excel suelen traer saltos de línea ("No. de⏎Póliza").
+const texto = (c: Celda) => (c === null || c === undefined ? "" : String(c).replace(/\s+/g, " ").trim());
 
 // Tolerantes a acentos mal decodificados: "Póliza" puede llegar como "PÃ³liza" en CSV de Excel.
+// Cubren PÓLIZA/POLIZA y COMISIÓN/COMISION en cualquier combinación de mayúsculas.
 const ES_POLIZA = /p.{1,2}liza/i;
 const ES_COMISION = /comisi/i;
 const ES_RECIBO = /recibo|no\.?\s*rec/i;
 const NO_ES_MONTO = /%|porcentaje|pct|tasa/i;
 
-/** Primera fila (entre las 20 primeras) que parece encabezado: menciona la póliza. */
-export function detectarEncabezado(filas: Celda[][]): number {
-  const i = filas.slice(0, 20).findIndex((f) => f.some((c) => ES_POLIZA.test(texto(c))));
-  return i >= 0 ? i : 0;
-}
+/**
+ * Filas que se revisan para encontrar el encabezado (y que ofrece el selector). Algunas
+ * aseguradoras ponen un preámbulo largo: MetLife trae los encabezados en la fila 22.
+ */
+export const MAX_FILAS_ENCABEZADO = 50;
 
 export type Mapeo = { poliza: number | null; comision: number | null; recibo: number | null };
 
 /** Propone qué columna es cada dato a partir del nombre del encabezado. */
-export function adivinarMapeo(encabezados: Celda[]): Mapeo {
-  const nombres = encabezados.map(texto);
+export function adivinarMapeo(encabezados: Celda[] | undefined): Mapeo {
+  const nombres = (encabezados ?? []).map(texto);
   const buscar = (prueba: (n: string) => boolean) => {
     const i = nombres.findIndex(prueba);
     return i >= 0 ? i : null;
@@ -62,6 +64,33 @@ export function adivinarMapeo(encabezados: Celda[]): Mapeo {
     comision: buscar((n) => ES_COMISION.test(n) && !NO_ES_MONTO.test(n)),
     recibo: buscar((n) => ES_RECIBO.test(n)),
   };
+}
+
+export type Estructura = {
+  /** Índice (base 0) de la fila de encabezados. */
+  encabezado: number;
+  mapeo: Mapeo;
+  /** true si se encontró una fila con columna de póliza y de comisión. */
+  detectada: boolean;
+};
+
+/**
+ * Auto-detección: la primera fila (de las primeras MAX_FILAS_ENCABEZADO) con una columna de
+ * PÓLIZA y otra de COMISIÓN, con sus columnas ya mapeadas. Se exigen celdas distintas para
+ * no confundir el encabezado con un título del preámbulo ("Estado de cuenta de comisiones,
+ * póliza 123"). Si ninguna cumple, la primera fila que mencione la póliza, o la primera.
+ */
+export function detectarEstructura(filas: Celda[][]): Estructura {
+  const candidatas = filas.slice(0, MAX_FILAS_ENCABEZADO);
+  const completa = candidatas.findIndex((f) => {
+    const m = adivinarMapeo(f);
+    return m.poliza !== null && m.comision !== null && m.poliza !== m.comision;
+  });
+  if (completa >= 0) return { encabezado: completa, mapeo: adivinarMapeo(candidatas[completa]), detectada: true };
+
+  const conPoliza = candidatas.findIndex((f) => f.some((c) => ES_POLIZA.test(texto(c))));
+  const encabezado = Math.max(0, conPoliza);
+  return { encabezado, mapeo: adivinarMapeo(filas[encabezado]), detectada: false };
 }
 
 export type Conversion = {

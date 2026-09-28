@@ -12,6 +12,7 @@ import {
   Loader2,
   ScanSearch,
   SearchX,
+  Sparkles,
   UploadCloud,
   X,
   type LucideIcon,
@@ -57,10 +58,11 @@ import { analizarConciliacion, aplicarConciliacion } from "@/lib/conciliacion/ac
 import {
   adivinarMapeo,
   construirFilas,
-  detectarEncabezado,
+  detectarEstructura,
   ESTADO_MAX_BYTES,
   EXTENSIONES_ESTADO,
   leerArchivoEstado,
+  MAX_FILAS_ENCABEZADO,
   type Celda,
   type Hoja,
   type Mapeo,
@@ -83,7 +85,25 @@ const estatusConfig: Record<EstatusMatch, { label: string; icono: LucideIcon; cl
 };
 const ORDEN_ESTATUS: EstatusMatch[] = ["conciliado", "diferencia", "no_encontrado", "revisar"];
 
-type Archivo = { nombre: string; hojas: Hoja[]; hoja: number; encabezado: number; mapeo: Mapeo };
+/**
+ * Cómo se llegó al mapeo actual: "auto" (se detectó una fila con póliza y comisión),
+ * "sin_deteccion" (no se encontró; hay que elegir a mano) o "manual" (el usuario lo cambió).
+ */
+type OrigenMapeo = "auto" | "sin_deteccion" | "manual";
+type Archivo = {
+  nombre: string;
+  hojas: Hoja[];
+  hoja: number;
+  encabezado: number;
+  mapeo: Mapeo;
+  origen: OrigenMapeo;
+};
+
+/** Encabezado y columnas detectados en una hoja, listos para el estado del archivo. */
+function autoMapear(hoja: Hoja): Pick<Archivo, "encabezado" | "mapeo" | "origen"> {
+  const { encabezado, mapeo, detectada } = detectarEstructura(hoja.filas);
+  return { encabezado, mapeo, origen: detectada ? "auto" : "sin_deteccion" };
+}
 type Analisis = { resultados: ResultadoMatch[]; resumen: ResumenMatch };
 
 const texto = (c: Celda | undefined) =>
@@ -132,10 +152,12 @@ export function ConciliacionWorkspace({
     setLeyendo(true);
     try {
       const hojas = await leerArchivoEstado(f);
-      const hoja = Math.max(0, hojas.findIndex((h) => h.filas.length > 0));
+      // La primera hoja donde se detectan póliza y comisión (a veces la primera es un resumen);
+      // si ninguna, la primera con datos.
+      const conEncabezado = hojas.findIndex((h) => detectarEstructura(h.filas).detectada);
+      const hoja = conEncabezado >= 0 ? conEncabezado : Math.max(0, hojas.findIndex((h) => h.filas.length > 0));
       if (!hojas[hoja]?.filas.length) throw new Error("vacío");
-      const encabezado = detectarEncabezado(hojas[hoja].filas);
-      setArchivo({ nombre: f.name, hojas, hoja, encabezado, mapeo: adivinarMapeo(hojas[hoja].filas[encabezado]) });
+      setArchivo({ nombre: f.name, hojas, hoja, ...autoMapear(hojas[hoja]) });
     } catch (e) {
       console.error("[conciliacion] lectura", e);
       setArchivo(null);
@@ -268,6 +290,7 @@ export function ConciliacionWorkspace({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 px-5 py-5">
+            <AvisoDeteccion archivo={archivo} encabezados={encabezados} />
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {archivo.hojas.length > 1 && (
                 <SelectorColumna
@@ -276,21 +299,21 @@ export function ConciliacionWorkspace({
                   opciones={archivo.hojas.map((h, i) => ({ value: String(i), label: h.nombre }))}
                   onChange={(v) => {
                     const hoja = Number(v);
-                    const encabezado = detectarEncabezado(archivo.hojas[hoja].filas);
-                    actualizarArchivo({ hoja, encabezado, mapeo: adivinarMapeo(archivo.hojas[hoja].filas[encabezado]) });
+                    actualizarArchivo({ hoja, ...autoMapear(archivo.hojas[hoja]) });
                   }}
                 />
               )}
               <SelectorColumna
                 label="Fila de encabezados"
                 valor={String(archivo.encabezado)}
-                opciones={hojaActual.filas.slice(0, 20).map((f, i) => ({
+                opciones={hojaActual.filas.slice(0, MAX_FILAS_ENCABEZADO).map((f, i) => ({
                   value: String(i),
                   label: `Fila ${i + 1}: ${f.map(texto).filter(Boolean).slice(0, 3).join(", ") || "(vacía)"}`,
                 }))}
                 onChange={(v) => {
                   const encabezado = Number(v);
-                  actualizarArchivo({ encabezado, mapeo: adivinarMapeo(hojaActual.filas[encabezado]) });
+                  // Las columnas se vuelven a proponer con los nombres de la fila elegida.
+                  actualizarArchivo({ encabezado, mapeo: adivinarMapeo(hojaActual.filas[encabezado]), origen: "manual" });
                 }}
               />
               {(["poliza", "comision", "recibo"] as const).map((clave) => (
@@ -305,7 +328,10 @@ export function ConciliacionWorkspace({
                     ...encabezados.map((c, i) => ({ value: String(i), label: texto(c) || `Columna ${i + 1}` })),
                   ]}
                   onChange={(v) =>
-                    actualizarArchivo({ mapeo: { ...archivo.mapeo, [clave]: v === "ninguna" ? null : Number(v) } })
+                    actualizarArchivo({
+                      mapeo: { ...archivo.mapeo, [clave]: v === "ninguna" ? null : Number(v) },
+                      origen: "manual",
+                    })
                   }
                 />
               ))}
@@ -518,6 +544,34 @@ export function ConciliacionWorkspace({
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Explica qué hizo la auto-detección, para que el usuario solo tenga que confirmarlo. */
+function AvisoDeteccion({ archivo, encabezados }: { archivo: Archivo; encabezados: Celda[] }) {
+  if (archivo.origen === "manual") return null;
+  if (archivo.origen === "sin_deteccion") {
+    return (
+      <p className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
+        <CircleAlert className="mt-0.5 size-4 shrink-0" />
+        No se encontró una fila con columnas de «Póliza» y «Comisión» en las primeras {MAX_FILAS_ENCABEZADO} filas.
+        Elige la fila de encabezados y las columnas manualmente.
+      </p>
+    );
+  }
+  const nombre = (i: number | null) => (i === null ? "" : texto(encabezados[i]) || `Columna ${i + 1}`);
+  return (
+    <p className="flex items-start gap-2 rounded-md border border-primary/30 bg-primary/[0.07] px-3 py-2 text-sm">
+      <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
+      <span>
+        <span className="font-medium text-primary">Detectado automáticamente:</span> encabezados en la{" "}
+        <strong>fila {archivo.encabezado + 1}</strong>
+        {archivo.hojas.length > 1 && ` de la hoja «${archivo.hojas[archivo.hoja].nombre}»`}, póliza en «
+        {nombre(archivo.mapeo.poliza)}» y comisión en «{nombre(archivo.mapeo.comision)}»
+        {archivo.mapeo.recibo !== null && `, recibo en «${nombre(archivo.mapeo.recibo)}»`}.{" "}
+        <span className="text-muted-foreground">Revisa la vista previa; puedes cambiarlo abajo.</span>
+      </span>
+    </p>
   );
 }
 
