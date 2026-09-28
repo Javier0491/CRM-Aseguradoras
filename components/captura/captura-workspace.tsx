@@ -31,7 +31,14 @@ function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): Pol
   };
 }
 
-export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
+export function CapturaWorkspace({
+  aseguradoras,
+  verComisiones,
+}: {
+  aseguradoras: Opcion[];
+  /** Solo ADMIN captura el % de comisión personalizado. */
+  verComisiones: boolean;
+}) {
   // `version` remonta el formulario para que tome los valores extraídos como estado inicial.
   const [prellenado, setPrellenado] = React.useState<{
     version: number;
@@ -94,6 +101,7 @@ export function CapturaWorkspace({ aseguradoras }: { aseguradoras: Opcion[] }) {
         key={prellenado.version}
         inicial={prellenado.inicial}
         aseguradoras={aseguradoras}
+        verComisiones={verComisiones}
         ref={formRef}
         extrayendo={extrayendo || leyendoComplemento}
         onRamoChange={setRamo}

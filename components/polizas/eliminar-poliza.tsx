@@ -117,7 +117,7 @@ export function EliminarPoliza({
                 <p className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
                   <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                   {conciliados === 1 ? "1 recibo ya está conciliado" : `${conciliados} recibos ya están conciliados`}: se
-                  perderá su historial de comisiones.
+                  perderá su historial de conciliación.
                 </p>
               )}
               <div className="space-y-2">

@@ -30,6 +30,7 @@ import {
   TIPOS_ARCHIVO,
   type TipoArchivo,
 } from "@/lib/archivos/config";
+import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
@@ -45,8 +46,10 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   const poliza = await getPolizaDetalle(id);
   if (!poliza) notFound();
   const hoy = hoyISO();
+  // La comisión es la ganancia del broker: solo la ve el rol ADMIN.
+  const verComisiones = esAdmin(await requireUser());
 
-  const datos = [
+  const datos: { label: string; valor: string; mono?: boolean }[] = [
     { label: "Cliente", valor: poliza.cliente.nombre },
     { label: "RFC", valor: poliza.cliente.rfc, mono: true },
     { label: "Teléfono", valor: poliza.cliente.telefono, mono: true },
@@ -54,13 +57,17 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
     { label: "Vigencia", valor: `${formatFecha(poliza.vigencia_inicio)} – ${formatFecha(poliza.vigencia_fin)}` },
     { label: "Prima total", valor: formatMoneda(Number(poliza.prima_total)) },
     { label: "Forma de pago", valor: formaPagoLabel[poliza.forma_pago] },
-    {
-      label: "Comisión",
-      valor:
-        poliza.comision_personalizada_pct !== null
-          ? `${Number(poliza.comision_personalizada_pct)}% (personalizada)`
-          : "Según la matriz de comisiones",
-    },
+    ...(verComisiones
+      ? [
+          {
+            label: "Comisión",
+            valor:
+              poliza.comision_personalizada_pct !== null
+                ? `${Number(poliza.comision_personalizada_pct)}% (personalizada)`
+                : "Según la matriz de comisiones",
+          },
+        ]
+      : []),
     { label: "Registrada", valor: formatFecha(poliza.created_at) },
   ];
 

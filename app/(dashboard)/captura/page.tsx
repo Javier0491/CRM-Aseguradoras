@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { CapturaWorkspace } from "@/components/captura/captura-workspace";
+import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
 
 export const metadata: Metadata = {
@@ -8,7 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CapturaPage() {
-  const aseguradoras = await getAseguradorasOpciones();
+  const [user, aseguradoras] = await Promise.all([requireUser(), getAseguradorasOpciones()]);
 
   return (
     <>
@@ -18,7 +19,7 @@ export default async function CapturaPage() {
           Extrae los datos de una póliza con IA o captúrala manualmente por ramo.
         </p>
       </div>
-      <CapturaWorkspace aseguradoras={aseguradoras} />
+      <CapturaWorkspace aseguradoras={aseguradoras} verComisiones={esAdmin(user)} />
     </>
   );
 }

@@ -3,17 +3,18 @@
 import { revalidatePath } from "next/cache";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { esAdmin, getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { registrarPoliza, type GuardarPolizaResultado } from "@/lib/polizas/guardar";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
   // Las Server Actions son endpoints públicos: se valida la sesión aquí mismo.
-  if (!(await getCurrentUser())) {
+  const user = await getCurrentUser();
+  if (!user) {
     return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
 
-  const resultado = await registrarPoliza(raw);
+  const resultado = await registrarPoliza(raw, { permitirComision: esAdmin(user) });
   if (resultado.ok) revalidatePath("/polizas");
   return resultado;
 }

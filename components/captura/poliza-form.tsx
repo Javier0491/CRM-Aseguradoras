@@ -185,6 +185,7 @@ function rutaCampo(nombre: string, ramo: Ramo) {
 export function PolizaForm({
   inicial,
   aseguradoras,
+  verComisiones,
   extrayendo = false,
   caratula = null,
   negociacion = null,
@@ -197,6 +198,8 @@ export function PolizaForm({
   ref?: React.Ref<PolizaFormHandle>;
   inicial?: PolizaFormInicial;
   aseguradoras: Opcion[];
+  /** false para ejecutivos: se oculta el % de comisión personalizado (el servidor lo ignora). */
+  verComisiones: boolean;
   /** El OCR está leyendo un documento; el formulario se reemplaza por un skeleton. */
   extrayendo?: boolean;
   /**
@@ -326,7 +329,9 @@ export function PolizaForm({
       camposGenerales.map((c) => (c.name === "aseguradora" ? { ...c, options: aseguradoras } : c)),
     [aseguradoras]
   );
-  const camposPoliza = CAMPOS_POLIZA.map((n) => generalesDefs.find((c) => c.name === n)!);
+  const camposPoliza = CAMPOS_POLIZA.filter((n) => verComisiones || n !== "comisionPersonalizadaPct").map(
+    (n) => generalesDefs.find((c) => c.name === n)!
+  );
   const camposContratante = generalesDefs.filter((c) => !CAMPOS_POLIZA.includes(c.name));
 
   function limpiarAvisos() {

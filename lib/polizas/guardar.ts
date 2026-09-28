@@ -44,12 +44,17 @@ function datosRamo(ramo: Ramo, especificos: Valores): Prisma.InputJsonObject {
 
 /**
  * Valida y registra una póliza con su cliente y recibos en una transacción.
- * No verifica sesión: quien la invoque (Server Action) debe hacerlo.
+ * No verifica sesión: quien la invoque (Server Action) debe hacerlo. Sin `permitirComision`
+ * (rol EJECUTIVO) el % personalizado se descarta y la póliza usa la matriz de comisiones.
  */
-export async function registrarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
+export async function registrarPoliza(
+  raw: unknown,
+  { permitirComision }: { permitirComision: boolean }
+): Promise<GuardarPolizaResultado> {
   const input = sanitizarPolizaInput(raw);
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
-  const { ramo, generales: g, especificos, asegurados } = input;
+  const { ramo, especificos, asegurados } = input;
+  const g = permitirComision ? input.generales : { ...input.generales, comisionPersonalizadaPct: "" };
 
   const aseguradoras = await db.aseguradora.findMany({ select: { id: true } });
   const errores = {
