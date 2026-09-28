@@ -1,10 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, LogOut, Search } from "lucide-react";
+import { LogOut } from "lucide-react";
 
+import { BusquedaGlobal } from "@/components/layout/busqueda-global";
+import { CampanaAvisos } from "@/components/layout/campana-avisos";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cerrarSesion } from "@/lib/auth/actions";
@@ -25,22 +26,8 @@ export function AppHeader() {
       <span className="text-sm font-medium">{current.title}</span>
 
       <div className="ml-auto flex items-center gap-2">
-        <div className="relative hidden md:block">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar póliza, cliente o recibo…"
-            className="h-8 w-72 bg-card pl-8 text-sm"
-          />
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          aria-label="Notificaciones"
-        >
-          <Bell />
-        </Button>
+        <BusquedaGlobal />
+        <CampanaAvisos />
         <form action={cerrarSesion}>
           <Button type="submit" variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground">
             <LogOut />
