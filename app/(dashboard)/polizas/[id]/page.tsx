@@ -184,6 +184,12 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
                     <TableRow key={r.id}>
                       <TableCell className="pl-5 text-muted-foreground tabular-nums">
                         {r.numero}/{poliza.recibos.length}
+                        {r.folio && <p className="font-mono text-[11px]">folio {r.folio}</p>}
+                        {r.auto_creado && (
+                          <p className="text-[11px] text-sky-400" title="Lo creó la conciliación; el monto es estimado">
+                            auto-creado
+                          </p>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Vencimiento fecha={r.fecha_vencimiento} estado={r.estado} hoy={hoy} />

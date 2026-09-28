@@ -8,10 +8,38 @@ export type FilaEstado = {
   comisionPagada: number;
   /** Número de recibo, si el archivo lo trae. */
   recibo?: number;
+  /** Folio del recibo en la aseguradora (p. ej. "27872103"), si el archivo lo trae. */
+  folio?: string;
+  /** Fecha del recibo o inicio de su periodo (YYYY-MM-DD), si el archivo la trae. */
+  fecha?: string;
 };
 
-export const ESTATUS_MATCH = ["conciliado", "diferencia", "no_encontrado", "revisar"] as const;
+/**
+ * - conciliado: el recibo existe y la comisión pagada coincide con la esperada.
+ * - auto_creado: la póliza existe pero el recibo no; al aplicar se crea ya conciliado (el estado
+ *   de cuenta es la fuente de la verdad de lo cobrado).
+ * - ya_conciliado: el recibo ya estaba conciliado (p. ej. se volvió a subir el archivo).
+ */
+export const ESTATUS_MATCH = [
+  "conciliado",
+  "auto_creado",
+  "diferencia",
+  "no_encontrado",
+  "revisar",
+  "ya_conciliado",
+] as const;
 export type EstatusMatch = (typeof ESTATUS_MATCH)[number];
+
+/** Recibo que la conciliación creará (estatus auto_creado). */
+export type NuevoRecibo = {
+  polizaId: string;
+  numero: number;
+  /** Monto con dos decimales; estimado a partir de la prima de la póliza. */
+  monto: string;
+  /** YYYY-MM-DD: la fecha del archivo o, si no la trae, la del calendario de la póliza. */
+  fecha: string;
+  folio: string | null;
+};
 
 export type ResultadoMatch = {
   fila: number;
@@ -21,6 +49,9 @@ export type ResultadoMatch = {
   detalle: string | null;
   poliza: { id: string; numeroImpreso: string; cliente: string } | null;
   recibo: { id: string; numero: number; total: number; monto: number } | null;
+  /** Solo en auto_creado: el recibo que se creará al aplicar. */
+  nuevoRecibo: NuevoRecibo | null;
+  folio: string | null;
   comisionPagada: number;
   comisionEsperada: number | null;
   /** comisionPagada − comisionEsperada. */
@@ -33,6 +64,8 @@ export type ResumenMatch = Record<EstatusMatch, number> & {
   esperada: number;
   /** Lo pagado en esos mismos renglones (comparable con `esperada`). */
   pagada: number;
+  /** Lo pagado en renglones de recibos que se auto-crean. */
+  pagadaAutoCreada: number;
   /** Lo pagado en renglones sin comisión esperada (no encontrados, por revisar). */
   pagadaSinCruce: number;
 };

@@ -163,7 +163,15 @@ export async function getPolizaDetalle(id: string) {
       },
       recibos: {
         orderBy: { numero: "asc" },
-        select: { id: true, numero: true, monto: true, fecha_vencimiento: true, estado: true },
+        select: {
+          id: true,
+          numero: true,
+          monto: true,
+          fecha_vencimiento: true,
+          estado: true,
+          folio: true,
+          auto_creado: true,
+        },
       },
     },
   });

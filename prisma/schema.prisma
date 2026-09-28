@@ -161,10 +161,17 @@ model Recibo {
   // Rastro de la conciliación: comisión que reportó la aseguradora y cuándo se concilió.
   comision_pagada   Decimal?     @db.Decimal(14, 2)
   conciliado_at     DateTime?
+  // Folio con el que la aseguradora identifica el recibo (p. ej. 27872103), tomado del estado
+  // de cuenta. Evita conciliar o crear dos veces el mismo recibo al reprocesar un archivo.
+  folio             String?
+  // Lo creó la conciliación porque el estado de cuenta lo reporta cobrado y no existía en el
+  // CRM. Su monto es estimado (prima de la póliza entre sus recibos) si el archivo no lo trae.
+  auto_creado       Boolean      @default(false)
 
   poliza Poliza @relation(fields: [poliza_id], references: [id], onDelete: Cascade)
 
   @@unique([poliza_id, numero])
+  @@unique([poliza_id, folio])
   @@index([fecha_vencimiento])
   @@index([estado, fecha_vencimiento])
   @@map("recibos")

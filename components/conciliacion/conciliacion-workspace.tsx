@@ -4,10 +4,12 @@ import * as React from "react";
 import Link from "next/link";
 import {
   AlertCircle,
+  CheckCheck,
   CheckCircle2,
   CircleAlert,
   CircleHelp,
   Columns3,
+  FilePlus2,
   FileSpreadsheet,
   Loader2,
   ScanSearch,
@@ -57,6 +59,7 @@ import {
 import { analizarConciliacion, aplicarConciliacion } from "@/lib/conciliacion/actions";
 import {
   adivinarMapeo,
+  COLUMNAS_OPCIONALES,
   construirFilas,
   detectarEstructura,
   ESTADO_MAX_BYTES,
@@ -79,11 +82,21 @@ import { cn } from "@/lib/utils";
 
 const estatusConfig: Record<EstatusMatch, { label: string; icono: LucideIcon; clase: string }> = {
   conciliado: { label: "Conciliado", icono: CheckCircle2, clase: "border-success/30 bg-success/10 text-success" },
+  auto_creado: { label: "Auto-creado y Conciliado", icono: FilePlus2, clase: "border-sky-500/30 bg-sky-500/10 text-sky-400" },
   diferencia: { label: "Diferencia", icono: CircleAlert, clase: "border-warning/30 bg-warning/10 text-warning" },
   no_encontrado: { label: "No encontrado", icono: SearchX, clase: "border-destructive/30 bg-destructive/10 text-destructive" },
   revisar: { label: "Revisar", icono: CircleHelp, clase: "border-border bg-muted text-muted-foreground" },
+  ya_conciliado: { label: "Ya conciliado", icono: CheckCheck, clase: "border-border bg-muted/40 text-muted-foreground" },
 };
-const ORDEN_ESTATUS: EstatusMatch[] = ["conciliado", "diferencia", "no_encontrado", "revisar"];
+const ORDEN_ESTATUS: EstatusMatch[] = ["conciliado", "auto_creado", "diferencia", "no_encontrado", "revisar", "ya_conciliado"];
+
+const ETIQUETAS_COLUMNA = {
+  poliza: "Columna de póliza *",
+  comision: "Columna de comisión pagada *",
+  recibo: "Columna de recibo (opcional)",
+  folio: "Folio del recibo (opcional)",
+  fecha: "Fecha / inicio del recibo (opcional)",
+} as const;
 
 /**
  * Cómo se llegó al mapeo actual: "auto" (se detectó una fila con póliza y comisión),
@@ -126,7 +139,7 @@ export function ConciliacionWorkspace({
   const [filtro, setFiltro] = React.useState<EstatusMatch | "todos">("todos");
   const [confirmar, setConfirmar] = React.useState(false);
   const [aplicando, startAplicar] = React.useTransition();
-  const [aplicados, setAplicados] = React.useState<number | null>(null);
+  const [aplicados, setAplicados] = React.useState<{ conciliados: number; creados: number } | null>(null);
 
   const hojaActual = archivo ? archivo.hojas[archivo.hoja] : null;
   const encabezados = hojaActual ? (hojaActual.filas[archivo!.encabezado] ?? []) : [];
@@ -197,13 +210,13 @@ export function ConciliacionWorkspace({
         setError(res.error);
         return;
       }
-      setAplicados(res.conciliados);
-      // Se vuelve a cruzar para reflejar el nuevo estado de los recibos.
-      const nuevo = await analizarConciliacion(aseguradora, conversion.filas);
-      if (nuevo.ok) setAnalisis({ resultados: nuevo.resultados, resumen: nuevo.resumen });
+      // La tabla se conserva para ver qué se concilió y qué se auto-creó. Si se vuelve a
+      // analizar, esos renglones salen como "Ya conciliado".
+      setAplicados({ conciliados: res.conciliados, creados: res.creados });
     });
   }
 
+  const porAplicar = analisis ? analisis.resumen.conciliado + analisis.resumen.auto_creado : 0;
   const visibles = analisis
     ? analisis.resultados.filter((r) => filtro === "todos" || r.estatus === filtro)
     : [];
@@ -316,15 +329,17 @@ export function ConciliacionWorkspace({
                   actualizarArchivo({ encabezado, mapeo: adivinarMapeo(hojaActual.filas[encabezado]), origen: "manual" });
                 }}
               />
-              {(["poliza", "comision", "recibo"] as const).map((clave) => (
+              {(["poliza", "comision", ...COLUMNAS_OPCIONALES] as const).map((clave) => (
                 <SelectorColumna
                   key={clave}
                   // Mismo dorado que las columnas resaltadas en la vista previa.
                   usadaEnCruce
-                  label={{ poliza: "Columna de póliza *", comision: "Columna de comisión pagada *", recibo: "Columna de recibo (opcional)" }[clave]}
+                  label={ETIQUETAS_COLUMNA[clave]}
                   valor={archivo.mapeo[clave] === null ? "" : String(archivo.mapeo[clave])}
                   opciones={[
-                    ...(clave === "recibo" ? [{ value: "ninguna", label: "No usar" }] : []),
+                    ...((COLUMNAS_OPCIONALES as readonly string[]).includes(clave)
+                      ? [{ value: "ninguna", label: "No usar" }]
+                      : []),
                     ...encabezados.map((c, i) => ({ value: String(i), label: texto(c) || `Columna ${i + 1}` })),
                   ]}
                   onChange={(v) =>
@@ -382,7 +397,7 @@ export function ConciliacionWorkspace({
             </CardDescription>
           </CardHeader>
 
-          <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-2 xl:grid-cols-[repeat(4,minmax(0,1fr))_minmax(0,1.4fr)]">
+          <div className="grid grid-cols-2 gap-3 border-b px-5 py-4 sm:grid-cols-3 lg:grid-cols-6">
             {ORDEN_ESTATUS.map((e) => {
               const c = estatusConfig[e];
               const activo = filtro === e;
@@ -398,32 +413,32 @@ export function ConciliacionWorkspace({
                   )}
                 >
                   <c.icono className={cn("size-5 shrink-0", c.clase.split(" ").find((k) => k.startsWith("text-")))} />
-                  <span>
+                  <span className="min-w-0">
                     <span className="block text-xl font-semibold tabular-nums">{analisis.resumen[e]}</span>
-                    <span className="block text-xs text-muted-foreground">{c.label}</span>
+                    <span className="block text-xs leading-tight text-muted-foreground">{c.label}</span>
                   </span>
                 </button>
               );
             })}
-            <div className="rounded-lg border px-3 py-2.5 text-xs">
-              <div className="flex justify-between gap-2">
-                <span className="text-muted-foreground">Esperada</span>
-                <span className="tabular-nums">{formatMoneda(analisis.resumen.esperada)}</span>
-              </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-muted-foreground">Pagada</span>
-                <span className="tabular-nums">{formatMoneda(analisis.resumen.pagada)}</span>
-              </div>
-              <div className="mt-1 flex justify-between gap-2 border-t pt-1 font-medium">
-                <span>Diferencia</span>
-                <span className="tabular-nums">{formatMoneda(analisis.resumen.pagada - analisis.resumen.esperada)}</span>
-              </div>
-              {analisis.resumen.pagadaSinCruce !== 0 && (
-                <div className="mt-1 flex justify-between gap-2 text-muted-foreground">
-                  <span title="Pagado en renglones no encontrados o por revisar">Pagado sin cruce</span>
-                  <span className="tabular-nums">{formatMoneda(analisis.resumen.pagadaSinCruce)}</span>
-                </div>
-              )}
+          </div>
+          <div className="grid gap-x-8 gap-y-1 border-b px-5 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div className="flex justify-between gap-2">
+              <span className="text-muted-foreground">Esperada · pagada</span>
+              <span className="tabular-nums">
+                {formatMoneda(analisis.resumen.esperada)} · {formatMoneda(analisis.resumen.pagada)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2 font-medium">
+              <span>Diferencia</span>
+              <span className="tabular-nums">{formatMoneda(analisis.resumen.pagada - analisis.resumen.esperada)}</span>
+            </div>
+            <div className="flex justify-between gap-2 text-sky-400">
+              <span title="Comisión pagada de los recibos que se auto-crean">Pagado en auto-creados</span>
+              <span className="tabular-nums">{formatMoneda(analisis.resumen.pagadaAutoCreada)}</span>
+            </div>
+            <div className="flex justify-between gap-2 text-muted-foreground">
+              <span title="Pagado en renglones no encontrados o por revisar">Pagado sin cruce</span>
+              <span className="tabular-nums">{formatMoneda(analisis.resumen.pagadaSinCruce)}</span>
             </div>
           </div>
 
@@ -462,7 +477,14 @@ export function ConciliacionWorkspace({
                       {r.poliza?.cliente ?? <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
-                      {r.recibo ? `${r.recibo.numero}/${r.recibo.total}` : "—"}
+                      {r.recibo ? (
+                        `${r.recibo.numero}/${r.recibo.total}`
+                      ) : r.nuevoRecibo ? (
+                        <span className="text-sky-400">{r.nuevoRecibo.numero} · nuevo</span>
+                      ) : (
+                        "—"
+                      )}
+                      {r.folio && <p className="font-mono text-[11px]">folio {r.folio}</p>}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {r.comisionEsperada !== null ? formatMoneda(r.comisionEsperada) : "—"}
@@ -505,16 +527,25 @@ export function ConciliacionWorkspace({
             <div className="mr-auto text-sm" aria-live="polite">
               {aplicados !== null ? (
                 <span className="flex items-center gap-1.5 text-success">
-                  <CheckCircle2 className="size-4" /> {aplicados} {aplicados === 1 ? "recibo conciliado" : "recibos conciliados"}.
+                  <CheckCircle2 className="size-4" /> {aplicados.conciliados}{" "}
+                  {aplicados.conciliados === 1 ? "recibo conciliado" : "recibos conciliados"}
+                  {aplicados.creados > 0 &&
+                    ` y ${aplicados.creados} ${aplicados.creados === 1 ? "auto-creado" : "auto-creados"}`}
+                  .
                 </span>
               ) : (
                 <span className="text-muted-foreground">
-                  Solo se concilian los renglones en verde; diferencias y no encontrados no se modifican.
+                  Se aplican los renglones en verde y los auto-creados en azul; diferencias, no encontrados y
+                  por revisar no se modifican.
                 </span>
               )}
             </div>
-            <Button onClick={() => setConfirmar(true)} disabled={analisis.resumen.conciliado === 0 || aplicando}>
-              <CheckCircle2 /> Aplicar Conciliación ({analisis.resumen.conciliado})
+            <Button
+              onClick={() => setConfirmar(true)}
+              // Ya aplicado: para volver a aplicar hay que analizar de nuevo.
+              disabled={porAplicar === 0 || aplicando || aplicados !== null}
+            >
+              <CheckCircle2 /> Aplicar Conciliación ({porAplicar})
             </Button>
           </CardFooter>
         </Card>
@@ -526,8 +557,15 @@ export function ConciliacionWorkspace({
             <DialogTitle>¿Aplicar la conciliación?</DialogTitle>
             <DialogDescription>
               Se marcarán como <strong>CONCILIADOS</strong> {analisis?.resumen.conciliado ?? 0} recibos de{" "}
-              {nombreAseguradora} y se guardará la comisión pagada de cada uno. Las diferencias, los no
-              encontrados y los renglones por revisar no se modifican.
+              {nombreAseguradora}
+              {(analisis?.resumen.auto_creado ?? 0) > 0 && (
+                <>
+                  {" "}y se <strong>crearán</strong> {analisis?.resumen.auto_creado} recibos que el estado de cuenta
+                  reporta cobrados pero no existían (con monto estimado de la prima)
+                </>
+              )}
+              . Se guardará la comisión pagada y el folio de cada uno. Las diferencias, los no encontrados y
+              los renglones por revisar no se modifican.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -568,7 +606,9 @@ function AvisoDeteccion({ archivo, encabezados }: { archivo: Archivo; encabezado
         <strong>fila {archivo.encabezado + 1}</strong>
         {archivo.hojas.length > 1 && ` de la hoja «${archivo.hojas[archivo.hoja].nombre}»`}, póliza en «
         {nombre(archivo.mapeo.poliza)}» y comisión en «{nombre(archivo.mapeo.comision)}»
-        {archivo.mapeo.recibo !== null && `, recibo en «${nombre(archivo.mapeo.recibo)}»`}.{" "}
+        {archivo.mapeo.recibo !== null && `, recibo en «${nombre(archivo.mapeo.recibo)}»`}
+        {archivo.mapeo.folio !== null && `, folio en «${nombre(archivo.mapeo.folio)}»`}
+        {archivo.mapeo.fecha !== null && `, fecha en «${nombre(archivo.mapeo.fecha)}»`}.{" "}
         <span className="text-muted-foreground">Revisa la vista previa; puedes cambiarlo abajo.</span>
       </span>
     </p>
@@ -621,7 +661,7 @@ const FILAS_VISTA_PREVIA = 50;
 function VistaPrevia({ filas, encabezado, mapeo }: { filas: Celda[][]; encabezado: number; mapeo: Mapeo }) {
   const columnas = filas[encabezado] ?? [];
   const datos = filas.slice(encabezado + 1, encabezado + 1 + FILAS_VISTA_PREVIA);
-  const marcadas = new Set([mapeo.poliza, mapeo.comision, mapeo.recibo].filter((c): c is number => c !== null));
+  const marcadas = new Set(Object.values(mapeo).filter((c): c is number => c !== null));
   return (
     <div className="overflow-hidden rounded-md border">
       {/* Scroll en ambos ejes dentro de la tarjeta: las columnas conservan su ancho sin aplastarse. */}
