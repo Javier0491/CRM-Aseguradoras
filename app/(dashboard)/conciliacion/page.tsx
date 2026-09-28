@@ -17,7 +17,8 @@ export default async function ConciliacionPage() {
   ]);
 
   return (
-    <>
+    // Ancho máximo: en monitores anchos el contenido no se estira de lado a lado.
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Conciliación de Cobranza</h1>
         <p className="text-sm text-muted-foreground">
@@ -25,6 +26,6 @@ export default async function ConciliacionPage() {
         </p>
       </div>
       <ConciliacionWorkspace aseguradoras={aseguradoras} conEsquema={conEsquema.map((e) => e.aseguradora_id)} />
-    </>
+    </div>
   );
 }

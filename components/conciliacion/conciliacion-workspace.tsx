@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   CircleAlert,
   CircleHelp,
+  Columns3,
   FileSpreadsheet,
   Loader2,
   ScanSearch,
@@ -250,89 +251,105 @@ export function ConciliacionWorkspace({
             </p>
           )}
 
-          {archivo && hojaActual && (
-            <div className="space-y-4 rounded-lg border bg-background/60 p-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                {archivo.hojas.length > 1 && (
-                  <SelectorColumna
-                    label="Hoja"
-                    valor={String(archivo.hoja)}
-                    opciones={archivo.hojas.map((h, i) => ({ value: String(i), label: h.nombre }))}
-                    onChange={(v) => {
-                      const hoja = Number(v);
-                      const encabezado = detectarEncabezado(archivo.hojas[hoja].filas);
-                      actualizarArchivo({ hoja, encabezado, mapeo: adivinarMapeo(archivo.hojas[hoja].filas[encabezado]) });
-                    }}
-                  />
-                )}
+        </CardContent>
+      </Card>
+
+      {archivo && hojaActual && (
+        <Card className="gap-0 border-primary/25 py-0">
+          <CardHeader className="border-b border-primary/15 px-5 py-4 [.border-b]:pb-4">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Columns3 className="size-4" />
+              </span>
+              2. Mapeo de columnas
+            </CardTitle>
+            <CardDescription>
+              Indica dónde están los encabezados y qué columnas traen la póliza y la comisión pagada.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5 px-5 py-5">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {archivo.hojas.length > 1 && (
                 <SelectorColumna
-                  label="Fila de encabezados"
-                  valor={String(archivo.encabezado)}
-                  opciones={hojaActual.filas.slice(0, 20).map((f, i) => ({
-                    value: String(i),
-                    label: `Fila ${i + 1}: ${f.map(texto).filter(Boolean).slice(0, 3).join(", ") || "(vacía)"}`,
-                  }))}
+                  label="Hoja"
+                  valor={String(archivo.hoja)}
+                  opciones={archivo.hojas.map((h, i) => ({ value: String(i), label: h.nombre }))}
                   onChange={(v) => {
-                    const encabezado = Number(v);
-                    actualizarArchivo({ encabezado, mapeo: adivinarMapeo(hojaActual.filas[encabezado]) });
+                    const hoja = Number(v);
+                    const encabezado = detectarEncabezado(archivo.hojas[hoja].filas);
+                    actualizarArchivo({ hoja, encabezado, mapeo: adivinarMapeo(archivo.hojas[hoja].filas[encabezado]) });
                   }}
                 />
-                {(["poliza", "comision", "recibo"] as const).map((clave) => (
-                  <SelectorColumna
-                    key={clave}
-                    label={{ poliza: "Columna de póliza *", comision: "Columna de comisión pagada *", recibo: "Columna de recibo (opcional)" }[clave]}
-                    valor={archivo.mapeo[clave] === null ? "" : String(archivo.mapeo[clave])}
-                    opciones={[
-                      ...(clave === "recibo" ? [{ value: "ninguna", label: "No usar" }] : []),
-                      ...encabezados.map((c, i) => ({ value: String(i), label: texto(c) || `Columna ${i + 1}` })),
-                    ]}
-                    onChange={(v) =>
-                      actualizarArchivo({ mapeo: { ...archivo.mapeo, [clave]: v === "ninguna" ? null : Number(v) } })
-                    }
-                  />
-                ))}
-              </div>
-
-              <VistaPrevia filas={hojaActual.filas} encabezado={archivo.encabezado} mapeo={archivo.mapeo} />
-
-              {conversion && (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>
-                    <strong className="text-foreground tabular-nums">{formatNumero(conversion.filas.length)}</strong>{" "}
-                    renglones para cruzar
-                  </span>
-                  {conversion.omitidas.length > 0 && (
-                    <details>
-                      <summary className="cursor-pointer hover:text-foreground">
-                        {conversion.omitidas.length} omitidos (totales, subtítulos o montos no numéricos)
-                      </summary>
-                      <ul className="mt-1 list-disc pl-5">
-                        {conversion.omitidas.slice(0, 20).map((o) => (
-                          <li key={`${o.fila}-${o.motivo}`}>
-                            {o.fila > 0 ? `Fila ${o.fila}: ` : ""}
-                            {o.motivo}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </div>
               )}
+              <SelectorColumna
+                label="Fila de encabezados"
+                valor={String(archivo.encabezado)}
+                opciones={hojaActual.filas.slice(0, 20).map((f, i) => ({
+                  value: String(i),
+                  label: `Fila ${i + 1}: ${f.map(texto).filter(Boolean).slice(0, 3).join(", ") || "(vacía)"}`,
+                }))}
+                onChange={(v) => {
+                  const encabezado = Number(v);
+                  actualizarArchivo({ encabezado, mapeo: adivinarMapeo(hojaActual.filas[encabezado]) });
+                }}
+              />
+              {(["poliza", "comision", "recibo"] as const).map((clave) => (
+                <SelectorColumna
+                  key={clave}
+                  // Mismo dorado que las columnas resaltadas en la vista previa.
+                  usadaEnCruce
+                  label={{ poliza: "Columna de póliza *", comision: "Columna de comisión pagada *", recibo: "Columna de recibo (opcional)" }[clave]}
+                  valor={archivo.mapeo[clave] === null ? "" : String(archivo.mapeo[clave])}
+                  opciones={[
+                    ...(clave === "recibo" ? [{ value: "ninguna", label: "No usar" }] : []),
+                    ...encabezados.map((c, i) => ({ value: String(i), label: texto(c) || `Columna ${i + 1}` })),
+                  ]}
+                  onChange={(v) =>
+                    actualizarArchivo({ mapeo: { ...archivo.mapeo, [clave]: v === "ninguna" ? null : Number(v) } })
+                  }
+                />
+              ))}
             </div>
-          )}
-        </CardContent>
-        <CardFooter className="justify-end border-t [.border-t]:pt-4">
-          <Button onClick={analizar} disabled={!listoParaAnalizar || analizando}>
-            {analizando ? <Loader2 className="animate-spin" /> : <ScanSearch />}
-            {analizando ? "Cruzando…" : "Analizar cruce"}
-          </Button>
-        </CardFooter>
-      </Card>
+
+            <VistaPrevia filas={hojaActual.filas} encabezado={archivo.encabezado} mapeo={archivo.mapeo} />
+
+            {conversion && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  <strong className="text-foreground tabular-nums">{formatNumero(conversion.filas.length)}</strong>{" "}
+                  renglones para cruzar
+                </span>
+                {conversion.omitidas.length > 0 && (
+                  <details>
+                    <summary className="cursor-pointer hover:text-foreground">
+                      {conversion.omitidas.length} omitidos (totales, subtítulos o montos no numéricos)
+                    </summary>
+                    <ul className="mt-1 list-disc pl-5">
+                      {conversion.omitidas.slice(0, 20).map((o) => (
+                        <li key={`${o.fila}-${o.motivo}`}>
+                          {o.fila > 0 ? `Fila ${o.fila}: ` : ""}
+                          {o.motivo}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </div>
+            )}
+          </CardContent>
+          <CardFooter className="justify-end border-t border-primary/15 px-5 py-4 [.border-t]:pt-4">
+            <Button onClick={analizar} disabled={!listoParaAnalizar || analizando}>
+              {analizando ? <Loader2 className="animate-spin" /> : <ScanSearch />}
+              {analizando ? "Cruzando…" : "Analizar cruce"}
+            </Button>
+          </CardFooter>
+        </Card>
+      )}
 
       {analisis && (
         <Card className="gap-0 py-0">
           <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
-            <CardTitle className="text-base">2. Resultado del cruce · {nombreAseguradora}</CardTitle>
+            <CardTitle className="text-base">3. Resultado del cruce · {nombreAseguradora}</CardTitle>
             <CardDescription>
               Comisión esperada = monto del recibo × % de la póliza o de la matriz de comisiones. Se
               considera que coincide con una diferencia de hasta {formatMoneda(TOLERANCIA_MXN)}.
@@ -385,7 +402,7 @@ export function ConciliacionWorkspace({
           </div>
 
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-muted/50">
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-16 pl-5">Fila</TableHead>
                 <TableHead>Póliza</TableHead>
@@ -508,21 +525,28 @@ function SelectorColumna({
   label,
   valor,
   opciones,
+  usadaEnCruce = false,
   onChange,
 }: {
   label: string;
   valor: string;
   opciones: Opcion[];
+  /** Columna que se usa en el cruce: se marca en dorado, como en la vista previa. */
+  usadaEnCruce?: boolean;
   onChange: (v: string) => void;
 }) {
   const id = React.useId();
   return (
-    <div className="space-y-2">
+    <div className="min-w-0 space-y-2">
       <Label htmlFor={id} className="text-xs">
+        {usadaEnCruce && <span className="size-1.5 rounded-full bg-primary" aria-hidden />}
         {label}
       </Label>
       <Select value={valor} onValueChange={onChange}>
-        <SelectTrigger id={id} className="w-full bg-card">
+        <SelectTrigger
+          id={id}
+          className={cn("w-full bg-card", usadaEnCruce && valor && "border-primary/40")}
+        >
           <SelectValue placeholder="Selecciona…" />
         </SelectTrigger>
         <SelectContent>
@@ -537,42 +561,63 @@ function SelectorColumna({
   );
 }
 
+/** Renglones de datos que se muestran en la vista previa (con scroll vertical). */
+const FILAS_VISTA_PREVIA = 50;
+
 function VistaPrevia({ filas, encabezado, mapeo }: { filas: Celda[][]; encabezado: number; mapeo: Mapeo }) {
   const columnas = filas[encabezado] ?? [];
-  const datos = filas.slice(encabezado + 1, encabezado + 6);
+  const datos = filas.slice(encabezado + 1, encabezado + 1 + FILAS_VISTA_PREVIA);
   const marcadas = new Set([mapeo.poliza, mapeo.comision, mapeo.recibo].filter((c): c is number => c !== null));
   return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-xs">
-        <thead>
-          <tr className="border-b bg-muted/40">
-            {columnas.map((c, i) => (
-              <th
-                key={i}
-                className={cn(
-                  "px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground",
-                  marcadas.has(i) && "text-primary"
-                )}
-              >
-                {texto(c) || `Columna ${i + 1}`}
+    <div className="overflow-hidden rounded-md border">
+      {/* Scroll en ambos ejes dentro de la tarjeta: las columnas conservan su ancho sin aplastarse. */}
+      <div className="max-h-[400px] overflow-auto">
+        <table className="w-max min-w-full text-xs">
+          <thead>
+            <tr>
+              <th className="sticky top-0 left-0 z-20 border-b bg-card bg-linear-to-b from-muted/50 to-muted/50 px-3 py-2 text-right font-medium text-muted-foreground">
+                #
               </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="tabular-nums">
-          {datos.map((f, i) => (
-            <tr key={i} className="border-b last:border-0">
-              {columnas.map((_, j) => (
-                <td key={j} className={cn("px-3 py-1.5 whitespace-nowrap", marcadas.has(j) && "bg-primary/5")}>
-                  {texto(f[j])}
-                </td>
+              {columnas.map((c, i) => (
+                <th
+                  key={i}
+                  // Fondo opaco (card + muted/50) para que el encabezado fijo tape las filas al hacer scroll.
+                  className={cn(
+                    "sticky top-0 z-10 border-b bg-card bg-linear-to-b from-muted/50 to-muted/50 px-3 py-2 text-left font-medium whitespace-nowrap text-muted-foreground",
+                    marcadas.has(i) && "text-primary shadow-[inset_0_-2px_0_var(--primary)]"
+                  )}
+                >
+                  {texto(c) || `Columna ${i + 1}`}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-        Vista previa: primeros {datos.length} renglones. En dorado, las columnas que se usan en el cruce.
+          </thead>
+          <tbody className="tabular-nums">
+            {datos.map((f, i) => (
+              <tr key={i} className="border-b last:border-0 hover:bg-muted/30">
+                <td className="sticky left-0 z-[1] border-r bg-card px-3 py-1.5 text-right text-muted-foreground">
+                  {encabezado + i + 2}
+                </td>
+                {columnas.map((_, j) => (
+                  <td
+                    key={j}
+                    title={texto(f[j]) || undefined}
+                    className={cn(
+                      "max-w-[20rem] truncate px-3 py-1.5 whitespace-nowrap",
+                      marcadas.has(j) && "bg-primary/5 text-foreground"
+                    )}
+                  >
+                    {texto(f[j])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="border-t bg-muted/30 px-3 py-1.5 text-[11px] text-muted-foreground">
+        Vista previa: {datos.length} de {formatNumero(Math.max(0, filas.length - encabezado - 1))} renglones. En
+        dorado, las columnas que se usan en el cruce.
       </p>
     </div>
   );

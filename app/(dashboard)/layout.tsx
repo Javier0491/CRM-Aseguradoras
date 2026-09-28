@@ -14,7 +14,8 @@ export default async function DashboardLayout({
   return (
     <SidebarProvider>
       <AppSidebar email={user.email} nombre={user.nombre} esAdmin={esAdmin(user)} />
-      <SidebarInset className="bg-background">
+      {/* min-w-0: sin él, el contenido ancho (tablas) estira toda la página en vez de hacer scroll. */}
+      <SidebarInset className="min-w-0 bg-background">
         <AppHeader />
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">{children}</div>
       </SidebarInset>
