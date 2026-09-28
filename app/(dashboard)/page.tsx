@@ -140,7 +140,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         comisiones.recibos === 0
           ? `sin recibos pendientes ${enPeriodo}`
           : `${formatNumero(comisiones.recibos)} ${comisiones.recibos === 1 ? "recibo pendiente" : "recibos pendientes"}` +
-            (comisiones.sinPorcentaje > 0 ? ` · ${comisiones.sinPorcentaje} sin matriz` : ""),
+            (comisiones.sinPorcentaje > 0 ? ` · ${comisiones.sinPorcentaje} sin matriz` : "") +
+            (comisiones.sinPrimaNeta > 0 ? ` · ${comisiones.sinPrimaNeta} sin prima neta` : ""),
     },
     {
       titulo: "Pólizas Activas",

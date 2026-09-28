@@ -107,6 +107,7 @@ export async function registrarPoliza(
           vigencia_inicio: fecha(g.vigenciaInicio),
           vigencia_fin: fecha(g.vigenciaFin),
           prima_total: parseNumero(g.primaTotal).toFixed(2),
+          prima_neta: parseNumero(g.primaNeta).toFixed(2),
           forma_pago: g.formaPago as FormaPago,
           datos_ramo: datosRamo(ramo, especificos),
           sumaAseguradaIlimitada,

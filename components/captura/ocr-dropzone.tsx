@@ -364,7 +364,7 @@ function EstadoBadge({ estado }: { estado: Estado }) {
 const formaPagoLabel = Object.fromEntries(FORMAS_PAGO.map((f) => [f.value, f.label]));
 
 function mostrarValor(campo: string, valor: string) {
-  if (campo === "primaTotal") return formatMoneda(Number(valor));
+  if (campo === "primaTotal" || campo === "primaNeta") return formatMoneda(Number(valor));
   if (campo === "vigenciaInicio" || campo === "vigenciaFin") return formatFecha(`${valor}T00:00:00Z`);
   if (campo === "formaPago") return formaPagoLabel[valor] ?? valor;
   return valor;

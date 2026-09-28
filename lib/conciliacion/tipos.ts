@@ -53,6 +53,8 @@ export type ResultadoMatch = {
   nuevoRecibo: NuevoRecibo | null;
   folio: string | null;
   comisionPagada: number;
+  /** Prima neta del recibo sobre la que se calculó la comisión esperada. */
+  base: { primaNeta: number; recibos: number } | null;
   comisionEsperada: number | null;
   /** comisionPagada − comisionEsperada. */
   diferencia: number | null;

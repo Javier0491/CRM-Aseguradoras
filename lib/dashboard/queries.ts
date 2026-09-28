@@ -2,7 +2,13 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { anioDePoliza, comisionEsperada, edadDelTitular, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
+import {
+  anioDePoliza,
+  comisionEsperada,
+  edadDelTitular,
+  primaNetaDelRecibo,
+  resolverPorcentaje,
+} from "@/lib/conciliacion/comisiones";
 import { rangoDePeriodo, type Periodo, type Rango } from "@/lib/dashboard/periodos";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
@@ -61,15 +67,15 @@ async function tasaRenovacion({ desde, hasta }: Rango, hoy: Date) {
 
 /**
  * Comisión esperada de los recibos PENDIENTES que vencen en el rango, con la misma regla que
- * la conciliación: % personalizado de la póliza o matriz por aseguradora, ramo y año de la
- * póliza (contado desde la primera vigencia de su cadena). Los recibos sin % aplicable no
- * suman y se reportan aparte.
+ * la conciliación: (prima neta ÷ número de recibos) × % personalizado de la póliza o de la
+ * matriz por aseguradora, ramo y año de la póliza (contado desde la primera vigencia de su
+ * cadena). Los recibos sin % aplicable o sin prima neta no suman y se reportan aparte.
  */
 async function comisionesPendientes({ desde, hasta }: Rango) {
   const recibos = await db.recibo.findMany({
     where: { estado: "PENDIENTE", fecha_vencimiento: { gte: desde, lte: hasta } },
     select: {
-      monto: true,
+      numero: true,
       fecha_vencimiento: true,
       poliza: {
         select: {
@@ -78,13 +84,16 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
           aseguradora_id: true,
           ramo: true,
           vigencia_inicio: true,
+          vigencia_fin: true,
+          forma_pago: true,
+          prima_neta: true,
           comision_personalizada_pct: true,
           asegurados: { select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true } },
         },
       },
     },
   });
-  if (recibos.length === 0) return { valor: 0, recibos: 0, sinPorcentaje: 0 };
+  if (recibos.length === 0) return { valor: 0, recibos: 0, sinPorcentaje: 0, sinPrimaNeta: 0 };
 
   const aseguradoras = [...new Set(recibos.map((r) => r.poliza.aseguradora_id))];
   const vigores = [...new Set(recibos.map((r) => r.poliza.polizaVigor).filter((v): v is string => Boolean(v)))];
@@ -114,6 +123,7 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
 
   let valor = 0;
   let sinPorcentaje = 0;
+  let sinPrimaNeta = 0;
   for (const r of recibos) {
     const p = r.poliza;
     const inicio = (p.polizaVigor && primeraVigencia.get(`${p.aseguradora_id}|${p.polizaVigor}`)) || p.vigencia_inicio;
@@ -128,10 +138,13 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
         .filter((e) => e.aseguradora_id === p.aseguradora_id)
         .map((e) => ({ ...e, porcentaje: Number(e.porcentaje) }))
     );
-    if (porcentaje) valor += comisionEsperada(Number(r.monto), porcentaje.valor);
-    else sinPorcentaje++;
+    // Base: la prima neta del recibo, nunca su monto cobrado (que sale de la prima total).
+    const base = primaNetaDelRecibo(p, r.numero);
+    if (!porcentaje) sinPorcentaje++;
+    else if (!base) sinPrimaNeta++;
+    else valor += comisionEsperada(base.primaNeta, porcentaje.valor);
   }
-  return { valor: Math.round(valor * 100) / 100, recibos: recibos.length, sinPorcentaje };
+  return { valor: Math.round(valor * 100) / 100, recibos: recibos.length, sinPorcentaje, sinPrimaNeta };
 }
 
 async function produccionPorAseguradora({ desde, hasta }: Rango) {

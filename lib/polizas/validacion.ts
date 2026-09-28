@@ -108,7 +108,7 @@ export function validarPoliza(
     }
   }
 
-  const { vigenciaInicio: ini, vigenciaFin: fin, primaTotal } = generales;
+  const { vigenciaInicio: ini, vigenciaFin: fin, primaTotal, primaNeta } = generales;
   if (ini && fin && !errores.vigenciaInicio && !errores.vigenciaFin) {
     if (fin <= ini) {
       errores.vigenciaFin = "Debe ser posterior al inicio de vigencia";
@@ -119,8 +119,22 @@ export function validarPoliza(
   if (primaTotal && !errores.primaTotal && parseNumero(primaTotal) <= 0) {
     errores.primaTotal = "Debe ser mayor a cero";
   }
+  const errorNeta = validarPrimaNeta(primaNeta, primaTotal && !errores.primaTotal ? parseNumero(primaTotal) : null);
+  if (primaNeta && !errores.primaNeta && errorNeta) errores.primaNeta = errorNeta;
 
   return errores;
+}
+
+/**
+ * Reglas de la prima neta: mayor a cero y no mayor que la prima total (que además incluye IVA,
+ * recargos y derecho de póliza). null si es válida.
+ */
+export function validarPrimaNeta(valor: string | undefined, primaTotal: number | null): string | null {
+  const n = parseNumero(valor ?? "");
+  if (!Number.isFinite(n) || n <= 0) return "Debe ser mayor a cero";
+  if (Math.round(n * 100) / 100 !== n) return "Máximo dos decimales";
+  if (primaTotal !== null && n > primaTotal) return "No puede ser mayor que la prima total";
+  return null;
 }
 
 export type PolizaInput = {

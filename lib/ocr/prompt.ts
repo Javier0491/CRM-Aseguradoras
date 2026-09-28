@@ -76,6 +76,10 @@ CAMPOS GENERALES
 - primaTotal: el importe TOTAL a pagar por toda la vigencia (incluye prima neta, recargos, derecho
   de póliza e IVA). Suele rotularse "Prima total" o "Importe total". No uses la prima neta ni el
   importe de un solo recibo. Número sin símbolo ni separadores de miles (ej. 48320.40).
+- primaNeta: la PRIMA NETA de toda la vigencia, ANTES de recargos por pago fraccionado, derecho de
+  póliza (gastos de expedición) e IVA. Suele rotularse "Prima neta". Es la base de la comisión del
+  agente, así que nunca pongas aquí la prima total ni el importe de un recibo; si no aparece
+  impresa, devuelve null (no la calcules restando conceptos).
 - formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL.
 
 REFERENCIA DE PAGO Y PÓLIZA VIGOR

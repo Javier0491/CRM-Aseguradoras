@@ -130,6 +130,7 @@ export async function getPolizaDetalle(id: string) {
       vigencia_inicio: true,
       vigencia_fin: true,
       prima_total: true,
+      prima_neta: true,
       forma_pago: true,
       created_at: true,
       comision_personalizada_pct: true,

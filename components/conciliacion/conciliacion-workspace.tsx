@@ -392,7 +392,8 @@ export function ConciliacionWorkspace({
           <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
             <CardTitle className="text-base">3. Resultado del cruce · {nombreAseguradora}</CardTitle>
             <CardDescription>
-              Comisión esperada = monto del recibo × % de la póliza o de la matriz de comisiones. Se
+              Comisión esperada = (prima neta anual ÷ número de recibos) × % de la póliza o de la matriz
+              de comisiones (aseguradora, ramo y año de la póliza). Nunca sobre la prima total. Se
               considera que coincide con una diferencia de hasta {formatMoneda(TOLERANCIA_MXN)}.
             </CardDescription>
           </CardHeader>
@@ -488,10 +489,14 @@ export function ConciliacionWorkspace({
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {r.comisionEsperada !== null ? formatMoneda(r.comisionEsperada) : "—"}
-                      {r.porcentaje && r.recibo && (
+                      {r.porcentaje && r.base && (
                         <p className="text-[11px] text-muted-foreground">
-                          {r.porcentaje.valor}% de {formatMoneda(r.recibo.monto)} ·{" "}
-                          {r.porcentaje.origen === "personalizado" ? "personalizado" : `año ${r.porcentaje.anio}`}
+                          {r.porcentaje.valor}% de {formatMoneda(r.base.primaNeta)} prima neta (÷{r.base.recibos}) ·{" "}
+                          {r.porcentaje.origen === "personalizado"
+                            ? "personalizado"
+                            : r.porcentaje.anio === 1
+                              ? "año 1"
+                              : `renovación · año ${r.porcentaje.anio}`}
                         </p>
                       )}
                     </TableCell>

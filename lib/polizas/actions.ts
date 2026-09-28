@@ -6,6 +6,7 @@ import { getAlmacen } from "@/lib/archivos/almacen";
 import { esAdmin, getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { registrarPoliza, type GuardarPolizaResultado } from "@/lib/polizas/guardar";
+import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
   // Las Server Actions son endpoints públicos: se valida la sesión aquí mismo.
@@ -59,4 +60,29 @@ export async function eliminarPoliza(polizaId: string, confirmacion: string): Pr
   revalidatePath("/polizas");
   revalidatePath("/");
   return { ok: true, archivosBorrados, avisoAlmacen };
+}
+
+export type ActualizarPrimaNetaResultado = { ok: true } | { ok: false; error: string };
+
+/**
+ * Captura o corrige la prima neta de una póliza (base de la comisión esperada). Sirve sobre
+ * todo para las pólizas registradas antes de que existiera el campo.
+ */
+export async function actualizarPrimaNeta(polizaId: string, valor: string): Promise<ActualizarPrimaNetaResultado> {
+  if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || typeof valor !== "string") {
+    return { ok: false, error: "Datos inválidos." };
+  }
+  const poliza = await db.poliza.findUnique({ where: { id: polizaId }, select: { prima_total: true } });
+  if (!poliza) return { ok: false, error: "La póliza ya no existe." };
+
+  const error = validarPrimaNeta(valor, Number(poliza.prima_total));
+  if (error) return { ok: false, error };
+
+  await db.poliza.update({ where: { id: polizaId }, data: { prima_neta: parseNumero(valor).toFixed(2) } });
+  // Cambia la comisión esperada del dashboard y de la conciliación.
+  revalidatePath(`/polizas/${polizaId}`);
+  revalidatePath("/");
+  revalidatePath("/conciliacion");
+  return { ok: true };
 }

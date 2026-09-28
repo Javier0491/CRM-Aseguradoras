@@ -107,6 +107,9 @@ model Poliza {
   vigencia_fin               DateTime  @db.Date
   // Prima de toda la vigencia capturada; se reparte entre los recibos.
   prima_total                Decimal   @db.Decimal(14, 2)
+  // Prima neta de la vigencia (sin IVA, recargos ni derecho de póliza): la base de la comisión.
+  // Opcional solo por las pólizas capturadas antes de existir el campo.
+  prima_neta                 Decimal?  @db.Decimal(14, 2)
   forma_pago                 FormaPago
   // Campos específicos del ramo (vehículo, suma asegurada, beneficiario, etc.). La suma
   // asegurada es opcional ahí: si es ilimitada, la cantidad y su unidad no se guardan.

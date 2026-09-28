@@ -164,6 +164,7 @@ const CAMPOS_POLIZA = [
   "vigenciaInicio",
   "vigenciaFin",
   "primaTotal",
+  "primaNeta",
 ];
 const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
 

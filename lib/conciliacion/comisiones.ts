@@ -1,6 +1,8 @@
 // Reglas de negocio de la comisión esperada (funciones puras, sin base de datos).
 
 import { edadEnRango, esTodasLasEdades } from "@/lib/comisiones/reglas";
+import { generarRecibos } from "@/lib/polizas/recibos";
+import { mesesPorFormaPago } from "@/lib/polizas/validacion";
 
 const redondear = (n: number) => Math.round(n * 100) / 100;
 
@@ -89,8 +91,43 @@ export function edadDelTitular(
   return titular.edad;
 }
 
-export const comisionEsperada = (montoRecibo: number, porcentaje: number) =>
-  redondear((montoRecibo * porcentaje) / 100);
+/**
+ * Comisión esperada de un recibo = prima neta que le corresponde × porcentaje.
+ * La base es SIEMPRE la prima neta (sin IVA, recargos ni derecho de póliza), nunca el monto
+ * cobrado del recibo, que sale de la prima total.
+ */
+export const comisionEsperada = (primaNetaRecibo: number, porcentaje: number) =>
+  redondear((primaNetaRecibo * porcentaje) / 100);
+
+export type BaseComision = {
+  /** Prima neta que le corresponde al recibo. */
+  primaNeta: number;
+  /** Recibos entre los que se reparte la prima neta anual (según la forma de pago). */
+  recibos: number;
+};
+
+/**
+ * Prima neta de un recibo: prima neta de la vigencia ÷ número de recibos de su forma de pago,
+ * con el mismo reparto de centavos que el calendario de recibos (el sobrante va al primero).
+ * null si la póliza no tiene prima neta capturada: la comisión no se puede calcular.
+ */
+export function primaNetaDelRecibo(
+  poliza: { prima_neta: { toString(): string } | null; vigencia_inicio: Date; vigencia_fin: Date; forma_pago: keyof typeof mesesPorFormaPago },
+  numero: number
+): BaseComision | null {
+  if (poliza.prima_neta === null) return null;
+  const neta = Number(poliza.prima_neta.toString());
+  if (!Number.isFinite(neta) || neta <= 0) return null;
+  const reparto = generarRecibos({
+    vigenciaInicio: poliza.vigencia_inicio.toISOString().slice(0, 10),
+    vigenciaFin: poliza.vigencia_fin.toISOString().slice(0, 10),
+    primaTotal: neta,
+    mesesPorPeriodo: mesesPorFormaPago[poliza.forma_pago],
+  });
+  // Un recibo fuera del calendario (p. ej. auto-creado) toma la parte de un recibo normal.
+  const parte = reparto[numero - 1] ?? reparto[reparto.length - 1];
+  return { primaNeta: Number(parte.monto), recibos: reparto.length };
+}
 
 /**
  * Monto de una celda del estado de cuenta: acepta números, "$1,234.56", "1234.5 MXN" y

@@ -134,6 +134,7 @@ export const camposGenerales: CampoDef[] = [
   { name: "vigenciaInicio", label: "Inicio de vigencia", type: "date", required: true },
   { name: "vigenciaFin", label: "Fin de vigencia", type: "date", required: true },
   { name: "primaTotal", label: "Prima total", type: "currency", required: true, placeholder: "0.00", hint: "Prima de toda la vigencia; se reparte entre los recibos." },
+  { name: "primaNeta", label: "Prima neta", type: "currency", required: true, placeholder: "0.00", hint: "Sin IVA, recargos ni derecho de póliza. Es la base de la comisión." },
   { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: FORMAS_PAGO.map(({ value, label }) => ({ value, label })) },
   { name: "comisionPersonalizadaPct", label: "Comisión personalizada (%)", type: "percent", placeholder: "Opcional", hint: "Solo si la póliza negoció un % distinto a la matriz de comisiones.", sinOcr: true },
 ];

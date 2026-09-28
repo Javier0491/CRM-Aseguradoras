@@ -5,6 +5,7 @@ import { ArrowLeft, Download, ExternalLink, FileArchive, FileText, FolderOpen } 
 
 import { ArchivoUploader } from "@/components/archivos/archivo-uploader";
 import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
+import { PrimaNeta } from "@/components/polizas/prima-neta";
 import {
   AseguradoraTag,
   estadoRecibo,
@@ -49,13 +50,19 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   // La comisión es la ganancia del broker: solo la ve el rol ADMIN.
   const verComisiones = esAdmin(await requireUser());
 
-  const datos: { label: string; valor: string; mono?: boolean }[] = [
+  const datos: { label: string; valor: React.ReactNode; mono?: boolean }[] = [
     { label: "Cliente", valor: poliza.cliente.nombre },
     { label: "RFC", valor: poliza.cliente.rfc, mono: true },
     { label: "Teléfono", valor: poliza.cliente.telefono, mono: true },
     { label: "Correo", valor: poliza.cliente.email },
     { label: "Vigencia", valor: `${formatFecha(poliza.vigencia_inicio)} – ${formatFecha(poliza.vigencia_fin)}` },
     { label: "Prima total", valor: formatMoneda(Number(poliza.prima_total)) },
+    {
+      label: "Prima neta",
+      valor: (
+        <PrimaNeta polizaId={poliza.id} valor={poliza.prima_neta === null ? null : Number(poliza.prima_neta)} />
+      ),
+    },
     { label: "Forma de pago", valor: formaPagoLabel[poliza.forma_pago] },
     ...(verComisiones
       ? [
@@ -115,7 +122,7 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
                 {datos.map((d) => (
                   <div key={d.label} className="min-w-0">
                     <dt className="text-xs text-muted-foreground">{d.label}</dt>
-                    <dd className={cn("truncate text-sm font-medium", d.mono && "font-mono")}>
+                    <dd className={cn("text-sm font-medium", typeof d.valor === "string" && "truncate", d.mono && "font-mono")}>
                       {d.valor}
                     </dd>
                   </div>

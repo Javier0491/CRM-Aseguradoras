@@ -1,6 +1,12 @@
 import "server-only";
 
-import { anioDePoliza, comisionEsperada, edadDelTitular, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
+import {
+  anioDePoliza,
+  comisionEsperada,
+  edadDelTitular,
+  primaNetaDelRecibo,
+  resolverPorcentaje,
+} from "@/lib/conciliacion/comisiones";
 import {
   TOLERANCIA_MXN,
   type FilaEstado,
@@ -15,6 +21,12 @@ import { mesesPorFormaPago } from "@/lib/polizas/validacion";
 
 const soloAlfanumerico = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 const isoFecha = (d: Date) => d.toISOString().slice(0, 10);
+/**
+ * La vigencia de la póliza incluye la fecha (YYYY-MM-DD); sin fecha, cualquiera la cubre. El fin
+ * es exclusivo: ese mismo día empieza la renovación (13/07/2025–13/07/2026 y luego 13/07/2026–…).
+ */
+const cubreFecha = (p: { vigencia_inicio: Date; vigencia_fin: Date }, fecha: string | undefined) =>
+  !fecha || (isoFecha(p.vigencia_inicio) <= fecha && fecha < isoFecha(p.vigencia_fin));
 
 /**
  * Cruza los renglones de un estado de cuenta contra las pólizas y recibos de la aseguradora.
@@ -23,8 +35,9 @@ const isoFecha = (d: Date) => d.toISOString().slice(0, 10);
  * - La póliza del archivo se busca por póliza vigor (la llave de cobranza) o por número impreso.
  * - El recibo se busca por folio; si no, por número de recibo; si no, el más antiguo aún no
  *   conciliado. Nunca se repite: dos renglones de la misma póliza pagan recibos distintos.
- * - Comisión esperada = monto del recibo × % (personalizado de la póliza o el de la matriz
- *   según ramo, año de la póliza y edad del titular).
+ * - Comisión esperada = (prima neta de la vigencia ÷ número de recibos) × % (personalizado de
+ *   la póliza o el de la matriz según aseguradora, ramo, año de la póliza y edad del titular).
+ *   Nunca sobre la prima total ni el monto cobrado del recibo.
  * - El estado de cuenta es la fuente de la verdad de lo cobrado: si la póliza existe pero el
  *   recibo no, se propone crearlo ya conciliado ("auto_creado"). Solo cuando el renglón trae
  *   folio o número de recibo, para no duplicar recibos al reprocesar un archivo.
@@ -49,6 +62,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
         vigencia_inicio: true,
         vigencia_fin: true,
         prima_total: true,
+        prima_neta: true,
         forma_pago: true,
         comision_personalizada_pct: true,
         cliente: { select: { nombre: true } },
@@ -68,8 +82,20 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
 
   const esquemasNum = esquemas.map((e) => ({ ...e, porcentaje: Number(e.porcentaje) }));
 
-  // Primera vigencia de cada cadena (misma póliza vigor) para calcular el año de la póliza.
+  // Primera vigencia de cada cadena (misma póliza vigor) para distinguir año 1 de renovación.
+  // Se consulta toda la cadena en la base de datos, no solo las vigencias que menciona el
+  // archivo: si el estado de cuenta nombra la renovación por su número impreso, sus vigencias
+  // anteriores no vienen entre `polizas` y la renovación se contaría como año 1.
+  const vigoresCadena = [...new Set(polizas.map((p) => p.polizaVigor).filter((v): v is string => Boolean(v)))];
+  const cadenas = vigoresCadena.length
+    ? await db.poliza.groupBy({
+        by: ["polizaVigor"],
+        where: { aseguradora_id: aseguradoraId, polizaVigor: { in: vigoresCadena } },
+        _min: { vigencia_inicio: true },
+      })
+    : [];
   const primeraVigencia = new Map<string, Date>();
+  for (const c of cadenas) if (c.polizaVigor && c._min.vigencia_inicio) primeraVigencia.set(c.polizaVigor, c._min.vigencia_inicio);
   for (const p of polizas) {
     const clave = p.polizaVigor ?? p.id;
     const actual = primeraVigencia.get(clave);
@@ -111,6 +137,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       poliza: null,
       recibo: null,
       nuevoRecibo: null,
+      base: null,
       comisionEsperada: null,
       diferencia: null,
       porcentaje: null,
@@ -163,7 +190,13 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       // Un recibo con otro folio es otro recibo, aunque coincida el número.
       .filter((r) => !fila.folio || r.folio === null)
       .filter((r) => fila.recibo === undefined || r.numero === fila.recibo)
-      .sort((a, b) => a.fecha_vencimiento.getTime() - b.fecha_vencimiento.getTime())[0];
+      // Con fecha en el archivo, primero los recibos de la vigencia que la cubre (en una cadena
+      // con renovaciones, el recibo 1 existe en cada vigencia).
+      .sort(
+        (a, b) =>
+          Number(!cubreFecha(a.poliza, fila.fecha)) - Number(!cubreFecha(b.poliza, fila.fecha)) ||
+          a.fecha_vencimiento.getTime() - b.fecha_vencimiento.getTime()
+      )[0];
 
     if (!recibo) return sinRecibo(fila, coincidentes, principal);
     usados.add(recibo.id);
@@ -197,12 +230,22 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       };
     }
 
-    const esperada = comisionEsperada(monto, porcentaje.valor);
+    const baseComision = primaNetaDelRecibo(recibo.poliza, recibo.numero);
+    if (!baseComision) {
+      return {
+        ...conRecibo,
+        porcentaje,
+        estatus: "revisar",
+        detalle: "La póliza no tiene prima neta capturada: agrégala en su detalle para calcular la comisión.",
+      };
+    }
+    const esperada = comisionEsperada(baseComision.primaNeta, porcentaje.valor);
     const diferencia = Math.round((fila.comisionPagada - esperada) * 100) / 100;
     const coincide = Math.abs(diferencia) <= TOLERANCIA_MXN;
     return {
       ...conRecibo,
       porcentaje,
+      base: baseComision,
       comisionEsperada: esperada,
       diferencia,
       estatus: coincide ? "conciliado" : "diferencia",
@@ -224,7 +267,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
 
       // Póliza de la cadena donde va el recibo: la que cubre la fecha del archivo, o la vigente.
       const destino = f.fecha
-        ? cadena.find((p) => isoFecha(p.vigencia_inicio) <= f.fecha! && f.fecha! <= isoFecha(p.vigencia_fin))
+        ? cadena.find((p) => cubreFecha(p, f.fecha))
         : vigente;
       if (!destino) {
         return {
