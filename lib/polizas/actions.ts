@@ -4,8 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
 import { esAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
-import { registrarPoliza, type GuardarPolizaResultado } from "@/lib/polizas/guardar";
+import {
+  actualizarPoliza,
+  registrarPoliza,
+  type EditarPolizaResultado,
+  type GuardarPolizaResultado,
+} from "@/lib/polizas/guardar";
 import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
@@ -15,8 +21,32 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
     return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
 
-  const resultado = await registrarPoliza(raw, { permitirComision: esAdmin(user) });
-  if (resultado.ok) revalidatePath("/polizas");
+  // Renovación: el formulario manda la póliza que se renueva.
+  const renuevaA =
+    typeof raw === "object" && raw !== null && "renuevaA" in raw ? (raw as { renuevaA: unknown }).renuevaA : undefined;
+  const resultado = await registrarPoliza(raw, {
+    permitirComision: esAdmin(user),
+    usuario: user,
+    ...(renuevaA !== undefined && { renuevaA: String(renuevaA) }),
+  });
+  if (resultado.ok) {
+    revalidatePath("/polizas", "layout");
+    revalidatePath("/");
+  }
+  return resultado;
+}
+
+/** Corrige una póliza existente (ver actualizarPoliza). */
+export async function editarPoliza(polizaId: string, raw: unknown): Promise<EditarPolizaResultado> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  const resultado = await actualizarPoliza(polizaId, raw, { permitirComision: esAdmin(user), usuario: user });
+  if (resultado.ok) {
+    revalidatePath("/polizas", "layout");
+    revalidatePath("/clientes", "layout");
+    revalidatePath("/");
+    revalidatePath("/conciliacion");
+  }
   return resultado;
 }
 
@@ -36,17 +66,33 @@ export type EliminarPolizaResultado =
  * quedarían archivos huérfanos, nunca una póliza apuntando a archivos inexistentes.
  */
 export async function eliminarPoliza(polizaId: string, confirmacion: string): Promise<EliminarPolizaResultado> {
-  if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { ok: false, error: "Datos inválidos." };
 
-  const poliza = await db.poliza.findUnique({ where: { id: polizaId }, select: { numeroImpreso: true } });
+  const poliza = await db.poliza.findUnique({
+    where: { id: polizaId },
+    select: { numeroImpreso: true, cliente: { select: { nombre: true } }, _count: { select: { recibos: true } } },
+  });
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
   // La confirmación también se valida aquí: el navegador no es de fiar.
   if (typeof confirmacion !== "string" || confirmacion.trim().toUpperCase() !== poliza.numeroImpreso.toUpperCase()) {
     return { ok: false, error: "El número escrito no coincide con el de la póliza." };
   }
 
-  await db.poliza.delete({ where: { id: polizaId } });
+  await db.$transaction(async (tx) => {
+    await tx.poliza.delete({ where: { id: polizaId } });
+    await registrarBitacora(
+      user,
+      {
+        accion: "poliza.eliminar",
+        entidad: "poliza",
+        entidadId: polizaId,
+        descripcion: `Eliminó la póliza ${poliza.numeroImpreso} de ${poliza.cliente.nombre} con ${poliza._count.recibos} recibos`,
+      },
+      tx
+    );
+  });
 
   let archivosBorrados = 0;
   let avisoAlmacen: string | undefined;
@@ -69,17 +115,34 @@ export type ActualizarPrimaNetaResultado = { ok: true } | { ok: false; error: st
  * todo para las pólizas registradas antes de que existiera el campo.
  */
 export async function actualizarPrimaNeta(polizaId: string, valor: string): Promise<ActualizarPrimaNetaResultado> {
-  if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || typeof valor !== "string") {
     return { ok: false, error: "Datos inválidos." };
   }
-  const poliza = await db.poliza.findUnique({ where: { id: polizaId }, select: { prima_total: true } });
+  const poliza = await db.poliza.findUnique({
+    where: { id: polizaId },
+    select: { prima_total: true, prima_neta: true, numeroImpreso: true },
+  });
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
 
   const error = validarPrimaNeta(valor, Number(poliza.prima_total));
   if (error) return { ok: false, error };
 
-  await db.poliza.update({ where: { id: polizaId }, data: { prima_neta: parseNumero(valor).toFixed(2) } });
+  const nueva = parseNumero(valor).toFixed(2);
+  await db.$transaction(async (tx) => {
+    await tx.poliza.update({ where: { id: polizaId }, data: { prima_neta: nueva } });
+    await registrarBitacora(
+      user,
+      {
+        accion: "poliza.prima_neta",
+        entidad: "poliza",
+        entidadId: polizaId,
+        descripcion: `Prima neta de la póliza ${poliza.numeroImpreso}: ${poliza.prima_neta === null ? "sin capturar" : `$${Number(poliza.prima_neta).toFixed(2)}`} → $${nueva}`,
+      },
+      tx
+    );
+  });
   // Cambia la comisión esperada del dashboard y de la conciliación.
   revalidatePath(`/polizas/${polizaId}`);
   revalidatePath("/");

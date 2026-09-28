@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Controller,
   useForm,
@@ -60,7 +61,7 @@ import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { subirArchivo } from "@/lib/archivos/subir";
-import { guardarPoliza } from "@/lib/polizas/actions";
+import { editarPoliza, guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
 import {
   aseguradoVacio,
@@ -98,6 +99,18 @@ export type PolizaFormInicial = {
   /** La IA detectó la suma asegurada como "Sin límite". */
   sumaAseguradaIlimitada?: boolean;
 };
+
+/**
+ * Para qué se usa el formulario:
+ * - captura: póliza nueva.
+ * - renovacion: póliza nueva que renueva `anterior`; conserva su póliza vigor (la cadena).
+ * - edicion: corrige una póliza guardada; `bloqueados` son campos que no se pueden cambiar
+ *   (el calendario de recibos cuando ya hay recibos cobrados).
+ */
+export type ModoPoliza =
+  | { tipo: "captura" }
+  | { tipo: "renovacion"; anterior: { id: string; numero: string } }
+  | { tipo: "edicion"; polizaId: string; numero: string; bloqueados: readonly string[] };
 
 /** Acciones del formulario disponibles para el contenedor (vía `ref`). */
 export type PolizaFormHandle = {
@@ -210,8 +223,10 @@ export function PolizaForm({
   negociacion = null,
   onReiniciar,
   onRamoChange,
+  modo = { tipo: "captura" },
   ref,
 }: {
+  modo?: ModoPoliza;
   /** Avisa al contenedor el ramo seleccionado (p. ej. para mostrar el segundo documento). */
   onRamoChange?: (ramo: Ramo) => void;
   ref?: React.Ref<PolizaFormHandle>;
@@ -240,6 +255,8 @@ export function PolizaForm({
     return Boolean(vigor) && vigor !== extraerPolizaVigor(inicial?.generales?.numeroImpreso ?? "");
   });
   const [subiendo, setSubiendo] = React.useState<TipoArchivo | null>(null);
+  const router = useRouter();
+  const editando = modo.tipo === "edicion";
 
   // La validación es la misma que aplica la Server Action (lib/polizas/validacion.ts).
   const resolver = React.useCallback<Resolver<FormValues>>(
@@ -388,7 +405,8 @@ export function PolizaForm({
   }
 
   function reiniciar() {
-    reset(valoresIniciales());
+    // En una renovación se vuelve a los datos de la vigencia anterior, no a un formulario vacío.
+    reset(valoresIniciales(modo.tipo === "renovacion" ? inicial : undefined));
     setVigorManual(false);
     limpiarAvisos();
     onReiniciar?.();
@@ -404,14 +422,32 @@ export function PolizaForm({
       }
     }
 
-    const res = await guardarPoliza({
+    const datos = {
       ramo: values.ramo,
       generales: values.generales,
       especificos: values.especificos[values.ramo],
       // En los ramos con censo los asegurados no se capturan uno por uno.
       asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
       sumaAseguradaIlimitada: esSumaIlimitada(values),
-    });
+    };
+
+    if (modo.tipo === "edicion") {
+      const editada = await editarPoliza(modo.polizaId, datos);
+      if (editada.ok) {
+        router.push(`/polizas/${modo.polizaId}`);
+        router.refresh();
+        return;
+      }
+      setErrorGeneral(editada.error ?? null);
+      for (const [nombre, message] of Object.entries(editada.errores ?? ({} as Errores))) {
+        setError(rutaCampo(nombre, values.ramo), { type: "server", message });
+      }
+      return;
+    }
+
+    const res = await guardarPoliza(
+      modo.tipo === "renovacion" ? { ...datos, renuevaA: modo.anterior.id } : datos
+    );
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
       const archivos: Exito["archivos"] = {};
@@ -448,6 +484,14 @@ export function PolizaForm({
   function renderGeneral(campo: CampoDef) {
     const esImpreso = campo.name === "numeroImpreso";
     const esVigor = campo.name === "polizaVigor";
+    const bloqueadoPorModo =
+      (modo.tipo === "edicion" && modo.bloqueados.includes(campo.name)) ||
+      (modo.tipo === "renovacion" && esVigor);
+    const ayudaModo = !bloqueadoPorModo
+      ? undefined
+      : modo.tipo === "renovacion"
+        ? "Se conserva la de la póliza anterior para mantener la cadena de renovaciones."
+        : "Tiene recibos cobrados: para cambiarlo, revierte primero su conciliación.";
 
     return (
       <Controller
@@ -459,12 +503,12 @@ export function PolizaForm({
             campo={campo}
             valor={field.value ?? ""}
             error={fieldState.error?.message}
-            disabled={bloqueado}
+            disabled={bloqueado || bloqueadoPorModo}
             inputRef={field.ref}
             onBlur={field.onBlur}
             destacado={esVigor}
             ayuda={
-              esVigor && vigorManual ? (
+              ayudaModo ?? (esVigor && vigorManual ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -475,12 +519,13 @@ export function PolizaForm({
                 >
                   <RotateCcw className="size-3" /> Recalcular desde el número impreso
                 </button>
-              ) : undefined
+              ) : undefined)
             }
             onChange={(v) => {
               field.onChange(v);
               limpiarAvisos();
-              if (esImpreso && !vigorManual) actualizarVigor(v);
+              // En una renovación la póliza vigor es la de la cadena: no se recalcula.
+              if (esImpreso && !vigorManual && modo.tipo !== "renovacion") actualizarVigor(v);
               if (esVigor) setVigorManual(true);
             }}
           />
@@ -493,9 +538,21 @@ export function PolizaForm({
     <Card className="gap-0 py-0">
       <form onSubmit={onSubmit} noValidate>
         <CardHeader className="border-b px-6 py-5 [.border-b]:pb-5">
-          <CardTitle className="text-base">Nueva póliza</CardTitle>
+          <CardTitle className="text-base">
+            {modo.tipo === "edicion"
+              ? `Editar póliza ${modo.numero}`
+              : modo.tipo === "renovacion"
+                ? `Renovación de la póliza ${modo.anterior.numero}`
+                : "Nueva póliza"}
+          </CardTitle>
           <CardDescription>
-            Revisa los datos extraídos antes de guardar; todos los campos son editables.
+            {modo.tipo === "edicion"
+              ? modo.bloqueados.length > 0
+                ? "La póliza ya tiene recibos cobrados: la vigencia, la forma de pago y la prima total quedan fijas."
+                : "Si cambias la vigencia, la forma de pago o la prima total, sus recibos se vuelven a generar."
+              : modo.tipo === "renovacion"
+                ? "Datos de la vigencia anterior precargados. Sube la carátula nueva o captura el número y las primas."
+                : "Revisa los datos extraídos antes de guardar; todos los campos son editables."}
           </CardDescription>
         </CardHeader>
 
@@ -627,39 +684,41 @@ export function PolizaForm({
                 </FormSection>
               ))}
 
-              <FormSection titulo="Documentos">
-                <Controller
-                  name="expediente"
-                  control={control}
-                  render={({ field, fieldState }) => (
-                    <div className="space-y-2 sm:col-span-2">
-                      <Label htmlFor="campo-expediente" className="text-xs">
-                        {ARCHIVOS.expediente.etiqueta}
-                      </Label>
-                      <ArchivoInput
-                        tipo="expediente"
-                        id="campo-expediente"
-                        value={field.value}
-                        onChange={(archivo) => {
-                          field.onChange(archivo);
-                          limpiarAvisos();
-                        }}
-                        onBlur={field.onBlur}
-                        disabled={bloqueado}
-                        invalid={fieldState.invalid}
-                        describedBy="campo-expediente-hint"
-                      />
-                      <p
-                        id="campo-expediente-hint"
-                        className={cn("text-xs", fieldState.error ? "text-destructive" : "text-muted-foreground")}
-                      >
-                        {fieldState.error?.message ??
-                          "Opcional. Solo se guarda como respaldo; no se analiza con IA."}
-                      </p>
-                    </div>
-                  )}
-                />
-              </FormSection>
+              {!editando && (
+                <FormSection titulo="Documentos">
+                  <Controller
+                    name="expediente"
+                    control={control}
+                    render={({ field, fieldState }) => (
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="campo-expediente" className="text-xs">
+                          {ARCHIVOS.expediente.etiqueta}
+                        </Label>
+                        <ArchivoInput
+                          tipo="expediente"
+                          id="campo-expediente"
+                          value={field.value}
+                          onChange={(archivo) => {
+                            field.onChange(archivo);
+                            limpiarAvisos();
+                          }}
+                          onBlur={field.onBlur}
+                          disabled={bloqueado}
+                          invalid={fieldState.invalid}
+                          describedBy="campo-expediente-hint"
+                        />
+                        <p
+                          id="campo-expediente-hint"
+                          className={cn("text-xs", fieldState.error ? "text-destructive" : "text-muted-foreground")}
+                        >
+                          {fieldState.error?.message ??
+                            "Opcional. Solo se guarda como respaldo; no se analiza con IA."}
+                        </p>
+                      </div>
+                    )}
+                  />
+                </FormSection>
+              )}
             </CardContent>
           </fieldset>
         )}
@@ -716,16 +775,26 @@ export function PolizaForm({
               </span>
             )}
           </div>
-          <Button type="button" variant="ghost" onClick={reiniciar} disabled={bloqueado}>
-            <RotateCcw /> Limpiar
-          </Button>
+          {editando ? (
+            <Button type="button" variant="ghost" asChild>
+              <Link href={`/polizas/${modo.polizaId}`}>Cancelar</Link>
+            </Button>
+          ) : (
+            <Button type="button" variant="ghost" onClick={reiniciar} disabled={bloqueado}>
+              <RotateCcw /> Limpiar
+            </Button>
+          )}
           <Button type="submit" disabled={bloqueado || exito !== null}>
             {isSubmitting ? <Loader2 className="animate-spin" /> : <Save />}
             {subiendo
               ? `Subiendo ${SUBIENDO[subiendo]}…`
               : isSubmitting
                 ? "Guardando…"
-                : "Guardar póliza"}
+                : editando
+                  ? "Guardar cambios"
+                  : modo.tipo === "renovacion"
+                    ? "Guardar renovación"
+                    : "Guardar póliza"}
           </Button>
         </CardFooter>
       </form>

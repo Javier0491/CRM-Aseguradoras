@@ -32,19 +32,43 @@ function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): Pol
   };
 }
 
+/**
+ * Renovación: lo que lee la IA de la carátula nueva manda, y lo que no trae se completa con la
+ * vigencia anterior (contacto, datos del ramo, asegurados y su antigüedad).
+ */
+function combinarRenovacion(ocr: PolizaFormInicial, anterior: PolizaFormInicial): PolizaFormInicial {
+  const conValor = (v: Record<string, string> | undefined) =>
+    Object.fromEntries(Object.entries(v ?? {}).filter(([, valor]) => valor !== ""));
+  const mismoRamo = !ocr.ramo || ocr.ramo === anterior.ramo;
+  const antiguedades = new Map((anterior.asegurados ?? []).map((a) => [a.nombre.trim().toUpperCase(), a.antiguedad]));
+  return {
+    ramo: ocr.ramo ?? anterior.ramo,
+    // La póliza vigor es la de la cadena, aunque la IA lea otra.
+    generales: { ...anterior.generales, ...conValor(ocr.generales), polizaVigor: anterior.generales?.polizaVigor ?? "" },
+    especificos: mismoRamo ? { ...anterior.especificos, ...conValor(ocr.especificos) } : ocr.especificos,
+    asegurados: ocr.asegurados?.length
+      ? ocr.asegurados.map((a) => ({ ...a, antiguedad: a.antiguedad || antiguedades.get(a.nombre.trim().toUpperCase()) || "" }))
+      : anterior.asegurados,
+    sumaAseguradaIlimitada: ocr.sumaAseguradaIlimitada ?? anterior.sumaAseguradaIlimitada,
+  };
+}
+
 export function CapturaWorkspace({
   aseguradoras,
   verComisiones,
+  renovacion,
 }: {
   aseguradoras: Opcion[];
   /** Solo ADMIN captura el % de comisión personalizado. */
   verComisiones: boolean;
+  /** Captura de la renovación de una póliza, con sus datos precargados. */
+  renovacion?: { anterior: { id: string; numero: string }; inicial: PolizaFormInicial };
 }) {
   // `version` remonta el formulario para que tome los valores extraídos como estado inicial.
   const [prellenado, setPrellenado] = React.useState<{
     version: number;
     inicial?: PolizaFormInicial;
-  }>({ version: 0 });
+  }>({ version: 0, inicial: renovacion?.inicial });
   const [extrayendo, setExtrayendo] = React.useState(false);
   // Documentos leídos por la IA: el primer PDF se guarda como carátula de la póliza.
   // Las imágenes y los demás documentos se usan solo para la lectura.
@@ -71,9 +95,10 @@ export function CapturaWorkspace({
           onLimpiar={() => setCaratula(null)}
           onAplicar={(datos, archivos) => {
             setCaratula(primerPdf(archivos));
+            const leidos = aValoresIniciales(datos, aseguradoras);
             setPrellenado((p) => ({
               version: p.version + 1,
-              inicial: aValoresIniciales(datos, aseguradoras),
+              inicial: renovacion ? combinarRenovacion(leidos, renovacion.inicial) : leidos,
             }));
           }}
         />
@@ -103,6 +128,7 @@ export function CapturaWorkspace({
         inicial={prellenado.inicial}
         aseguradoras={aseguradoras}
         verComisiones={verComisiones}
+        modo={renovacion ? { tipo: "renovacion", anterior: renovacion.anterior } : undefined}
         ref={formRef}
         extrayendo={extrayendo || leyendoComplemento}
         onRamoChange={setRamo}

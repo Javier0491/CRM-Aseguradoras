@@ -1,7 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Download, ExternalLink, FileArchive, FileText, FolderOpen } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Download,
+  ExternalLink,
+  FileArchive,
+  FileText,
+  FolderOpen,
+  Pencil,
+  RefreshCcw,
+} from "lucide-react";
 
 import { ArchivoUploader } from "@/components/archivos/archivo-uploader";
 import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
@@ -9,6 +19,7 @@ import { PrimaNeta } from "@/components/polizas/prima-neta";
 import {
   AseguradoraTag,
   estadoRecibo,
+  estadoVigencia,
   formaPagoLabel,
   ramoLabel,
   Vencimiento,
@@ -35,7 +46,8 @@ import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { CAMPOS_LISTA_COBERTURAS, listaDeCoberturas } from "@/lib/polizas/coberturas";
-import { getPolizaDetalle } from "@/lib/polizas/queries";
+import { getRenovacion } from "@/lib/polizas/formulario";
+import { DIAS_POR_VENCER, getPolizaDetalle } from "@/lib/polizas/queries";
 import { ramoDesdeDb, seccionesPorRamo, SUMA_ASEGURADA, TEXTO_SUMA_ILIMITADA, type CampoDef } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
 
@@ -50,6 +62,9 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   const hoy = hoyISO();
   // La comisión es la ganancia del broker: solo la ve el rol ADMIN.
   const verComisiones = esAdmin(await requireUser());
+  const renovada = await getRenovacion(poliza);
+  // "Renovar" se destaca cuando la póliza está por vencer o ya venció.
+  const toca = estadoVigencia(poliza.vigencia_fin, hoy, DIAS_POR_VENCER) !== "vigente";
 
   const datos: { label: string; valor: React.ReactNode; mono?: boolean }[] = [
     { label: "Cliente", valor: poliza.cliente.nombre },
@@ -95,9 +110,27 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
               <span className="font-mono text-primary">{poliza.polizaVigor ?? "—"}</span>
             </p>
           </div>
-          <div className="flex items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
             <AseguradoraTag nombre={poliza.aseguradora.nombre} color={poliza.aseguradora.color_hex} />
             <Badge variant="outline">{ramoLabel[poliza.ramo]}</Badge>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/polizas/${poliza.id}/editar`}>
+                <Pencil /> Editar
+              </Link>
+            </Button>
+            {renovada ? (
+              <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+                <Link href={`/polizas/${renovada.id}`} title="Esta póliza ya se renovó">
+                  Renovada: <span className="font-mono">{renovada.numeroImpreso}</span> <ArrowRight />
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild variant={toca ? "default" : "outline"} size="sm">
+                <Link href={`/captura?renovar=${poliza.id}`}>
+                  <RefreshCcw /> Renovar
+                </Link>
+              </Button>
+            )}
             <EliminarPoliza
               polizaId={poliza.id}
               numero={poliza.numeroImpreso}

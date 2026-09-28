@@ -445,6 +445,15 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                           <Eye className="size-3.5" />
                         </Link>
                       </Button>
+                      <Button variant="ghost" size="icon" className="size-7 hover:text-primary" asChild>
+                        <Link
+                          href={`/captura?renovar=${p.id}`}
+                          aria-label={`Renovar póliza de ${p.cliente.nombre}`}
+                          title="Capturar la renovación"
+                        >
+                          <RefreshCcw className="size-3.5" />
+                        </Link>
+                      </Button>
                       {whatsapp && (
                         <Button variant="ghost" size="icon" className="size-7 hover:text-success" asChild>
                           <a
