@@ -1,9 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 
+import logoPj from "@/public/logo-pj-icono.png";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -84,9 +86,16 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip="PJ MAGNUS">
               <Link href="/">
-                <div className="flex aspect-square size-8 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-xs font-bold text-primary-foreground">
-                  PJ
-                </div>
+                {/* Monograma del logo (public/logo-pj-icono.png, recortado de logo-pj.png): 32 px, que
+                    es también el tamaño del botón con el menú colapsado. */}
+                <Image
+                  src={logoPj}
+                  alt="PJ Magnus"
+                  width={32}
+                  height={32}
+                  loading="eager"
+                  className="size-8 shrink-0 object-contain"
+                />
                 <div className="grid flex-1 text-left leading-tight">
                   <span className="truncate text-sm font-semibold tracking-[0.18em] text-foreground">
                     PJ MAGNUS
