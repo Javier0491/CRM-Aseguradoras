@@ -28,6 +28,7 @@ function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): Pol
     generales: { ...datos.generales, aseguradora: aseguradora?.value ?? "" },
     especificos: datos.especificos,
     asegurados: datos.asegurados,
+    sumaAseguradaIlimitada: datos.sumaAseguradaIlimitada,
   };
 }
 

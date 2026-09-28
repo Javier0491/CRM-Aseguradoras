@@ -3,6 +3,7 @@
 import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 import {
   camposGenerales,
+  camposSumaAsegurada,
   maxLongitud,
   RAMOS,
   RAMOS_CON_CENSO,
@@ -190,9 +191,18 @@ export function normalizarExtraccion(
 
   if (!ramo) advertencias.push("No se pudo determinar el ramo; selecciónalo manualmente.");
 
+  // "Sin límite" solo aplica a ramos con suma asegurada; entonces la cantidad se descarta
+  // aunque la IA haya puesto alguna, para que el formulario no muestre un número inventado.
+  const camposSuma = ramo ? camposSumaAsegurada(ramo) : [];
+  const sumaAseguradaIlimitada = obj.sumaAseguradaIlimitada === true && camposSuma.length > 0;
+  if (sumaAseguradaIlimitada) {
+    for (const nombre of camposSuma) delete especificos[nombre];
+    advertencias.push("Suma asegurada detectada como Sin Límite; verifícalo en la carátula.");
+  }
+
   // En los ramos con censo los asegurados no se capturan uno por uno.
   const asegurados =
     ramo && RAMOS_CON_CENSO.includes(ramo) ? [] : extraerAsegurados(obj.asegurados_lista, advertencias);
 
-  return { ramo, generales, especificos, referenciaPago, asegurados, advertencias };
+  return { ramo, generales, especificos, referenciaPago, sumaAseguradaIlimitada, asegurados, advertencias };
 }

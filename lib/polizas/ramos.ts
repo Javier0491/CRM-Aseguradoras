@@ -184,6 +184,28 @@ const CONDICIONES_GMM: CampoDef[] = [
   RED_MEDICA,
 ];
 
+/**
+ * Suma asegurada principal de cada ramo (y el campo de su unidad, si lo tiene). Es la que puede
+ * venir como "Sin límite": con la bandera `sumaAseguradaIlimitada` ambos campos quedan vacíos.
+ * En Vida la "moneda" es la de toda la póliza, no solo de la suma, así que no se incluye.
+ */
+export const SUMA_ASEGURADA: Partial<Record<Ramo, { valor: string; unidad?: string }>> = {
+  gmm_individual: { valor: "sumaAseguradaValor", unidad: "sumaAseguradaUnidad" },
+  gmm_colectivo: { valor: "sumaAseguradaValor", unidad: "sumaAseguradaUnidad" },
+  vida_individual: { valor: "sumaAsegurada" },
+  vida_grupo: { valor: "sumaAsegurada" },
+  rc_profesional: { valor: "sumaAsegurada" },
+  otros: { valor: "sumaAsegurada" },
+};
+
+/** Nombres de los campos que se vacían cuando la suma asegurada es ilimitada. */
+export function camposSumaAsegurada(ramo: Ramo): string[] {
+  const suma = SUMA_ASEGURADA[ramo];
+  return suma ? [suma.valor, ...(suma.unidad ? [suma.unidad] : [])] : [];
+}
+
+export const TEXTO_SUMA_ILIMITADA = "Sin Límite";
+
 export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
   autos: [
     {

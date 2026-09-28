@@ -134,6 +134,7 @@ export async function getPolizaDetalle(id: string) {
       created_at: true,
       comision_personalizada_pct: true,
       datos_ramo: true,
+      sumaAseguradaIlimitada: true,
       caratula_path: true,
       caratula_nombre: true,
       caratula_bytes: true,

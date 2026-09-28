@@ -108,8 +108,11 @@ model Poliza {
   // Prima de toda la vigencia capturada; se reparte entre los recibos.
   prima_total                Decimal   @db.Decimal(14, 2)
   forma_pago                 FormaPago
-  // Campos específicos del ramo (vehículo, suma asegurada, beneficiario, etc.).
+  // Campos específicos del ramo (vehículo, suma asegurada, beneficiario, etc.). La suma
+  // asegurada es opcional ahí: si es ilimitada, la cantidad y su unidad no se guardan.
   datos_ramo                 Json      @default("{}")
+  // La carátula dice "Sin límite", "Ilimitada", "S/L", "Amparada"… en la suma asegurada.
+  sumaAseguradaIlimitada     Boolean   @default(false) @map("suma_asegurada_ilimitada")
   // Porcentaje de comisión negociado para esta póliza (p. ej. colectivos de MetLife cuya
   // comisión depende de la edad de los integrantes). Si existe, reemplaza al EsquemaComision.
   comision_personalizada_pct Decimal?  @db.Decimal(5, 2)

@@ -17,7 +17,8 @@ de Gastos Médicos Mayores Colectivo, que complementa a la carátula porque trae
 - ADEMÁS del resumen, llena los campos del plan con los valores del Subgrupo 1 (o del subgrupo
   principal si no están numerados). Cada monto va separado en cantidad y unidad:
   · sumaAseguradaValor + sumaAseguradaUnidad: "2000 U.M.A.M." → 2000 y "UMAM";
-    "$5,000,000" → 5000000 y "MXN"; "USD 1,000,000" → 1000000 y "USD".
+    "$5,000,000" → 5000000 y "MXN"; "USD 1,000,000" → 1000000 y "USD". Si la suma del subgrupo
+    principal es "Sin Límite" o una variación, ambos van en null y sumaAseguradaIlimitada es true.
   · deducibleValor + deducibleUnidad: "3 U.M.A.M." → 3 y "UMAM".
   · coaseguro: "10%" → 10.
   · topeCoaseguroValor + topeCoaseguroUnidad: igual que los montos anteriores, si hay tope.
@@ -128,6 +129,14 @@ CAMPOS ESPECÍFICOS
 - Llena solo los del ramo detectado; los de otros ramos van en null.
 - Para campos con valores permitidos, usa exactamente uno de ellos o null si ninguno coincide.
 - Montos y porcentajes como números (deducible 5% → 5; suma asegurada $1,500,000 → 1500000).
+- SUMA ASEGURADA ILIMITADA: Al buscar la Suma Asegurada, ten en cuenta que muchas aseguradoras usan
+  textos como "SIN/LIMITE", "Ilimitada", "Sin Límite", "S/L" o "Amparada". Si detectas cualquier
+  variación de esto, establece el campo sumaAseguradaIlimitada como true y deja la cantidad numérica
+  en null.
+  La cantidad es sumaAseguradaValor en GMM (deja también sumaAseguradaUnidad en null) o
+  sumaAsegurada en los demás ramos. Si la suma asegurada trae una cantidad o no aparece,
+  sumaAseguradaIlimitada es false. Se refiere solo a la suma asegurada principal de la póliza, no
+  a coberturas adicionales ni al deducible o al coaseguro.
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
 - redMedica (GMM Individual y Colectivo): ver RED MÉDICA.
 - condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma

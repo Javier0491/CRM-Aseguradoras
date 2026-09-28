@@ -36,6 +36,11 @@ export type ExtraccionPoliza = {
    * póliza, de aquí se calcula la póliza vigor.
    */
   referenciaPago: string | null;
+  /**
+   * La suma asegurada viene como "Sin límite" (u otra variación). Solo es true en ramos con
+   * suma asegurada; entonces su cantidad y unidad no vienen en `especificos`.
+   */
+  sumaAseguradaIlimitada: boolean;
   /** Personas aseguradas detectadas, en el orden de la carátula. */
   asegurados: AseguradoValores[];
   /** Observaciones para que el usuario revise (datos ambiguos, ilegibles, etc.). */

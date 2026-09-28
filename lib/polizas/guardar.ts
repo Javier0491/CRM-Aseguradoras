@@ -53,12 +53,12 @@ export async function registrarPoliza(
 ): Promise<GuardarPolizaResultado> {
   const input = sanitizarPolizaInput(raw);
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
-  const { ramo, especificos, asegurados } = input;
+  const { ramo, especificos, asegurados, sumaAseguradaIlimitada } = input;
   const g = permitirComision ? input.generales : { ...input.generales, comisionPersonalizadaPct: "" };
 
   const aseguradoras = await db.aseguradora.findMany({ select: { id: true } });
   const errores = {
-    ...validarPoliza(ramo, g, especificos, aseguradoras.map((a) => a.id)),
+    ...validarPoliza(ramo, g, especificos, aseguradoras.map((a) => a.id), sumaAseguradaIlimitada),
     ...validarAsegurados(asegurados),
   };
   if (Object.keys(errores).length > 0) return { ok: false, errores };
@@ -109,6 +109,7 @@ export async function registrarPoliza(
           prima_total: parseNumero(g.primaTotal).toFixed(2),
           forma_pago: g.formaPago as FormaPago,
           datos_ramo: datosRamo(ramo, especificos),
+          sumaAseguradaIlimitada,
           comision_personalizada_pct: g.comisionPersonalizadaPct
             ? parseNumero(g.comisionPersonalizadaPct).toFixed(2)
             : null,

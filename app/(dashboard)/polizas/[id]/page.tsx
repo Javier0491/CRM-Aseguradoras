@@ -34,7 +34,7 @@ import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
-import { ramoDesdeDb, seccionesPorRamo, type CampoDef } from "@/lib/polizas/ramos";
+import { ramoDesdeDb, seccionesPorRamo, SUMA_ASEGURADA, TEXTO_SUMA_ILIMITADA, type CampoDef } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -124,7 +124,7 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
             </CardContent>
           </Card>
 
-          <DatosRamo ramo={poliza.ramo} datos={poliza.datos_ramo} />
+          <DatosRamo ramo={poliza.ramo} datos={poliza.datos_ramo} sumaIlimitada={poliza.sumaAseguradaIlimitada} />
 
           <Card className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
@@ -337,7 +337,7 @@ const humanizar = (clave: string) =>
  * formulario de captura. Lo que no corresponde a un campo actual (p. ej. datos de una
  * versión anterior del formulario) se muestra en "Otros datos" para no ocultarlo.
  */
-function DatosRamo({ ramo, datos }: { ramo: string; datos: unknown }) {
+function DatosRamo({ ramo, datos, sumaIlimitada }: { ramo: string; datos: unknown; sumaIlimitada: boolean }) {
   const valores =
     typeof datos === "object" && datos !== null && !Array.isArray(datos)
       ? (datos as Record<string, unknown>)
@@ -345,6 +345,7 @@ function DatosRamo({ ramo, datos }: { ramo: string; datos: unknown }) {
   const clave = ramoDesdeDb(ramo);
   const secciones = clave ? seccionesPorRamo[clave] : [];
   const conocidos = new Set(secciones.flatMap((s) => s.campos.map((c) => c.name)));
+  const campoSuma = sumaIlimitada && clave ? SUMA_ASEGURADA[clave]?.valor : undefined;
 
   const bloques = [
     ...secciones.map((s) => ({
@@ -354,6 +355,7 @@ function DatosRamo({ ramo, datos }: { ramo: string; datos: unknown }) {
         .filter((c) => !(c.name.endsWith("Unidad") && conocidos.has(c.name.replace(/Unidad$/, "Valor"))))
         .map((c) => {
           const unidad = c.name.endsWith("Valor") ? valores[c.name.replace(/Valor$/, "Unidad")] : undefined;
+          if (c.name === campoSuma) return { campo: c, label: c.label, valor: TEXTO_SUMA_ILIMITADA };
           const valor =
             unidad !== undefined && valores[c.name] !== undefined && valores[c.name] !== ""
               ? `${formatNumero(Number(valores[c.name]))} ${String(unidad)}`

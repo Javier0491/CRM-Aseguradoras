@@ -127,6 +127,13 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
           additionalProperties: false,
         },
       },
+      sumaAseguradaIlimitada: {
+        type: "boolean",
+        description:
+          'true si la suma asegurada aparece como "SIN/LIMITE", "Ilimitada", "Sin Límite", "S/L", ' +
+          '"Amparada" o cualquier variación; entonces su cantidad y su unidad van en null. ' +
+          "false si trae una cantidad o no aparece.",
+      },
       referenciaPago: {
         type: ["string", "null"],
         description:
@@ -139,7 +146,15 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
         description: "Observaciones breves en español para que el usuario revise.",
       },
     },
-    required: ["ramo", "generales", "especificos", "asegurados_lista", "referenciaPago", "advertencias"],
+    required: [
+      "ramo",
+      "generales",
+      "especificos",
+      "asegurados_lista",
+      "sumaAseguradaIlimitada",
+      "referenciaPago",
+      "advertencias",
+    ],
     additionalProperties: false,
   };
 }

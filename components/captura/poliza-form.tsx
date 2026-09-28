@@ -74,11 +74,14 @@ import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import { redesDeAseguradora } from "@/lib/polizas/redes-medicas";
 import {
   camposGenerales,
+  camposSumaAsegurada,
   normalizarOpcion,
   RAMOS,
   RAMOS_CON_CENSO,
   ramoLabels,
   seccionesPorRamo,
+  SUMA_ASEGURADA,
+  TEXTO_SUMA_ILIMITADA,
   type CampoDef,
   type Opcion,
   type Ramo,
@@ -92,6 +95,8 @@ export type PolizaFormInicial = {
   /** Campos específicos del ramo inicial. */
   especificos?: Valores;
   asegurados?: AseguradoValores[];
+  /** La IA detectó la suma asegurada como "Sin límite". */
+  sumaAseguradaIlimitada?: boolean;
 };
 
 /** Acciones del formulario disponibles para el contenedor (vía `ref`). */
@@ -124,9 +129,18 @@ type FormValues = {
   // Se conservan los valores de cada ramo para no perder captura al cambiar de producto.
   especificos: Record<Ramo, Valores>;
   asegurados: AseguradoValores[];
+  /**
+   * Suma asegurada "Sin límite". Aplica solo a los ramos con suma asegurada (SUMA_ASEGURADA):
+   * su cantidad y unidad se vacían, se deshabilitan y no se validan.
+   */
+  sumaIlimitada: boolean;
   /** Expediente de respaldo; se sube a Storage después de guardar la póliza. */
   expediente: File | null;
 };
+
+/** La bandera solo cuenta en ramos que tienen suma asegurada. */
+const esSumaIlimitada = (values: Pick<FormValues, "ramo" | "sumaIlimitada">) =>
+  values.sumaIlimitada && camposSumaAsegurada(values.ramo).length > 0;
 
 const iconosRamo: Record<Ramo, LucideIcon> = {
   autos: Car,
@@ -164,11 +178,15 @@ function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
   if (inicial?.ramo && inicial.especificos) {
     especificos[inicial.ramo] = { ...especificos[inicial.ramo], ...inicial.especificos };
   }
+  if (inicial?.ramo && inicial.sumaAseguradaIlimitada) {
+    for (const nombre of camposSumaAsegurada(inicial.ramo)) especificos[inicial.ramo][nombre] = "";
+  }
   return {
     ramo: inicial?.ramo ?? "autos",
     generales: { ...vacios(camposGenerales), ...inicial?.generales },
     especificos,
     asegurados: (inicial?.asegurados ?? []).map((a) => ({ ...aseguradoVacio(), ...a })),
+    sumaIlimitada: inicial?.sumaAseguradaIlimitada ?? false,
     expediente: null,
   };
 }
@@ -229,7 +247,8 @@ export function PolizaForm({
         values.ramo,
         values.generales,
         values.especificos[values.ramo],
-        aseguradoras.map((a) => a.value)
+        aseguradoras.map((a) => a.value),
+        esSumaIlimitada(values)
       );
       // En los ramos con censo la lista no se usa, así que no se valida.
       const erroresAsegurados = RAMOS_CON_CENSO.includes(values.ramo)
@@ -290,6 +309,20 @@ export function PolizaForm({
   const secciones = seccionesPorRamo[ramo];
   const RamoIcon = iconosRamo[ramo];
   const conCenso = RAMOS_CON_CENSO.includes(ramo);
+  const sumaDelRamo = SUMA_ASEGURADA[ramo];
+  const sumaIlimitada = useWatch({ control, name: "sumaIlimitada" }) && Boolean(sumaDelRamo);
+
+  function cambiarSumaIlimitada(activa: boolean) {
+    setValue("sumaIlimitada", activa, { shouldDirty: true });
+    if (activa) {
+      // Se vacían la cantidad y su unidad: la póliza no tiene tope.
+      for (const nombre of camposSumaAsegurada(ramo)) {
+        setValue(`especificos.${ramo}.${nombre}`, "", { shouldDirty: true });
+        clearErrors(`especificos.${ramo}.${nombre}`);
+      }
+    }
+    limpiarAvisos();
+  }
   const aseguradoraId = useWatch({ control, name: "generales.aseguradora" });
   const nombreAseguradora = aseguradoras.find((a) => a.value === aseguradoraId)?.label;
 
@@ -305,6 +338,13 @@ export function PolizaForm({
         const actuales = getValues();
         const destino = datos.ramo ?? actuales.ramo;
         if (datos.ramo && datos.ramo !== actuales.ramo) setValue("ramo", datos.ramo, opciones);
+        // Con la suma "Sin límite" (ya marcada o detectada en este documento) sus campos no se llenan.
+        const ilimitada = actuales.sumaIlimitada || Boolean(datos.sumaAseguradaIlimitada);
+        const camposSuma = new Set(camposSumaAsegurada(destino));
+        if (datos.sumaAseguradaIlimitada && camposSuma.size > 0 && !actuales.sumaIlimitada) {
+          setValue("sumaIlimitada", true, opciones);
+          for (const nombre of camposSuma) setValue(`especificos.${destino}.${nombre}`, "", opciones);
+        }
 
         for (const [nombre, valor] of Object.entries(datos.generales ?? {})) {
           if (valor && !actuales.generales[nombre]?.trim()) {
@@ -313,6 +353,7 @@ export function PolizaForm({
         }
         for (const [nombre, valor] of Object.entries(datos.especificos ?? {})) {
           const vacio = !actuales.especificos[destino]?.[nombre]?.trim();
+          if (ilimitada && camposSuma.has(nombre)) continue;
           if (valor && (vacio || CAMPOS_DEL_COMPLEMENTO.has(nombre))) {
             setValue(`especificos.${destino}.${nombre}`, valor, opciones);
           }
@@ -368,6 +409,7 @@ export function PolizaForm({
       especificos: values.especificos[values.ramo],
       // En los ramos con censo los asegurados no se capturan uno por uno.
       asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
+      sumaAseguradaIlimitada: esSumaIlimitada(values),
     });
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
@@ -530,33 +572,57 @@ export function PolizaForm({
                   titulo={seccion.titulo}
                   badge={ramoLabels[ramo]}
                 >
-                  {seccion.campos.map((campo) => (
-                    <Controller
-                      key={`${ramo}-${campo.name}`}
-                      name={`especificos.${ramo}.${campo.name}`}
-                      control={control}
-                      render={({ field, fieldState }) => (
-                        <Campo
-                          campo={campo}
-                          // Las redes médicas se sugieren según la aseguradora elegida.
-                          sugerencias={
-                            campo.sugerenciasPorAseguradora
-                              ? (redesDeAseguradora(nombreAseguradora) ?? campo.sugerencias)
-                              : campo.sugerencias
-                          }
-                          valor={field.value ?? ""}
-                          error={fieldState.error?.message}
-                          disabled={bloqueado}
-                          inputRef={field.ref}
-                          onBlur={field.onBlur}
-                          onChange={(v) => {
-                            field.onChange(v);
-                            limpiarAvisos();
-                          }}
-                        />
-                      )}
-                    />
-                  ))}
+                  {seccion.campos.map((campo) => {
+                    const esSuma = campo.name === sumaDelRamo?.valor;
+                    // Cantidad y unidad de una suma "Sin límite": deshabilitadas y sin requerir.
+                    const bloqueadoPorSuma = sumaIlimitada && (esSuma || campo.name === sumaDelRamo?.unidad);
+                    return (
+                      <Controller
+                        key={`${ramo}-${campo.name}`}
+                        name={`especificos.${ramo}.${campo.name}`}
+                        control={control}
+                        render={({ field, fieldState }) => (
+                          <Campo
+                            campo={
+                              bloqueadoPorSuma
+                                ? { ...campo, required: false, placeholder: TEXTO_SUMA_ILIMITADA, hint: undefined }
+                                : campo
+                            }
+                            accesorio={
+                              esSuma ? (
+                                <span className="flex items-center gap-2">
+                                  <Switch
+                                    id="suma-ilimitada"
+                                    checked={sumaIlimitada}
+                                    onCheckedChange={cambiarSumaIlimitada}
+                                    disabled={bloqueado}
+                                  />
+                                  <Label htmlFor="suma-ilimitada" className="text-xs font-normal">
+                                    Suma Ilimitada
+                                  </Label>
+                                </span>
+                              ) : undefined
+                            }
+                            // Las redes médicas se sugieren según la aseguradora elegida.
+                            sugerencias={
+                              campo.sugerenciasPorAseguradora
+                                ? (redesDeAseguradora(nombreAseguradora) ?? campo.sugerencias)
+                                : campo.sugerencias
+                            }
+                            valor={field.value ?? ""}
+                            error={fieldState.error?.message}
+                            disabled={bloqueado || bloqueadoPorSuma}
+                            inputRef={field.ref}
+                            onBlur={field.onBlur}
+                            onChange={(v) => {
+                              field.onChange(v);
+                              limpiarAvisos();
+                            }}
+                          />
+                        )}
+                      />
+                    );
+                  })}
                 </FormSection>
               ))}
 
@@ -728,11 +794,14 @@ function Campo({
   destacado,
   ayuda,
   sugerencias = campo.sugerencias,
+  accesorio,
   inputRef,
   onBlur,
   onChange,
 }: {
   campo: CampoDef;
+  /** Control extra alineado a la derecha de la etiqueta (p. ej. el switch "Suma Ilimitada"). */
+  accesorio?: React.ReactNode;
   /** Reemplaza a `campo.sugerencias` (p. ej. filtradas por aseguradora). */
   sugerencias?: readonly string[];
   valor: string;
@@ -780,7 +849,9 @@ function Campo({
           aria-describedby={error ? errorId : undefined}
           className="w-full"
         >
-          <SelectValue placeholder={opciones.length ? "Selecciona…" : "Sin opciones disponibles"} />
+          <SelectValue
+            placeholder={campo.placeholder ?? (opciones.length ? "Selecciona…" : "Sin opciones disponibles")}
+          />
         </SelectTrigger>
         <SelectContent>
           {opciones.map((o) => (
@@ -841,10 +912,13 @@ function Campo({
 
   return (
     <div className={cn("space-y-2", campo.wide && "sm:col-span-2")}>
-      <Label htmlFor={id} className="text-xs">
-        {campo.label}
-        {campo.required && <span className="text-primary">*</span>}
-      </Label>
+      <div className="flex min-h-5 items-center justify-between gap-3">
+        <Label htmlFor={id} className="text-xs">
+          {campo.label}
+          {campo.required && <span className="text-primary">*</span>}
+        </Label>
+        {accesorio}
+      </div>
       {control}
       {error ? (
         <p id={errorId} className="text-xs text-destructive">

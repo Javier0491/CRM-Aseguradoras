@@ -2,6 +2,7 @@
 import { sanitizarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
 import {
   camposGenerales,
+  camposSumaAsegurada,
   FORMAS_PAGO,
   maxLongitud,
   RAMOS,
@@ -87,9 +88,12 @@ export function validarPoliza(
   ramo: Ramo,
   generales: Valores,
   especificos: Valores,
-  aseguradoraIds: readonly string[]
+  aseguradoraIds: readonly string[],
+  /** Suma asegurada "Sin límite": su cantidad y unidad no se piden ni se validan. */
+  sumaIlimitada = false
 ): Errores {
   const errores: Errores = {};
+  const omitidos = new Set(sumaIlimitada ? camposSumaAsegurada(ramo) : []);
 
   for (const campo of camposGenerales) {
     const def = campo.name === "aseguradora" ? { ...campo, options: aseguradoraIds } : campo;
@@ -98,6 +102,7 @@ export function validarPoliza(
   }
   for (const seccion of seccionesPorRamo[ramo]) {
     for (const campo of seccion.campos) {
+      if (omitidos.has(campo.name)) continue;
       const e = validarCampo(campo, especificos[campo.name]);
       if (e) errores[campo.name] = e;
     }
@@ -123,6 +128,8 @@ export type PolizaInput = {
   generales: Valores;
   especificos: Valores;
   asegurados: AseguradoValores[];
+  /** Solo es true en ramos con suma asegurada; entonces su cantidad y unidad vienen vacías. */
+  sumaAseguradaIlimitada: boolean;
 };
 
 /**
@@ -131,8 +138,9 @@ export type PolizaInput = {
  */
 export function sanitizarPolizaInput(raw: unknown): PolizaInput | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const { ramo, generales, especificos, asegurados } = raw as Record<string, unknown>;
+  const { ramo, generales, especificos, asegurados, sumaAseguradaIlimitada } = raw as Record<string, unknown>;
   if (typeof ramo !== "string" || !(RAMOS as readonly string[]).includes(ramo)) return null;
+  if (sumaAseguradaIlimitada !== undefined && typeof sumaAseguradaIlimitada !== "boolean") return null;
 
   const tomar = (fuente: unknown, campos: CampoDef[]): Valores | null => {
     if (typeof fuente !== "object" || fuente === null) return null;
@@ -151,7 +159,13 @@ export function sanitizarPolizaInput(raw: unknown): PolizaInput | null {
   const g = tomar(generales, camposGenerales);
   const e = tomar(especificos, seccionesPorRamo[r].flatMap((s) => s.campos));
   const a = sanitizarAsegurados(asegurados);
-  return g && e && a ? { ramo: r, generales: g, especificos: e, asegurados: a } : null;
+  if (!g || !e || !a) return null;
+
+  // La bandera solo aplica a ramos con suma asegurada; con ella, la cantidad se descarta.
+  const campos = camposSumaAsegurada(r);
+  const ilimitada = sumaAseguradaIlimitada === true && campos.length > 0;
+  if (ilimitada) for (const nombre of campos) delete e[nombre];
+  return { ramo: r, generales: g, especificos: e, asegurados: a, sumaAseguradaIlimitada: ilimitada };
 }
 
 export const mesesPorFormaPago = Object.fromEntries(
