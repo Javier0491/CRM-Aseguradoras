@@ -33,6 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { esPeriodo, PERIODO_PREDETERMINADO } from "@/lib/dashboard/periodos";
 import { DIAS_PROXIMOS_VENCIMIENTOS, getDashboard } from "@/lib/dashboard/queries";
 import { diasDesdeHoy, formatFecha, formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
@@ -113,11 +114,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // "…que inician vigencia este mes / en el último trimestre / en el año actual"
   const enPeriodo = { mes: "este mes", trimestre: "en el último trimestre", anio: "en el año actual" }[periodo];
 
-  const { rango, hoy, totalPolizas, metricas, produccion, recibos, vencimientos } = await getDashboard(periodo);
+  // Las comisiones son información confidencial: solo las ve el rol ADMIN.
+  const verComisiones = esAdmin(await requireUser());
+  const { rango, hoy, totalPolizas, metricas, produccion, recibos, vencimientos } = await getDashboard(periodo, {
+    incluirComisiones: verComisiones,
+  });
   const contraAnterior = "vs. periodo anterior";
   const { renovacion } = metricas;
 
-  const tarjetas: MetricCardProps[] = [
+  const { comisiones } = metricas;
+  const tarjetas: (MetricCardProps | null)[] = [
     {
       titulo: "Primas Emitidas",
       icono: Landmark,
@@ -125,16 +131,16 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       variacion: metricas.primas.variacion,
       detalle: metricas.primas.variacion !== null ? contraAnterior : `pólizas que inician vigencia ${enPeriodo}`,
     },
-    {
+    comisiones && {
       titulo: "Comisiones Pendientes",
       icono: HandCoins,
-      valor: formatMoneda(metricas.comisiones.valor),
+      valor: formatMoneda(comisiones.valor),
       variacion: null,
       detalle:
-        metricas.comisiones.recibos === 0
+        comisiones.recibos === 0
           ? `sin recibos pendientes ${enPeriodo}`
-          : `${formatNumero(metricas.comisiones.recibos)} ${metricas.comisiones.recibos === 1 ? "recibo pendiente" : "recibos pendientes"}` +
-            (metricas.comisiones.sinPorcentaje > 0 ? ` · ${metricas.comisiones.sinPorcentaje} sin matriz` : ""),
+          : `${formatNumero(comisiones.recibos)} ${comisiones.recibos === 1 ? "recibo pendiente" : "recibos pendientes"}` +
+            (comisiones.sinPorcentaje > 0 ? ` · ${comisiones.sinPorcentaje} sin matriz` : ""),
     },
     {
       titulo: "Pólizas Activas",
@@ -167,10 +173,11 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         <PeriodoSelector periodo={periodo} />
       </div>
 
-      <section aria-label="Métricas principales" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {tarjetas.map((t) => (
-          <MetricCard key={t.titulo} {...t} />
-        ))}
+      <section
+        aria-label="Métricas principales"
+        className={cn("grid gap-4 sm:grid-cols-2", comisiones ? "xl:grid-cols-4" : "xl:grid-cols-3")}
+      >
+        {tarjetas.map((t) => t && <MetricCard key={t.titulo} {...t} />)}
       </section>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -201,11 +208,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Últimos Recibos Conciliados</CardTitle>
               <CardDescription>Recibos conciliados en el periodo contra estados de cuenta.</CardDescription>
-              <CardAction>
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/conciliacion">Ver conciliación</Link>
-                </Button>
-              </CardAction>
+              {verComisiones && (
+                <CardAction>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/conciliacion">Ver conciliación</Link>
+                  </Button>
+                </CardAction>
+              )}
             </CardHeader>
             {recibos.length === 0 ? (
               <Vacio
@@ -223,8 +232,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                     <TableHead>Aseguradora</TableHead>
                     <TableHead>Ramo</TableHead>
                     <TableHead>Conciliado</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
-                    <TableHead className="pr-5 text-right">Comisión</TableHead>
+                    <TableHead className={cn("text-right", !verComisiones && "pr-5")}>Monto</TableHead>
+                    {verComisiones && <TableHead className="pr-5 text-right">Comisión</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -248,10 +257,14 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                       <TableCell className="tabular-nums">
                         {r.conciliado_at ? formatFecha(r.conciliado_at) : "—"}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatMoneda(Number(r.monto))}</TableCell>
-                      <TableCell className="pr-5 text-right font-medium text-primary tabular-nums">
-                        {r.comision_pagada !== null ? formatMoneda(Number(r.comision_pagada)) : "—"}
+                      <TableCell className={cn("text-right tabular-nums", !verComisiones && "pr-5")}>
+                        {formatMoneda(Number(r.monto))}
                       </TableCell>
+                      {verComisiones && (
+                        <TableCell className="pr-5 text-right font-medium text-primary tabular-nums">
+                          {r.comision_pagada !== null ? formatMoneda(Number(r.comision_pagada)) : "—"}
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

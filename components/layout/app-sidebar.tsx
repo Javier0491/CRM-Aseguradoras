@@ -27,7 +27,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { cerrarSesion } from "@/lib/auth/actions";
-import { isActivePath, mainNav, systemNav, type NavItem } from "@/lib/navigation";
+import { isActivePath, mainNav, navPara, systemNav, type NavItem } from "@/lib/navigation";
 
 function NavGroup({ label, items, pathname }: { label: string; items: NavItem[]; pathname: string }) {
   return (
@@ -65,8 +65,17 @@ function inicialesDe(email: string | null) {
   return ini.toUpperCase() || "PJ";
 }
 
-export function AppSidebar({ email }: { email: string | null }) {
+export function AppSidebar({
+  email,
+  nombre,
+  esAdmin,
+}: {
+  email: string | null;
+  nombre: string | null;
+  esAdmin: boolean;
+}) {
   const pathname = usePathname();
+  const sistema = navPara(systemNav, esAdmin);
 
   return (
     <Sidebar collapsible="icon">
@@ -93,8 +102,8 @@ export function AppSidebar({ email }: { email: string | null }) {
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="Operación" items={mainNav} pathname={pathname} />
-        <NavGroup label="Sistema" items={systemNav} pathname={pathname} />
+        <NavGroup label="Operación" items={navPara(mainNav, esAdmin)} pathname={pathname} />
+        {sistema.length > 0 && <NavGroup label="Sistema" items={sistema} pathname={pathname} />}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border">
@@ -109,7 +118,7 @@ export function AppSidebar({ email }: { email: string | null }) {
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-medium">Sesión activa</span>
+                    <span className="truncate font-medium">{nombre ?? "Sesión activa"}</span>
                     <span className="truncate text-xs text-muted-foreground">
                       {email ?? "Usuario"}
                     </span>
@@ -120,6 +129,7 @@ export function AppSidebar({ email }: { email: string | null }) {
               <DropdownMenuContent side="right" align="end" className="w-56">
                 <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
                   {email}
+                  <span className="block text-[11px] text-primary">{esAdmin ? "Administrador" : "Ejecutivo"}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <form action={cerrarSesion}>

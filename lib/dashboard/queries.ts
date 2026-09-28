@@ -204,7 +204,8 @@ function proximosVencimientos(hoy: Date) {
   });
 }
 
-export async function getDashboard(periodo: Periodo) {
+/** `incluirComisiones` es false para los ejecutivos: las comisiones ni siquiera se calculan. */
+export async function getDashboard(periodo: Periodo, { incluirComisiones }: { incluirComisiones: boolean }) {
   await connection();
   const hoyIso = hoyISO();
   const hoy = new Date(`${hoyIso}T00:00:00Z`);
@@ -221,7 +222,7 @@ export async function getDashboard(periodo: Periodo) {
       recibosConciliados(actual),
       proximosVencimientos(hoy),
       db.poliza.count(),
-      comisionesPendientes(actual),
+      incluirComisiones ? comisionesPendientes(actual) : null,
     ]);
 
   return {
@@ -235,7 +236,8 @@ export async function getDashboard(periodo: Periodo) {
       comisiones: pendientes,
     },
     produccion,
-    recibos,
+    // Sin permiso, el recibo no lleva la comisión pagada.
+    recibos: incluirComisiones ? recibos : recibos.map((r) => ({ ...r, comision_pagada: null })),
     vencimientos,
   };
 }

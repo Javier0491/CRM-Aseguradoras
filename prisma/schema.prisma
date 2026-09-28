@@ -35,6 +35,25 @@ enum EstadoRecibo {
   CONCILIADO
 }
 
+// ADMIN: acceso total. EJECUTIVO: operación diaria, sin comisiones, conciliación ni configuración.
+enum Rol {
+  ADMIN
+  EJECUTIVO
+}
+
+// Perfil y rol de cada cuenta del equipo. La autenticación (correo y contraseña, guardada con
+// bcrypt) la hace Supabase Auth; aquí solo vive lo que el CRM necesita saber de la persona.
+model Usuario {
+  // Mismo id que auth.users en Supabase.
+  id         String   @id
+  nombre     String
+  email      String   @unique
+  rol        Rol      @default(EJECUTIVO)
+  created_at DateTime @default(now())
+
+  @@map("usuarios")
+}
+
 model Cliente {
   id       String @id @default(cuid())
   nombre   String

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
 import {
   claveRango,
   esTodasLasEdades,
@@ -63,6 +63,16 @@ function validar(raw: unknown): { ok: true; datos: EsquemaInput & { ramo: Ramo }
   return { ok: true, datos: { id, aseguradoraId, ramo: ramo as Ramo, anio, porcentaje, edadMinima, edadMaxima } };
 }
 
+const SIN_PERMISO = "Solo un administrador puede modificar la matriz de comisiones.";
+
+async function verificarAdmin(): Promise<ResultadoEsquema | null> {
+  if (await getAdmin()) return null;
+  return {
+    ok: false,
+    error: (await getCurrentUser()) ? SIN_PERMISO : "Tu sesión expiró. Vuelve a iniciar sesión.",
+  };
+}
+
 function revalidar() {
   revalidatePath("/configuracion/comisiones");
   // La matriz cambia los montos esperados del dashboard y de la conciliación.
@@ -102,7 +112,8 @@ function conflictoDeRango(
 
 /** Crea o actualiza una regla de la matriz de comisiones. */
 export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquema> {
-  if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  const acceso = await verificarAdmin();
+  if (acceso) return acceso;
   const v = validar(raw);
   if (!v.ok) return v;
   const { id, aseguradoraId, ramo, anio, porcentaje, edadMinima, edadMaxima } = v.datos;
@@ -150,7 +161,8 @@ export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquem
 }
 
 export async function eliminarEsquema(id: string): Promise<ResultadoEsquema> {
-  if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  const acceso = await verificarAdmin();
+  if (acceso) return acceso;
   if (typeof id !== "string" || !id) return { ok: false, error: "Datos inválidos." };
   // deleteMany: si otra persona ya la borró no es un error.
   await db.esquemaComision.deleteMany({ where: { id } });

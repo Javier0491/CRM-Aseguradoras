@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
 import { cruzarEstadoDeCuenta } from "@/lib/conciliacion/motor";
 import { MAX_FILAS_ESTADO, type AnalisisResultado, type FilaEstado } from "@/lib/conciliacion/tipos";
 import { db } from "@/lib/db";
@@ -25,7 +25,11 @@ function sanitizarFilas(raw: unknown): FilaEstado[] | null {
 type Validacion = { ok: true; aseguradoraId: string; filas: FilaEstado[] } | { ok: false; error: string };
 
 async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Validacion> {
-  if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  if (!(await getAdmin())) {
+    return (await getCurrentUser())
+      ? { ok: false, error: "Solo un administrador puede conciliar comisiones." }
+      : { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
   if (typeof aseguradoraId !== "string") return { ok: false, error: "Selecciona la aseguradora." };
   const aseguradora = await db.aseguradora.findUnique({ where: { id: aseguradoraId }, select: { id: true } });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe." };

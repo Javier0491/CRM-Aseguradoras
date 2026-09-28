@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { ConciliacionWorkspace } from "@/components/conciliacion/conciliacion-workspace";
+import { requireAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
 
@@ -9,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ConciliacionPage() {
+  await requireAdmin();
   const [aseguradoras, conEsquema] = await Promise.all([
     getAseguradorasOpciones(),
     db.esquemaComision.findMany({ distinct: ["aseguradora_id"], select: { aseguradora_id: true } }),

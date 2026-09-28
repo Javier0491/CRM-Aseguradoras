@@ -4,6 +4,7 @@ import { Database, ExternalLink, PlugZap, ServerCog, Unplug } from "lucide-react
 import { ConfigurarApiDialog } from "@/components/integraciones/configurar-api-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { requireAdmin } from "@/lib/auth/dal";
 import { colorTextoSobre, normalizarHex } from "@/lib/color";
 import { getAseguradorasIntegracion } from "@/lib/integraciones/queries";
 import type { AseguradoraIntegracion } from "@/lib/integraciones/types";
@@ -129,6 +130,7 @@ function SinAseguradoras() {
 }
 
 export default async function IntegracionesPage() {
+  await requireAdmin();
   const aseguradoras = await getAseguradorasIntegracion();
 
   const total = aseguradoras.length;
