@@ -2,14 +2,23 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   BarChart3,
   CalendarCheck,
+  Eye,
+  FilePlus2,
   FileText,
   HandCoins,
   Landmark,
+  Mail,
+  MessageCircle,
   ReceiptText,
   RefreshCcw,
+  Scale,
+  Send,
+  UploadCloud,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
@@ -51,52 +60,82 @@ type MetricCardProps = {
   /** Variación porcentual contra el mismo tramo del periodo anterior; null si no aplica. */
   variacion: number | null;
   detalle: string;
+  /** Sección a la que lleva la tarjeta. */
+  href: string;
 };
 
-function MetricCard({ titulo, icono: Icon, valor, variacion, detalle }: MetricCardProps) {
+function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href }: MetricCardProps) {
   const positiva = (variacion ?? 0) >= 0;
   const Trend = positiva ? ArrowUpRight : ArrowDownRight;
 
   return (
-    <Card className="gap-3 py-5">
-      <CardHeader className="px-5">
-        <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
-        <CardAction>
-          <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary">
-            <Icon className="size-4" />
+    <Link
+      href={href}
+      className="group block rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <Card
+        className={cn(
+          "h-full gap-3 py-5 transition-all duration-200",
+          "group-hover:scale-[1.02] group-hover:border-primary/50 group-hover:bg-primary/[0.03] group-hover:shadow-md",
+          "motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+        )}
+      >
+        <CardHeader className="px-5">
+          <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
+          <CardAction>
+            <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary transition-colors group-hover:border-primary/40 group-hover:bg-primary/10">
+              <Icon className="size-4" />
+            </div>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="space-y-2 px-5">
+          <p
+            className={cn(
+              "text-2xl font-semibold tracking-tight tabular-nums",
+              valor === null && "text-muted-foreground"
+            )}
+          >
+            {valor ?? "Sin datos"}
+          </p>
+          <div className="flex items-center gap-2 text-xs">
+            {variacion !== null && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 font-medium tabular-nums",
+                  positiva ? "text-success" : "text-destructive"
+                )}
+              >
+                <Trend className="size-3.5" />
+                {positiva ? "+" : ""}
+                {formatPorcentaje(variacion)}
+              </span>
+            )}
+            <span className="text-muted-foreground">{detalle}</span>
+            <ArrowRight
+              className="ml-auto size-3.5 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              aria-hidden
+            />
           </div>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="space-y-2 px-5">
-        <p
-          className={cn(
-            "text-2xl font-semibold tracking-tight tabular-nums",
-            valor === null && "text-muted-foreground"
-          )}
-        >
-          {valor ?? "Sin datos"}
-        </p>
-        <div className="flex items-center gap-2 text-xs">
-          {variacion !== null && (
-            <span
-              className={cn(
-                "inline-flex items-center gap-0.5 font-medium tabular-nums",
-                positiva ? "text-success" : "text-destructive"
-              )}
-            >
-              <Trend className="size-3.5" />
-              {positiva ? "+" : ""}
-              {formatPorcentaje(variacion)}
-            </span>
-          )}
-          <span className="text-muted-foreground">{detalle}</span>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </Link>
   );
 }
 
-function Vacio({ icono: Icon, titulo, detalle }: { icono: LucideIcon; titulo: string; detalle: string }) {
+type Accion = { href: string; label: string; icono: LucideIcon };
+
+function Vacio({
+  icono: Icon,
+  titulo,
+  detalle,
+  accion,
+}: {
+  icono: LucideIcon;
+  titulo: string;
+  detalle: string;
+  /** Invitación a actuar (p. ej. capturar la primera póliza). */
+  accion?: Accion;
+}) {
   return (
     <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
       <div className="flex size-10 items-center justify-center rounded-full border bg-background text-muted-foreground">
@@ -104,8 +143,65 @@ function Vacio({ icono: Icon, titulo, detalle }: { icono: LucideIcon; titulo: st
       </div>
       <p className="text-sm font-medium">{titulo}</p>
       <p className="max-w-xs text-xs text-muted-foreground">{detalle}</p>
+      {accion && (
+        <Button variant="outline" size="sm" className="mt-2 border-primary/30 hover:border-primary/60" asChild>
+          <Link href={accion.href}>
+            <accion.icono /> {accion.label}
+          </Link>
+        </Button>
+      )}
     </div>
   );
+}
+
+type AccionRapida = Accion & { descripcion: string; destacada?: boolean };
+
+/** Atajos a las tareas más frecuentes del broker. */
+function AccionesRapidas({ acciones }: { acciones: AccionRapida[] }) {
+  return (
+    <nav aria-label="Acciones rápidas" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {acciones.map(({ href, label, descripcion, icono: Icon, destacada }) => (
+        <Link
+          key={label}
+          href={href}
+          className={cn(
+            "group flex items-center gap-3 rounded-xl border px-4 py-3 transition-all duration-200 outline-none",
+            "hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+            destacada
+              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
+              : "bg-card hover:border-primary/50 hover:bg-primary/[0.04]"
+          )}
+        >
+          <span
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-lg",
+              destacada ? "bg-primary-foreground/10" : "border bg-background text-primary"
+            )}
+          >
+            <Icon className="size-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">{label}</span>
+            <span
+              className={cn(
+                "line-clamp-2 block text-xs leading-snug",
+                destacada ? "text-primary-foreground/75" : "text-muted-foreground"
+              )}
+            >
+              {descripcion}
+            </span>
+          </span>
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+/** Solo dígitos a 10 posiciones (México); null si no es un celular/teléfono utilizable. */
+function telefonoWhatsApp(telefono: string) {
+  const d = telefono.replace(/\D/g, "");
+  const local = d.length === 12 && d.startsWith("52") ? d.slice(2) : d;
+  return local.length === 10 ? `52${local}` : null;
 }
 
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
@@ -130,6 +226,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       valor: formatMoneda(metricas.primas.valor),
       variacion: metricas.primas.variacion,
       detalle: metricas.primas.variacion !== null ? contraAnterior : `pólizas que inician vigencia ${enPeriodo}`,
+      href: "/reportes",
     },
     comisiones && {
       titulo: "Comisiones Pendientes",
@@ -142,6 +239,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           : `${formatNumero(comisiones.recibos)} ${comisiones.recibos === 1 ? "recibo pendiente" : "recibos pendientes"}` +
             (comisiones.sinPorcentaje > 0 ? ` · ${comisiones.sinPorcentaje} sin matriz` : "") +
             (comisiones.sinPrimaNeta > 0 ? ` · ${comisiones.sinPrimaNeta} sin prima neta` : ""),
+      // Solo la ve el ADMIN (como la conciliación).
+      href: "/conciliacion",
     },
     {
       titulo: "Pólizas Activas",
@@ -149,6 +248,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
       valor: formatNumero(metricas.activas.valor),
       variacion: metricas.activas.variacion,
       detalle: metricas.activas.variacion !== null ? contraAnterior : "con vigencia en el periodo",
+      href: "/polizas",
     },
     {
       titulo: "Tasa de Renovación",
@@ -159,7 +259,19 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         renovacion.tasa === null
           ? "Sin vencimientos en el periodo"
           : `${renovacion.renovadas} de ${renovacion.vencidas} ${renovacion.vencidas === 1 ? "vencida" : "vencidas"}`,
+      // Reportes incluye las pólizas por vencer, que son las que hay que renovar.
+      href: "/reportes",
     },
+  ];
+
+  const acciones: AccionRapida[] = [
+    { href: "/captura", label: "Capturar póliza", descripcion: "Sube la carátula y la IA la llena", icono: FilePlus2, destacada: true },
+    ...(verComisiones
+      ? [{ href: "/conciliacion", label: "Conciliar cobranza", descripcion: "Cruza el estado de cuenta", icono: Scale }]
+      : []),
+    // Los clientes se dan de alta al capturar su primera póliza: no hay un alta aparte.
+    { href: "/captura", label: "Nuevo cliente", descripcion: "Se registra con su primera póliza", icono: UserPlus },
+    { href: "/comunicaciones", label: "Enviar comunicado", descripcion: "Correo a uno o a todos tus clientes", icono: Send },
   ];
 
   return (
@@ -173,6 +285,8 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         </div>
         <PeriodoSelector periodo={periodo} />
       </div>
+
+      <AccionesRapidas acciones={acciones} />
 
       <section
         aria-label="Métricas principales"
@@ -198,6 +312,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                       ? "Aún no hay pólizas registradas. Captura la primera desde Captura Inteligente."
                       : "Ninguna póliza inicia vigencia en este periodo; prueba con un rango más amplio."
                   }
+                  accion={{ href: "/captura", label: "Subir carátula nueva", icono: UploadCloud }}
                 />
               ) : (
                 <ProduccionChart datos={produccion} />
@@ -222,6 +337,9 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                 icono={ReceiptText}
                 titulo="No hay recibos conciliados recientemente"
                 detalle="Cuando se concilien pagos contra los estados de cuenta de las aseguradoras aparecerán aquí."
+                accion={
+                  verComisiones ? { href: "/conciliacion", label: "Ir a módulo de cobranza", icono: Scale } : undefined
+                }
               />
             ) : (
               <Table>
@@ -287,31 +405,71 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               icono={CalendarCheck}
               titulo="Sin vencimientos próximos"
               detalle={`Ninguna póliza vence en los próximos ${DIAS_PROXIMOS_VENCIMIENTOS} días.`}
+              accion={{ href: "/polizas", label: "Ver cartera de pólizas", icono: FileText }}
             />
           ) : (
             <ul className="divide-y">
               {vencimientos.map((p) => {
                 const dias = diasDesdeHoy(p.vigencia_fin, hoy);
+                const vence = formatFecha(p.vigencia_fin);
+                const mensaje =
+                  `Hola ${p.cliente.nombre}, le escribimos de PJ Magnus: su póliza ${p.numeroImpreso} de ` +
+                  `${p.aseguradora.nombre} vence el ${vence}. ¿Le ayudamos con la renovación?`;
+                const whatsapp = telefonoWhatsApp(p.cliente.telefono);
+                const correo = p.cliente.email.trim();
                 return (
-                  <li key={p.id}>
-                    <Link
-                      href={`/polizas/${p.id}`}
-                      className="flex items-start gap-3 px-5 py-3 transition-colors hover:bg-accent/40"
-                    >
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <p className="truncate text-sm font-medium">{p.cliente.nombre}</p>
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                          <RamoBadge ramo={p.ramo} />
-                          <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
-                        </div>
+                  <li key={p.id} className="group relative flex items-start gap-3 px-5 py-3 transition-colors hover:bg-accent/40">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      {/* El enlace cubre toda la fila; los botones de acción quedan por encima. */}
+                      <Link
+                        href={`/polizas/${p.id}`}
+                        className="block truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:underline"
+                      >
+                        {p.cliente.nombre}
+                      </Link>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                        <RamoBadge ramo={p.ramo} />
+                        <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-xs tabular-nums">{formatFecha(p.vigencia_fin)}</p>
-                        <p className={cn("text-[11px] font-medium", dias <= 7 ? "text-destructive" : "text-warning")}>
-                          {dias === 0 ? "Vence hoy" : `En ${dias} d`}
-                        </p>
-                      </div>
-                    </Link>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs tabular-nums">{vence}</p>
+                      <p className={cn("text-[11px] font-medium", dias <= 7 ? "text-destructive" : "text-warning")}>
+                        {dias === 0 ? "Vence hoy" : `En ${dias} d`}
+                      </p>
+                    </div>
+                    {/* En pantallas táctiles siempre visibles; con mouse aparecen al pasar el cursor. */}
+                    <div className="relative z-10 flex shrink-0 items-center gap-0.5 self-center transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+                      <Button variant="ghost" size="icon" className="size-7" asChild>
+                        <Link href={`/polizas/${p.id}`} aria-label={`Ver póliza de ${p.cliente.nombre}`} title="Ver póliza">
+                          <Eye className="size-3.5" />
+                        </Link>
+                      </Button>
+                      {whatsapp && (
+                        <Button variant="ghost" size="icon" className="size-7 hover:text-success" asChild>
+                          <a
+                            href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(mensaje)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`WhatsApp a ${p.cliente.nombre}`}
+                            title="Contactar por WhatsApp"
+                          >
+                            <MessageCircle className="size-3.5" />
+                          </a>
+                        </Button>
+                      )}
+                      {correo && (
+                        <Button variant="ghost" size="icon" className="size-7 hover:text-primary" asChild>
+                          <a
+                            href={`mailto:${correo}?subject=${encodeURIComponent(`Renovación de su póliza ${p.numeroImpreso}`)}&body=${encodeURIComponent(mensaje)}`}
+                            aria-label={`Correo a ${p.cliente.nombre}`}
+                            title="Contactar por correo"
+                          >
+                            <Mail className="size-3.5" />
+                          </a>
+                        </Button>
+                      )}
+                    </div>
                   </li>
                 );
               })}

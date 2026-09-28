@@ -218,7 +218,8 @@ function proximosVencimientos(hoy: Date) {
       numeroImpreso: true,
       ramo: true,
       vigencia_fin: true,
-      cliente: { select: { nombre: true } },
+      // Contacto para las acciones rápidas (WhatsApp y correo) del panel de vencimientos.
+      cliente: { select: { nombre: true, telefono: true, email: true } },
       aseguradora: { select: { nombre: true, color_hex: true } },
     },
   });
