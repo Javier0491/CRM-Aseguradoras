@@ -73,14 +73,15 @@ const NO_ES_MONTO = /\bTIPO\b|%|\bPORCENTAJE\b|\bPORC\b|\bPCT\b|\bTASA\b|\bESTAT
 /**
  * Columna de la comisión pagada, de mayor a menor prioridad. Primero los nombres exactos de
  * comisión; luego cualquier otra columna de comisión (p. ej. "COMISIÓN DEL AGENTE"); al final
- * los nombres genéricos de dinero, que solo se usan si el archivo no trae columna de comisión.
+ * "IMPORTE", que solo se usa si el archivo no trae columna de comisión.
+ * No se incluye la prima (p. ej. "PRIMA NETA"): no es la comisión pagada y el cruce marcaría
+ * todo como diferencia; sin columna de comisión es mejor que el usuario la elija.
  */
 const PRIORIDAD_MONTO: ((clave: string) => boolean)[] = [
   (c) => c === "COMISION" || c === "COMISIONES",
   (c) => c === "IMPORTE COMISION" || c === "IMPORTE DE COMISION" || c === "IMPORTE COMISIONES",
   (c) => /\bCOMISI/.test(c),
   (c) => c === "IMPORTE",
-  (c) => c === "PRIMA NETA",
 ];
 
 /** Índice de la columna de dinero según PRIORIDAD_MONTO, descartando las de NO_ES_MONTO. */
