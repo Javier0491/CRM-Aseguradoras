@@ -18,7 +18,6 @@ import {
   Scale,
   Send,
   UploadCloud,
-  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 
@@ -159,7 +158,11 @@ type AccionRapida = Accion & { descripcion: string; destacada?: boolean };
 /** Atajos a las tareas más frecuentes del broker. */
 function AccionesRapidas({ acciones }: { acciones: AccionRapida[] }) {
   return (
-    <nav aria-label="Acciones rápidas" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <nav
+      aria-label="Acciones rápidas"
+      // Una columna por acción en pantallas anchas (3 para ADMIN, 2 para ejecutivos): la fila queda completa.
+      className={cn("grid grid-cols-1 gap-3", acciones.length >= 3 ? "lg:grid-cols-3" : "sm:grid-cols-2")}
+    >
       {acciones.map(({ href, label, descripcion, icono: Icon, destacada }) => (
         <Link
           key={label}
@@ -269,8 +272,6 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     ...(verComisiones
       ? [{ href: "/conciliacion", label: "Conciliar cobranza", descripcion: "Cruza el estado de cuenta", icono: Scale }]
       : []),
-    // Los clientes se dan de alta al capturar su primera póliza: no hay un alta aparte.
-    { href: "/captura", label: "Nuevo cliente", descripcion: "Se registra con su primera póliza", icono: UserPlus },
     { href: "/comunicaciones", label: "Enviar comunicado", descripcion: "Correo a uno o a todos tus clientes", icono: Send },
   ];
 
