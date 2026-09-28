@@ -30,6 +30,16 @@ const RFC_GENERICOS = new Set(["XAXX010101000", "XEXX010101000"]);
 
 const fecha = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
+/** Nombre comparable: sin acentos, mayúsculas, signos ni espacios dobles. */
+const claveNombre = (nombre: string) =>
+  nombre
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
 /** Campos específicos del ramo con los numéricos convertidos a number. */
 function datosRamo(ramo: Ramo, especificos: Valores): Prisma.InputJsonObject {
   const datos: Record<string, string | number> = {};
@@ -78,14 +88,36 @@ export async function registrarPoliza(
   try {
     const resultado = await db.$transaction(async (tx) => {
       // 1. Buscar o crear al cliente: por RFC, o por RFC + nombre si el RFC es genérico.
-      const existente = await tx.cliente.findFirst({
-        where: RFC_GENERICOS.has(rfc)
-          ? { rfc, nombre: { equals: nombre, mode: "insensitive" } }
-          : { rfc },
-        select: { id: true, nombre: true },
-      });
+      // Un bloqueo por cliente (se libera al terminar la transacción) evita que dos capturas
+      // simultáneas del mismo RFC creen el cliente dos veces.
+      const generico = RFC_GENERICOS.has(rfc);
+      const claveCliente = generico ? `${rfc}|${claveNombre(nombre)}` : rfc;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cliente:${claveCliente}`}))`;
+      const existente = generico
+        ? // El nombre se compara sin acentos, mayúsculas ni signos: "HÉCTOR  MORALES" = "Hector Morales".
+          (
+            await tx.cliente.findMany({ where: { rfc }, select: { id: true, nombre: true, telefono: true, email: true } })
+          ).find((c) => claveNombre(c.nombre) === claveNombre(nombre))
+        : await tx.cliente.findFirst({
+            where: { rfc },
+            orderBy: { id: "asc" },
+            select: { id: true, nombre: true, telefono: true, email: true },
+          });
+      if (existente) {
+        // Expediente maestro: se completan los datos de contacto que el cliente no tenía, sin
+        // sobrescribir los que ya estaban.
+        const telefono = normalizarTelefono(g.telefono);
+        const email = g.email.trim().toLowerCase();
+        const faltantes = {
+          ...(!existente.telefono && telefono && { telefono }),
+          ...(!existente.email && email && { email }),
+        };
+        if (Object.keys(faltantes).length > 0) {
+          await tx.cliente.update({ where: { id: existente.id }, data: faltantes });
+        }
+      }
       const cliente =
-        existente ??
+        (existente && { id: existente.id, nombre: existente.nombre }) ??
         (await tx.cliente.create({
           data: {
             nombre,

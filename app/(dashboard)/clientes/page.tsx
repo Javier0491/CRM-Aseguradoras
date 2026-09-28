@@ -86,7 +86,12 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
                   {clientes.map((c) => (
                     <TableRow key={c.id}>
                       <TableCell className="max-w-[280px] pl-5">
-                        <p className="truncate font-medium">{c.nombre}</p>
+                        <Link
+                          href={`/clientes/${c.id}`}
+                          className="block truncate font-medium hover:text-primary hover:underline"
+                        >
+                          {c.nombre}
+                        </Link>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{c.rfc || <SinDato />}</TableCell>
                       <TableCell>
@@ -117,10 +122,7 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
                       </TableCell>
                       <TableCell className="pr-5 text-right">
                         {c._count.polizas > 0 ? (
-                          <Link
-                            href={`/polizas?q=${encodeURIComponent(c.rfc || c.nombre)}`}
-                            aria-label={`Ver pólizas de ${c.nombre}`}
-                          >
+                          <Link href={`/clientes/${c.id}`} aria-label={`Ver expediente y pólizas de ${c.nombre}`}>
                             <Badge variant="secondary" className="tabular-nums hover:bg-primary/15">
                               {formatNumero(c._count.polizas)}
                             </Badge>

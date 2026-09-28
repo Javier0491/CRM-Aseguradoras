@@ -35,3 +35,34 @@ export async function getClientesListado(q = "") {
   ]);
   return { clientes, total, totalGeneral };
 }
+
+/** Expediente del cliente: contacto y todas sus pólizas (las más recientes primero). */
+export async function getClienteExpediente(id: string) {
+  await connection();
+  if (!/^[a-z0-9]+$/i.test(id)) return null;
+  return db.cliente.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      nombre: true,
+      rfc: true,
+      telefono: true,
+      email: true,
+      polizas: {
+        orderBy: [{ vigencia_fin: "desc" }, { numeroImpreso: "asc" }],
+        select: {
+          id: true,
+          numeroImpreso: true,
+          polizaVigor: true,
+          ramo: true,
+          vigencia_inicio: true,
+          vigencia_fin: true,
+          prima_total: true,
+          forma_pago: true,
+          aseguradora: { select: { nombre: true, color_hex: true } },
+          recibos: { select: { estado: true } },
+        },
+      },
+    },
+  });
+}

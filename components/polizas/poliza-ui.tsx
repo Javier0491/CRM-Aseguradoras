@@ -95,6 +95,19 @@ const vigenciaEstilo: Record<EstadoVigencia, { label: string; punto: string; tex
   vencida: { label: "Vencida", punto: "bg-destructive", texto: "text-destructive" },
 };
 
+/** Estatus de vigencia como píldora (Vigente, Por vencer, Vencida). */
+export function EstadoVigenciaBadge({ fin, hoy, diasAviso }: { fin: Date; hoy: string; diasAviso: number }) {
+  const estado = estadoVigencia(fin, hoy, diasAviso);
+  const e = vigenciaEstilo[estado];
+  const fondo = { vigente: "border-success/30 bg-success/10", por_vencer: "border-warning/30 bg-warning/10", vencida: "border-destructive/30 bg-destructive/10" }[estado];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${fondo} ${e.texto}`}>
+      <span aria-hidden className={`size-1.5 rounded-full ${e.punto}`} />
+      {e.label}
+    </span>
+  );
+}
+
 export function EstadoVigenciaIndicador({
   fin,
   hoy,
