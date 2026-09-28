@@ -33,7 +33,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { eliminarEsquema, guardarEsquema, type EsquemaInput } from "@/lib/comisiones/actions";
-import { coberturaDeAnios, MAX_ANIO_POLIZA } from "@/lib/comisiones/reglas";
+import { claveRango, coberturaDeAnios, MAX_ANIO_POLIZA, MAX_EDAD, textoRangoEdad } from "@/lib/comisiones/reglas";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import type { Opcion } from "@/lib/polizas/ramos";
 
@@ -45,9 +45,31 @@ export type Esquema = {
   ramo: Ramo;
   anio: number;
   porcentaje: number;
+  edadMinima: number | null;
+  edadMaxima: number | null;
 };
 
-type Formulario = { id?: string; aseguradoraId: string; ramo: string; anio: string; porcentaje: string };
+type Formulario = {
+  id?: string;
+  aseguradoraId: string;
+  ramo: string;
+  anio: string;
+  porcentaje: string;
+  edadMinima: string;
+  edadMaxima: string;
+};
+
+/** Clave de la tabla por año a la que pertenece una regla: aseguradora, ramo y rango de edad. */
+const claveGrupo = (e: Esquema) => `${e.aseguradoraId}|${e.ramo}|${claveRango(e)}`;
+
+/** "Año 1 (Desde 70 años)", "Todos los años (20 a 65 años)" o solo la cobertura de años. */
+function aplicaA(cobertura: string, e: Esquema) {
+  const rango = textoRangoEdad(e);
+  return rango ? `${cobertura} (${rango})` : cobertura;
+}
+
+/** Campo numérico opcional: en blanco = null. */
+const edadONull = (v: string) => (v.trim() === "" ? null : Number(v));
 const TODAS = "todas";
 
 export function MatrizComisiones({
@@ -66,10 +88,10 @@ export function MatrizComisiones({
   const [pendiente, startTransition] = React.useTransition();
 
   const visibles = esquemas.filter((e) => filtro === TODAS || e.aseguradoraId === filtro);
-  // Años definidos por aseguradora + ramo, para explicar qué años cubre cada regla.
+  // Años definidos por aseguradora + ramo + rango de edad, para explicar qué años cubre cada regla.
   const aniosPorGrupo = React.useMemo(() => {
     const m = new Map<string, number[]>();
-    for (const e of esquemas) m.set(`${e.aseguradoraId}|${e.ramo}`, [...(m.get(`${e.aseguradoraId}|${e.ramo}`) ?? []), e.anio]);
+    for (const e of esquemas) m.set(claveGrupo(e), [...(m.get(claveGrupo(e)) ?? []), e.anio]);
     return m;
   }, [esquemas]);
 
@@ -77,8 +99,23 @@ export function MatrizComisiones({
     setError(null);
     setFormulario(
       e
-        ? { id: e.id, aseguradoraId: e.aseguradoraId, ramo: e.ramo, anio: String(e.anio), porcentaje: String(e.porcentaje) }
-        : { aseguradoraId: filtro === TODAS ? "" : filtro, ramo: "", anio: "1", porcentaje: "" }
+        ? {
+            id: e.id,
+            aseguradoraId: e.aseguradoraId,
+            ramo: e.ramo,
+            anio: String(e.anio),
+            porcentaje: String(e.porcentaje),
+            edadMinima: e.edadMinima === null ? "" : String(e.edadMinima),
+            edadMaxima: e.edadMaxima === null ? "" : String(e.edadMaxima),
+          }
+        : {
+            aseguradoraId: filtro === TODAS ? "" : filtro,
+            ramo: "",
+            anio: "1",
+            porcentaje: "",
+            edadMinima: "",
+            edadMaxima: "",
+          }
     );
   }
 
@@ -92,6 +129,8 @@ export function MatrizComisiones({
         ramo: formulario.ramo,
         anio: Number(formulario.anio),
         porcentaje: Number(formulario.porcentaje.replace(",", ".")),
+        edadMinima: edadONull(formulario.edadMinima),
+        edadMaxima: edadONull(formulario.edadMaxima),
       });
       if (res.ok) {
         setFormulario(null);
@@ -122,7 +161,8 @@ export function MatrizComisiones({
         <CardTitle className="text-base">Reglas de comisión</CardTitle>
         <CardDescription>
           Un año sin regla usa la del mayor año definido que no lo exceda: una sola regla de año 1
-          es un porcentaje fijo para todos los años.
+          es un porcentaje fijo para todos los años. Las reglas con rango de edad (del titular) tienen
+          prioridad sobre las que aplican a todas las edades.
         </CardDescription>
         <CardAction className="flex gap-2">
           <Select value={filtro} onValueChange={setFiltro}>
@@ -185,7 +225,7 @@ export function MatrizComisiones({
                 </TableCell>
                 <TableCell className="text-right tabular-nums">{e.anio}</TableCell>
                 <TableCell className="text-muted-foreground">
-                  {coberturaDeAnios(aniosPorGrupo.get(`${e.aseguradoraId}|${e.ramo}`) ?? [e.anio], e.anio)}
+                  {aplicaA(coberturaDeAnios(aniosPorGrupo.get(claveGrupo(e)) ?? [e.anio], e.anio), e)}
                 </TableCell>
                 <TableCell className="text-right font-medium text-primary tabular-nums">{e.porcentaje}%</TableCell>
                 <TableCell className="pr-5">
@@ -214,15 +254,15 @@ export function MatrizComisiones({
       )}
 
       <Dialog open={formulario !== null} onOpenChange={(v) => !v && !pendiente && setFormulario(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <form onSubmit={guardar} className="space-y-5">
             <DialogHeader>
               <DialogTitle>{formulario?.id ? "Editar regla" : "Agregar regla"}</DialogTitle>
               <DialogDescription>Porcentaje de comisión sobre el monto de cada recibo.</DialogDescription>
             </DialogHeader>
             {formulario && (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
+              <div className="grid gap-4 sm:grid-cols-4">
+                <div className="space-y-2 sm:col-span-4">
                   <Label htmlFor="esq-aseguradora">Aseguradora</Label>
                   <Select value={formulario.aseguradoraId} onValueChange={(v) => actualizar({ aseguradoraId: v })}>
                     <SelectTrigger id="esq-aseguradora" className="w-full" aria-invalid={error?.campo === "aseguradoraId"}>
@@ -237,7 +277,7 @@ export function MatrizComisiones({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2 sm:col-span-2">
+                <div className="space-y-2 sm:col-span-4">
                   <Label htmlFor="esq-ramo">Ramo</Label>
                   <Select value={formulario.ramo} onValueChange={(v) => actualizar({ ramo: v })}>
                     <SelectTrigger id="esq-ramo" className="w-full" aria-invalid={error?.campo === "ramo"}>
@@ -252,42 +292,85 @@ export function MatrizComisiones({
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="esq-anio">Año de póliza</Label>
-                  <Input
-                    id="esq-anio"
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={MAX_ANIO_POLIZA}
-                    step={1}
-                    value={formulario.anio}
-                    onChange={(e) => actualizar({ anio: e.target.value })}
-                    aria-invalid={error?.campo === "anio"}
-                    className="tabular-nums"
-                  />
-                  <p className="text-xs text-muted-foreground">1 = negocio nuevo, 2 = primera renovación…</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="esq-porcentaje">Comisión</Label>
-                  <div className="relative">
+                <div className="grid grid-cols-2 content-start gap-x-4 gap-y-2 sm:col-span-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="esq-anio">Año de póliza</Label>
                     <Input
-                      id="esq-porcentaje"
+                      id="esq-anio"
                       type="number"
-                      inputMode="decimal"
-                      min={0.01}
-                      max={100}
-                      step={0.01}
-                      placeholder="Ej. 12"
-                      value={formulario.porcentaje}
-                      onChange={(e) => actualizar({ porcentaje: e.target.value })}
-                      aria-invalid={error?.campo === "porcentaje"}
-                      className="pr-8 tabular-nums"
+                      inputMode="numeric"
+                      min={1}
+                      max={MAX_ANIO_POLIZA}
+                      step={1}
+                      value={formulario.anio}
+                      onChange={(e) => actualizar({ anio: e.target.value })}
+                      aria-invalid={error?.campo === "anio"}
+                      className="tabular-nums"
                     />
-                    <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
-                      %
-                    </span>
                   </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="esq-porcentaje">Comisión</Label>
+                    <div className="relative">
+                      <Input
+                        id="esq-porcentaje"
+                        type="number"
+                        inputMode="decimal"
+                        min={0.01}
+                        max={100}
+                        step={0.01}
+                        placeholder="Ej. 12"
+                        value={formulario.porcentaje}
+                        onChange={(e) => actualizar({ porcentaje: e.target.value })}
+                        aria-invalid={error?.campo === "porcentaje"}
+                        className="pr-8 tabular-nums"
+                      />
+                      <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                        %
+                      </span>
+                    </div>
+                  </div>
+                  <p className="col-span-2 text-xs text-muted-foreground">
+                    Año 1 = negocio nuevo, 2 = primera renovación…
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 content-start gap-x-4 gap-y-2 sm:col-span-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="esq-edad-min">Edad mínima</Label>
+                    <Input
+                      id="esq-edad-min"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={MAX_EDAD}
+                      step={1}
+                      placeholder="—"
+                      value={formulario.edadMinima}
+                      onChange={(e) => actualizar({ edadMinima: e.target.value })}
+                      aria-invalid={error?.campo === "edadMinima"}
+                      aria-describedby="esq-edad-ayuda"
+                      className="tabular-nums"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="esq-edad-max">Edad máxima</Label>
+                    <Input
+                      id="esq-edad-max"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      max={MAX_EDAD}
+                      step={1}
+                      placeholder="—"
+                      value={formulario.edadMaxima}
+                      onChange={(e) => actualizar({ edadMaxima: e.target.value })}
+                      aria-invalid={error?.campo === "edadMaxima"}
+                      aria-describedby="esq-edad-ayuda"
+                      className="tabular-nums"
+                    />
+                  </div>
+                  <p id="esq-edad-ayuda" className="col-span-2 text-xs text-muted-foreground">
+                    Dejar en blanco para aplicar a todas las edades.
+                  </p>
                 </div>
               </div>
             )}
@@ -317,7 +400,7 @@ export function MatrizComisiones({
             <DialogTitle>¿Eliminar la regla?</DialogTitle>
             <DialogDescription>
               {aEliminar &&
-                `${aEliminar.aseguradora} · año ${aEliminar.anio} · ${aEliminar.porcentaje}%. Los recibos de ese ramo y año pasarán a usar la regla del año anterior definido, o quedarán sin comisión esperada si no hay ninguna.`}
+                `${aEliminar.aseguradora} · año ${aEliminar.anio}${textoRangoEdad(aEliminar) ? ` · ${textoRangoEdad(aEliminar)}` : ""} · ${aEliminar.porcentaje}%. Los recibos de ese ramo y año pasarán a usar la regla del año anterior definido, o quedarán sin comisión esperada si no hay ninguna.`}
             </DialogDescription>
           </DialogHeader>
           {error && (

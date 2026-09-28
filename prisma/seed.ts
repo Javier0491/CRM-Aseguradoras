@@ -60,7 +60,11 @@ async function main() {
   for (const e of esquemasComision) {
     const aseguradora = await db.aseguradora.findUniqueOrThrow({ where: { nombre: e.aseguradora } });
     const clave = { aseguradora_id: aseguradora.id, ramo: e.ramo, anio_poliza: e.anio };
-    const existe = await db.esquemaComision.findUnique({ where: { aseguradora_id_ramo_anio_poliza: clave } });
+    // Las reglas del seed aplican a todas las edades.
+    const existe = await db.esquemaComision.findFirst({
+      where: { ...clave, edad_minima: null, edad_maxima: null },
+      select: { id: true },
+    });
     if (!existe) {
       await db.esquemaComision.create({ data: { ...clave, porcentaje: e.porcentaje } });
       creados++;

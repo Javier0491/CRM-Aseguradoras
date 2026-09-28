@@ -2,7 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { anioDePoliza, comisionEsperada, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
+import { anioDePoliza, comisionEsperada, edadDelTitular, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
 import { rangoDePeriodo, type Periodo, type Rango } from "@/lib/dashboard/periodos";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
@@ -79,6 +79,7 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
           ramo: true,
           vigencia_inicio: true,
           comision_personalizada_pct: true,
+          asegurados: { select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true } },
         },
       },
     },
@@ -90,7 +91,14 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
   const [esquemas, cadenas] = await Promise.all([
     db.esquemaComision.findMany({
       where: { aseguradora_id: { in: aseguradoras } },
-      select: { aseguradora_id: true, ramo: true, anio_poliza: true, porcentaje: true },
+      select: {
+        aseguradora_id: true,
+        ramo: true,
+        anio_poliza: true,
+        porcentaje: true,
+        edad_minima: true,
+        edad_maxima: true,
+      },
     }),
     vigores.length
       ? db.poliza.groupBy({
@@ -115,9 +123,10 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
         ramo: p.ramo,
       },
       anioDePoliza(inicio, r.fecha_vencimiento),
+      edadDelTitular(p.asegurados, r.fecha_vencimiento),
       esquemas
         .filter((e) => e.aseguradora_id === p.aseguradora_id)
-        .map((e) => ({ ramo: e.ramo, anio_poliza: e.anio_poliza, porcentaje: Number(e.porcentaje) }))
+        .map((e) => ({ ...e, porcentaje: Number(e.porcentaje) }))
     );
     if (porcentaje) valor += comisionEsperada(Number(r.monto), porcentaje.valor);
     else sinPorcentaje++;

@@ -3,7 +3,14 @@
 import { revalidatePath } from "next/cache";
 
 import { getCurrentUser } from "@/lib/auth/dal";
-import { MAX_ANIO_POLIZA } from "@/lib/comisiones/reglas";
+import {
+  claveRango,
+  esTodasLasEdades,
+  MAX_ANIO_POLIZA,
+  MAX_EDAD,
+  rangosSeTraslapan,
+  textoRangoEdad,
+} from "@/lib/comisiones/reglas";
 import { db } from "@/lib/db";
 import { Prisma, Ramo } from "@/lib/generated/prisma/client";
 
@@ -13,13 +20,16 @@ export type EsquemaInput = {
   ramo: string;
   anio: number;
   porcentaje: number;
+  /** null = sin límite (en blanco en el formulario). */
+  edadMinima: number | null;
+  edadMaxima: number | null;
 };
 
 export type ResultadoEsquema = { ok: true } | { ok: false; error: string; campo?: keyof EsquemaInput };
 
 function validar(raw: unknown): { ok: true; datos: EsquemaInput & { ramo: Ramo } } | { ok: false; error: string; campo?: keyof EsquemaInput } {
   if (typeof raw !== "object" || raw === null) return { ok: false, error: "Datos inválidos." };
-  const { id, aseguradoraId, ramo, anio, porcentaje } = raw as Record<string, unknown>;
+  const { id, aseguradoraId, ramo, anio, porcentaje, edadMinima, edadMaxima } = raw as Record<string, unknown>;
   if (id !== undefined && typeof id !== "string") return { ok: false, error: "Datos inválidos." };
   if (typeof aseguradoraId !== "string" || !aseguradoraId) {
     return { ok: false, error: "Selecciona la aseguradora.", campo: "aseguradoraId" };
@@ -39,7 +49,18 @@ function validar(raw: unknown): { ok: true; datos: EsquemaInput & { ramo: Ramo }
   ) {
     return { ok: false, error: "El porcentaje debe ser mayor a 0 y hasta 100, con máximo dos decimales.", campo: "porcentaje" };
   }
-  return { ok: true, datos: { id, aseguradoraId, ramo: ramo as Ramo, anio, porcentaje } };
+  const edadValida = (v: unknown): v is number | null =>
+    v === null || (typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= MAX_EDAD);
+  if (!edadValida(edadMinima)) {
+    return { ok: false, error: `La edad mínima debe ser un entero entre 0 y ${MAX_EDAD}, o quedar en blanco.`, campo: "edadMinima" };
+  }
+  if (!edadValida(edadMaxima)) {
+    return { ok: false, error: `La edad máxima debe ser un entero entre 0 y ${MAX_EDAD}, o quedar en blanco.`, campo: "edadMaxima" };
+  }
+  if (edadMinima !== null && edadMaxima !== null && edadMinima > edadMaxima) {
+    return { ok: false, error: "La edad mínima no puede ser mayor que la máxima.", campo: "edadMaxima" };
+  }
+  return { ok: true, datos: { id, aseguradoraId, ramo: ramo as Ramo, anio, porcentaje, edadMinima, edadMaxima } };
 }
 
 function revalidar() {
@@ -49,26 +70,77 @@ function revalidar() {
   revalidatePath("/conciliacion");
 }
 
+/**
+ * Una regla choca con otra de la misma aseguradora y ramo si tiene el mismo año y el mismo
+ * rango de edad, o si su rango se traslapa con otro rango distinto: para una edad del
+ * traslape no se sabría qué tabla usar. "Todas las edades" es el respaldo y no se traslapa.
+ */
+function conflictoDeRango(
+  rango: { edadMinima: number | null; edadMaxima: number | null },
+  anio: number,
+  otras: { anio_poliza: number; edad_minima: number | null; edad_maxima: number | null }[]
+): ResultadoEsquema | null {
+  for (const o of otras) {
+    const rangoOtra = { edadMinima: o.edad_minima, edadMaxima: o.edad_maxima };
+    const texto = textoRangoEdad(rangoOtra) ?? "todas las edades";
+    if (claveRango(rangoOtra) === claveRango(rango)) {
+      if (o.anio_poliza === anio) {
+        return { ok: false, error: `Ya existe una regla para ese ramo, año ${anio} y ${texto} en esta aseguradora.`, campo: "anio" };
+      }
+      continue;
+    }
+    if (!esTodasLasEdades(rango) && !esTodasLasEdades(rangoOtra) && rangosSeTraslapan(rango, rangoOtra)) {
+      return {
+        ok: false,
+        error: `El rango de edad se traslapa con otra regla de este ramo (${texto}). Usa el mismo rango o uno que no se traslape.`,
+        campo: "edadMinima",
+      };
+    }
+  }
+  return null;
+}
+
 /** Crea o actualiza una regla de la matriz de comisiones. */
 export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquema> {
   if (!(await getCurrentUser())) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   const v = validar(raw);
   if (!v.ok) return v;
-  const { id, aseguradoraId, ramo, anio, porcentaje } = v.datos;
+  const { id, aseguradoraId, ramo, anio, porcentaje, edadMinima, edadMaxima } = v.datos;
+  const rango = { edadMinima, edadMaxima };
 
   const aseguradora = await db.aseguradora.findUnique({ where: { id: aseguradoraId }, select: { id: true } });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe.", campo: "aseguradoraId" };
 
-  const data = { aseguradora_id: aseguradoraId, ramo, anio_poliza: anio, porcentaje: porcentaje.toFixed(2) };
+  const data = {
+    aseguradora_id: aseguradoraId,
+    ramo,
+    anio_poliza: anio,
+    porcentaje: porcentaje.toFixed(2),
+    edad_minima: edadMinima,
+    edad_maxima: edadMaxima,
+  };
   try {
-    if (id) await db.esquemaComision.update({ where: { id }, data });
-    else await db.esquemaComision.create({ data });
+    // Serializable: la validación contra las demás reglas y el guardado ocurren como una sola
+    // operación, así dos personas no pueden crear a la vez reglas que choquen.
+    const conflicto = await db.$transaction(
+      async (tx) => {
+        const otras = await tx.esquemaComision.findMany({
+          where: { aseguradora_id: aseguradoraId, ramo, ...(id ? { id: { not: id } } : {}) },
+          select: { anio_poliza: true, edad_minima: true, edad_maxima: true },
+        });
+        const conflicto = conflictoDeRango(rango, anio, otras);
+        if (conflicto) return conflicto;
+        if (id) await tx.esquemaComision.update({ where: { id }, data });
+        else await tx.esquemaComision.create({ data });
+        return null;
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+    if (conflicto) return conflicto;
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      if (e.code === "P2002") {
-        return { ok: false, error: `Ya existe una regla para ese ramo y año ${anio} en esta aseguradora.`, campo: "anio" };
-      }
       if (e.code === "P2025") return { ok: false, error: "La regla ya no existe; recarga la página." };
+      if (e.code === "P2034") return { ok: false, error: "Otra persona modificó la matriz al mismo tiempo. Intenta de nuevo." };
     }
     console.error("[guardarEsquema]", e);
     return { ok: false, error: "No se pudo guardar la regla." };

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { anioDePoliza, comisionEsperada, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
+import { anioDePoliza, comisionEsperada, edadDelTitular, resolverPorcentaje } from "@/lib/conciliacion/comisiones";
 import {
   TOLERANCIA_MXN,
   type FilaEstado,
@@ -19,7 +19,7 @@ const soloAlfanumerico = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, ""
  * - Cada renglón toma el recibo más antiguo aún no conciliado de esa póliza (o el número de
  *   recibo indicado), sin repetir: dos renglones de la misma póliza pagan recibos distintos.
  * - Comisión esperada = monto del recibo × % (personalizado de la póliza o el de la matriz
- *   según ramo y año de la póliza).
+ *   según ramo, año de la póliza y edad del titular).
  */
 export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonly FilaEstado[]) {
   const vigores = [...new Set(filas.map((f) => extraerPolizaVigor(f.poliza)).filter(Boolean))];
@@ -39,6 +39,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
         vigencia_inicio: true,
         comision_personalizada_pct: true,
         cliente: { select: { nombre: true } },
+        asegurados: { select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true } },
         recibos: {
           orderBy: { fecha_vencimiento: "asc" },
           select: { id: true, numero: true, monto: true, fecha_vencimiento: true, estado: true },
@@ -47,7 +48,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
     }),
     db.esquemaComision.findMany({
       where: { aseguradora_id: aseguradoraId },
-      select: { ramo: true, anio_poliza: true, porcentaje: true },
+      select: { ramo: true, anio_poliza: true, porcentaje: true, edad_minima: true, edad_maxima: true },
     }),
   ]);
 
@@ -136,6 +137,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
         ramo: recibo.poliza.ramo,
       },
       anio,
+      edadDelTitular(recibo.poliza.asegurados, recibo.fecha_vencimiento),
       esquemasNum
     );
     if (!porcentaje) {

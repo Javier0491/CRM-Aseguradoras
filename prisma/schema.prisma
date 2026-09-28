@@ -170,15 +170,22 @@ model Asegurado {
 // Matriz de comisiones: porcentaje por aseguradora, ramo y año de la póliza (1 = negocio
 // nuevo, 2 = primera renovación…). Si el año no está definido se usa el mayor año definido
 // que no lo exceda, así un solo renglón de año 1 funciona como porcentaje fijo.
+// El rango de edad (del titular, típico en GMM) es opcional: las reglas de un mismo rango
+// forman su propia tabla por año y tienen prioridad sobre las que aplican a todas las edades.
+// La unicidad (mismo año y rango) y que los rangos no se traslapen se validan en
+// lib/comisiones/actions.ts, porque un índice único trataría los NULL como distintos.
 model EsquemaComision {
   id             String  @id @default(cuid())
   aseguradora_id String
   ramo           Ramo
   anio_poliza    Int
   porcentaje     Decimal @db.Decimal(5, 2)
+  // Límites inclusivos; null = sin límite. Ambos null = todas las edades.
+  edad_minima    Int?
+  edad_maxima    Int?
 
   aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
 
-  @@unique([aseguradora_id, ramo, anio_poliza])
+  @@index([aseguradora_id, ramo, anio_poliza])
   @@map("esquemas_comision")
 }
