@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAdmin } from "@/lib/auth/dal";
+import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -44,7 +45,8 @@ function validar(raw: unknown): { ok: true; datos: NuevoUsuarioInput } | Extract
  * la almacena. Aquí solo se registra el perfil (nombre y rol) con el mismo id.
  */
 export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsuario> {
-  if (!(await getAdmin())) return { ok: false, error: "Solo un administrador puede crear usuarios." };
+  const admin = await getAdmin();
+  if (!admin) return { ok: false, error: "Solo un administrador puede crear usuarios." };
   const v = validar(raw);
   if (!v.ok) return v;
   const { nombre, email, password, rol } = v.datos;
@@ -87,7 +89,14 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
   }
 
   try {
-    await db.usuario.create({ data: { id: data.user.id, nombre, email, rol } });
+    await db.$transaction(async (tx) => {
+      await tx.usuario.create({ data: { id: data.user.id, nombre, email, rol } });
+      await registrarBitacora(
+        admin,
+        { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rol}` },
+        tx
+      );
+    });
   } catch (e) {
     // Sin perfil la cuenta quedaría huérfana: se deshace para poder reintentar.
     await supabase.auth.admin.deleteUser(data.user.id);
@@ -142,11 +151,25 @@ export async function actualizarUsuario(raw: EdicionUsuarioInput): Promise<Resul
   try {
     await db.$transaction(
       async (tx) => {
-        const actual = await tx.usuario.findUniqueOrThrow({ where: { id: raw.id }, select: { rol: true, activo: true } });
+        const actual = await tx.usuario.findUniqueOrThrow({
+          where: { id: raw.id },
+          select: { rol: true, activo: true, nombre: true, email: true },
+        });
         if (actual.rol === "ADMIN" && rol !== "ADMIN" && actual.activo) {
           await verificarOtroAdmin(tx, raw.id, "quitarle el rol de administrador");
         }
         await tx.usuario.update({ where: { id: raw.id }, data: { nombre, rol } });
+        const cambios = [
+          actual.nombre !== nombre && `nombre «${actual.nombre}» → «${nombre}»`,
+          actual.rol !== rol && `rol ${actual.rol} → ${rol}`,
+        ].filter(Boolean);
+        if (cambios.length > 0) {
+          await registrarBitacora(
+            admin,
+            { accion: "usuario.editar", entidad: "usuario", entidadId: raw.id, descripcion: `${actual.email}: ${cambios.join(", ")}` },
+            tx
+          );
+        }
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
@@ -176,15 +199,17 @@ export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise
     return { ok: false, error: "Falta SUPABASE_SECRET_KEY en el servidor para bloquear o desbloquear cuentas." };
   }
 
+  let email: string;
   try {
-    await db.$transaction(
+    email = await db.$transaction(
       async (tx) => {
-        const actual = await tx.usuario.findUniqueOrThrow({ where: { id }, select: { rol: true } });
+        const actual = await tx.usuario.findUniqueOrThrow({ where: { id }, select: { rol: true, email: true } });
         if (!activo && actual.rol === "ADMIN") await verificarOtroAdmin(tx, id, "desactivarlo");
         await tx.usuario.update({
           where: { id },
           data: { activo, desactivado_at: activo ? null : new Date() },
         });
+        return actual.email;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
@@ -204,6 +229,13 @@ export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise
     console.error("[cambiarEstadoUsuario] Supabase Auth:", error.code, error.message);
     return { ok: false, error: `No se pudo ${activo ? "desbloquear" : "bloquear"} la cuenta en Supabase Auth.` };
   }
+  // Solo cuando el cambio quedó completo (base de datos y Supabase Auth).
+  await registrarBitacora(admin, {
+    accion: "usuario.estado",
+    entidad: "usuario",
+    entidadId: id,
+    descripcion: `${activo ? "Reactivó" : "Desactivó"} a ${email}`,
+  });
 
   revalidatePath("/sistema/usuarios");
   return { ok: true };

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { registrarBitacora } from "@/lib/bitacora/registrar";
 import {
   claveRango,
   esTodasLasEdades,
@@ -119,8 +120,13 @@ export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquem
   const { id, aseguradoraId, ramo, anio, porcentaje, edadMinima, edadMaxima } = v.datos;
   const rango = { edadMinima, edadMaxima };
 
-  const aseguradora = await db.aseguradora.findUnique({ where: { id: aseguradoraId }, select: { id: true } });
+  const admin = await getAdmin();
+  const aseguradora = await db.aseguradora.findUnique({ where: { id: aseguradoraId }, select: { id: true, nombre: true } });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe.", campo: "aseguradoraId" };
+  const describir = (r: { ramo: string; anio_poliza: number; porcentaje: unknown; edad_minima: number | null; edad_maxima: number | null }) =>
+    `${aseguradora.nombre} · ${r.ramo} · año ${r.anio_poliza}` +
+    `${textoRangoEdad({ edadMinima: r.edad_minima, edadMaxima: r.edad_maxima }) ? ` (${textoRangoEdad({ edadMinima: r.edad_minima, edadMaxima: r.edad_maxima })})` : ""}` +
+    ` · ${Number(r.porcentaje)}%`;
 
   const data = {
     aseguradora_id: aseguradoraId,
@@ -141,8 +147,27 @@ export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquem
         });
         const conflicto = conflictoDeRango(rango, anio, otras);
         if (conflicto) return conflicto;
-        if (id) await tx.esquemaComision.update({ where: { id }, data });
-        else await tx.esquemaComision.create({ data });
+        const anterior = id
+          ? await tx.esquemaComision.findUnique({
+              where: { id },
+              select: { ramo: true, anio_poliza: true, porcentaje: true, edad_minima: true, edad_maxima: true },
+            })
+          : null;
+        const regla = id
+          ? await tx.esquemaComision.update({ where: { id }, data, select: { id: true } })
+          : await tx.esquemaComision.create({ data, select: { id: true } });
+        await registrarBitacora(
+          admin,
+          {
+            accion: "comision.regla_guardar",
+            entidad: "regla_comision",
+            entidadId: regla.id,
+            descripcion: anterior
+              ? `Cambió la regla ${describir(anterior)} → ${describir(data)}`
+              : `Agregó la regla ${describir(data)}`,
+          },
+          tx
+        );
         return null;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
@@ -164,8 +189,36 @@ export async function eliminarEsquema(id: string): Promise<ResultadoEsquema> {
   const acceso = await verificarAdmin();
   if (acceso) return acceso;
   if (typeof id !== "string" || !id) return { ok: false, error: "Datos inválidos." };
-  // deleteMany: si otra persona ya la borró no es un error.
-  await db.esquemaComision.deleteMany({ where: { id } });
+  const admin = await getAdmin();
+  await db.$transaction(async (tx) => {
+    const regla = await tx.esquemaComision.findUnique({
+      where: { id },
+      select: {
+        ramo: true,
+        anio_poliza: true,
+        porcentaje: true,
+        edad_minima: true,
+        edad_maxima: true,
+        aseguradora: { select: { nombre: true } },
+      },
+    });
+    // Si otra persona ya la borró no es un error.
+    if (!regla) return;
+    await tx.esquemaComision.delete({ where: { id } });
+    const rango = textoRangoEdad({ edadMinima: regla.edad_minima, edadMaxima: regla.edad_maxima });
+    await registrarBitacora(
+      admin,
+      {
+        accion: "comision.regla_eliminar",
+        entidad: "regla_comision",
+        entidadId: id,
+        descripcion:
+          `Eliminó la regla ${regla.aseguradora.nombre} · ${regla.ramo} · año ${regla.anio_poliza}` +
+          `${rango ? ` (${rango})` : ""} · ${Number(regla.porcentaje)}%`,
+      },
+      tx
+    );
+  });
   revalidar();
   return { ok: true };
 }

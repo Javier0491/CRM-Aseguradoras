@@ -14,7 +14,10 @@ import {
   type ResultadoMatch,
   type ResumenMatch,
 } from "@/lib/conciliacion/tipos";
+import type { UsuarioSesion } from "@/lib/auth/dal";
+import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
+import type { Prisma } from "@/lib/generated/prisma/client";
 import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
 import { generarRecibos, sumarMeses } from "@/lib/polizas/recibos";
 import { mesesPorFormaPago } from "@/lib/polizas/validacion";
@@ -380,65 +383,253 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
  * - conciliado: CONCILIADO (cobrado y comisión correcta).
  * - diferencia: PAGADO (cobrado, pero la comisión no coincide y queda por aclarar).
  * - auto_creado: se crea ya CONCILIADO.
- * En todos se guarda la comisión pagada y el folio del archivo. No verifica sesión: quien la
- * invoque (Server Action) debe hacerlo.
+ * En todos se guarda la comisión pagada y el folio del archivo. Todo queda en un lote con el
+ * estado anterior de cada recibo, para poder revertirlo (revertirLote), y en la bitácora.
+ * No verifica sesión: quien la invoque (Server Action) debe hacerlo.
  */
-export async function aplicarResultados(resultados: readonly ResultadoMatch[]) {
+export async function aplicarResultados(
+  resultados: readonly ResultadoMatch[],
+  {
+    aseguradoraId,
+    archivoNombre,
+    usuario = null,
+  }: { aseguradoraId: string; archivoNombre: string; usuario?: UsuarioSesion | null }
+) {
   const conciliar = resultados.filter((r) => r.estatus === "conciliado" && r.recibo);
   const pagar = resultados.filter((r) => r.estatus === "diferencia" && r.recibo);
   const crear = resultados.filter((r) => r.estatus === "auto_creado" && r.nuevoRecibo);
   if (conciliar.length === 0 && pagar.length === 0 && crear.length === 0) {
-    return { conciliados: 0, pagados: 0, creados: 0 };
+    return { loteId: null, conciliados: 0, pagados: 0, creados: 0 };
   }
 
   const ahora = new Date();
   return db.$transaction(
     async (tx) => {
+      // Estado de los recibos antes de tocarlos: es lo que restaura revertirLote.
+      const antes = new Map(
+        (
+          await tx.recibo.findMany({
+            where: { id: { in: [...conciliar, ...pagar].map((r) => r.recibo!.id) } },
+            select: { id: true, estado: true, comision_pagada: true, folio: true, conciliado_at: true },
+          })
+        ).map((r) => [r.id, r])
+      );
+      type Cambio = Omit<Prisma.LoteCambioCreateManyInput, "lote_id">;
+      const cambios: Cambio[] = [];
+
       let conciliados = 0;
-      for (const r of conciliar) {
+      let pagados = 0;
+      const porAplicar = [
+        ...conciliar.map((r) => ({ r, estado: "CONCILIADO" as const })),
+        ...pagar.map((r) => ({ r, estado: "PAGADO" as const })),
+      ];
+      for (const { r, estado } of porAplicar) {
+        const previo = antes.get(r.recibo!.id);
         // El filtro por estado evita conciliar dos veces si otra persona lo hizo en paralelo.
         const { count } = await tx.recibo.updateMany({
           where: { id: r.recibo!.id, estado: { not: "CONCILIADO" } },
           data: {
-            estado: "CONCILIADO",
+            estado,
             comision_pagada: r.comisionPagada.toFixed(2),
-            conciliado_at: ahora,
+            ...(estado === "CONCILIADO" && { conciliado_at: ahora }),
             ...(r.folio && { folio: r.folio }),
           },
         });
-        conciliados += count;
-      }
-      let pagados = 0;
-      for (const r of pagar) {
-        const { count } = await tx.recibo.updateMany({
-          where: { id: r.recibo!.id, estado: { not: "CONCILIADO" } },
-          data: {
-            estado: "PAGADO",
-            comision_pagada: r.comisionPagada.toFixed(2),
-            ...(r.folio && { folio: r.folio }),
-          },
+        if (count === 0 || !previo) continue;
+        if (estado === "CONCILIADO") conciliados++;
+        else pagados++;
+        cambios.push({
+          recibo_id: r.recibo!.id,
+          tipo: estado === "CONCILIADO" ? "conciliado" : "pagado",
+          fila: r.fila,
+          poliza_numero: r.poliza?.numeroImpreso ?? r.polizaArchivo,
+          recibo_numero: r.recibo!.numero,
+          estado_anterior: previo.estado,
+          comision_anterior: previo.comision_pagada,
+          folio_anterior: previo.folio,
+          conciliado_at_anterior: previo.conciliado_at,
+          estado_nuevo: estado,
+          comision_nueva: r.comisionPagada.toFixed(2),
         });
-        pagados += count;
       }
-      const { count: creados } = await tx.recibo.createMany({
-        data: crear.map((r) => {
-          const n = r.nuevoRecibo!;
-          return {
-            poliza_id: n.polizaId,
-            numero: n.numero,
-            monto: n.monto,
-            fecha_vencimiento: new Date(`${n.fecha}T00:00:00Z`),
-            estado: "CONCILIADO" as const,
-            comision_pagada: r.comisionPagada.toFixed(2),
-            conciliado_at: ahora,
-            folio: n.folio,
-            auto_creado: true,
-          };
-        }),
+
+      const creadosDb = crear.length
+        ? await tx.recibo.createManyAndReturn({
+            data: crear.map((r) => {
+              const n = r.nuevoRecibo!;
+              return {
+                poliza_id: n.polizaId,
+                numero: n.numero,
+                monto: n.monto,
+                fecha_vencimiento: new Date(`${n.fecha}T00:00:00Z`),
+                estado: "CONCILIADO" as const,
+                comision_pagada: r.comisionPagada.toFixed(2),
+                conciliado_at: ahora,
+                folio: n.folio,
+                auto_creado: true,
+              };
+            }),
+            select: { id: true, poliza_id: true, numero: true },
+          })
+        : [];
+      const idCreado = new Map(creadosDb.map((c) => [`${c.poliza_id}|${c.numero}`, c.id]));
+      for (const r of crear) {
+        const n = r.nuevoRecibo!;
+        cambios.push({
+          recibo_id: idCreado.get(`${n.polizaId}|${n.numero}`) ?? null,
+          tipo: "creado",
+          fila: r.fila,
+          poliza_numero: r.poliza?.numeroImpreso ?? r.polizaArchivo,
+          recibo_numero: n.numero,
+          estado_nuevo: "CONCILIADO",
+          comision_nueva: r.comisionPagada.toFixed(2),
+        });
+      }
+      const creados = creadosDb.length;
+
+      const lote = await tx.loteConciliacion.create({
+        data: {
+          aseguradora_id: aseguradoraId,
+          usuario_id: usuario?.id ?? null,
+          usuario_email: usuario?.email ?? null,
+          archivo_nombre: archivoNombre,
+          renglones: resultados.length,
+          conciliados,
+          pagados,
+          creados,
+        },
+        select: { id: true, aseguradora: { select: { nombre: true } } },
       });
-      return { conciliados, pagados, creados };
+      if (cambios.length) {
+        await tx.loteCambio.createMany({ data: cambios.map((c) => ({ ...c, lote_id: lote.id })) });
+      }
+      await registrarBitacora(
+        usuario,
+        {
+          accion: "conciliacion.aplicar",
+          entidad: "lote",
+          entidadId: lote.id,
+          descripcion:
+            `Aplicó «${archivoNombre}» de ${lote.aseguradora.nombre}: ${conciliados} conciliados, ` +
+            `${pagados} pagados con diferencia y ${creados} auto-creados`,
+        },
+        tx
+      );
+      return { loteId: lote.id, conciliados, pagados, creados };
     },
     // Un archivo grande actualiza cientos de recibos: más margen que los 5 s por omisión.
+    { maxWait: 10_000, timeout: 60_000 }
+  );
+}
+
+export class LoteNoReversibleError extends Error {}
+
+/**
+ * Revierte un lote de conciliación: borra los recibos que creó y devuelve los demás a su estado
+ * anterior (estado, comisión pagada, folio y fecha de conciliación). Solo si nada se movió
+ * después: otro lote posterior no revertido que tocó los mismos recibos, o un recibo que cambió
+ * por una aclaración, bloquean la reversión para no pisar ese trabajo.
+ */
+export async function revertirLote(loteId: string, usuario: UsuarioSesion | null) {
+  return db.$transaction(
+    async (tx) => {
+      const clave = `lote:${loteId}`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`;
+      const lote = await tx.loteConciliacion.findUnique({
+        where: { id: loteId },
+        select: {
+          id: true,
+          created_at: true,
+          archivo_nombre: true,
+          revertido_at: true,
+          aseguradora: { select: { nombre: true } },
+          cambios: true,
+        },
+      });
+      if (!lote) throw new LoteNoReversibleError("El lote ya no existe.");
+      if (lote.revertido_at) throw new LoteNoReversibleError("Este lote ya se había revertido.");
+
+      const vivos = lote.cambios.filter((c) => c.recibo_id !== null);
+      const ids = vivos.map((c) => c.recibo_id!);
+
+      const posteriores = await tx.loteCambio.findMany({
+        where: {
+          recibo_id: { in: ids },
+          lote_id: { not: lote.id },
+          lote: { revertido_at: null, created_at: { gt: lote.created_at } },
+        },
+        select: { lote_id: true, lote: { select: { archivo_nombre: true } } },
+        distinct: ["lote_id"],
+      });
+      if (posteriores.length > 0) {
+        throw new LoteNoReversibleError(
+          `Primero revierte ${posteriores.length === 1 ? "el lote posterior" : "los lotes posteriores"} que tocó los mismos recibos: ` +
+            posteriores.map((p) => `«${p.lote.archivo_nombre}»`).join(", ") +
+            "."
+        );
+      }
+
+      const actuales = new Map(
+        (
+          await tx.recibo.findMany({
+            where: { id: { in: ids } },
+            select: { id: true, estado: true, comision_pagada: true, auto_creado: true },
+          })
+        ).map((r) => [r.id, r])
+      );
+      const cambiados = vivos.filter((c) => {
+        const r = actuales.get(c.recibo_id!);
+        return r && (r.estado !== c.estado_nuevo || r.comision_pagada?.toFixed(2) !== c.comision_nueva.toFixed(2));
+      });
+      if (cambiados.length > 0) {
+        throw new LoteNoReversibleError(
+          "Estos recibos cambiaron después de aplicar el lote (p. ej. por una aclaración): " +
+            cambiados.map((c) => `${c.poliza_numero} recibo ${c.recibo_numero}`).join(", ") +
+            ". Revísalos antes de revertir."
+        );
+      }
+
+      let restaurados = 0;
+      let borrados = 0;
+      for (const c of vivos) {
+        const r = actuales.get(c.recibo_id!);
+        if (!r) continue; // Se borró por otra vía (p. ej. se eliminó la póliza).
+        if (c.tipo === "creado") {
+          if (!r.auto_creado) continue;
+          await tx.recibo.delete({ where: { id: c.recibo_id! } });
+          borrados++;
+        } else {
+          await tx.recibo.update({
+            where: { id: c.recibo_id! },
+            data: {
+              estado: c.estado_anterior ?? "PENDIENTE",
+              comision_pagada: c.comision_anterior,
+              folio: c.folio_anterior,
+              conciliado_at: c.conciliado_at_anterior,
+            },
+          });
+          restaurados++;
+        }
+      }
+
+      await tx.loteConciliacion.update({
+        where: { id: lote.id },
+        data: { revertido_at: new Date(), revertido_por: usuario?.email ?? null },
+      });
+      await registrarBitacora(
+        usuario,
+        {
+          accion: "conciliacion.revertir",
+          entidad: "lote",
+          entidadId: lote.id,
+          descripcion:
+            `Revirtió «${lote.archivo_nombre}» de ${lote.aseguradora.nombre}: ${restaurados} recibos restaurados ` +
+            `y ${borrados} auto-creados eliminados`,
+        },
+        tx
+      );
+      return { restaurados, borrados };
+    },
     { maxWait: 10_000, timeout: 60_000 }
   );
 }

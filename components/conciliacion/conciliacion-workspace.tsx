@@ -204,7 +204,7 @@ export function ConciliacionWorkspace({
   function aplicar() {
     if (!conversion) return;
     startAplicar(async () => {
-      const res = await aplicarConciliacion(aseguradora, conversion.filas);
+      const res = await aplicarConciliacion(aseguradora, conversion.filas, archivo?.nombre ?? "");
       setConfirmar(false);
       if (!res.ok) {
         setError(res.error);

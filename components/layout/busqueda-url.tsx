@@ -39,8 +39,13 @@ export function BusquedaUrl({
     if (temporizador.current) window.clearTimeout(temporizador.current);
     temporizador.current = window.setTimeout(() => {
       const texto = valor.trim();
+      // Conserva los demás filtros de la URL (p. ej. ?entidad=…).
+      const params = new URLSearchParams(window.location.search);
+      if (texto) params.set("q", texto);
+      else params.delete("q");
+      const query = params.toString();
       startTransition(() => {
-        router.replace(texto ? `${pathname}?q=${encodeURIComponent(texto)}` : pathname, { scroll: false });
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
       });
     }, ESPERA_MS);
   }

@@ -88,6 +88,7 @@ model Aseguradora {
 
   polizas  Poliza[]
   esquemas EsquemaComision[]
+  lotes    LoteConciliacion[]
 
   @@map("aseguradoras")
 }
@@ -171,6 +172,9 @@ model Recibo {
   // CRM. Su monto es estimado (prima de la póliza entre sus recibos) si el archivo no lo trae.
   auto_creado       Boolean      @default(false)
 
+  cambios_lote LoteCambio[]
+  notas        NotaAclaracion[]
+
   poliza Poliza @relation(fields: [poliza_id], references: [id], onDelete: Cascade)
 
   @@unique([poliza_id, numero])
@@ -224,4 +228,92 @@ model EsquemaComision {
 
   @@index([aseguradora_id, ramo, anio_poliza])
   @@map("esquemas_comision")
+}
+
+// Bitácora de auditoría: quién hizo qué y cuándo (conciliaciones, pólizas, matriz, usuarios).
+// Guarda el correo además del id para seguir siendo legible si la cuenta se desactiva.
+model Bitacora {
+  id            String   @id @default(cuid())
+  created_at    DateTime @default(now())
+  usuario_id    String?
+  usuario_email String?
+  // Clave estable de la acción, p. ej. "conciliacion.aplicar" o "poliza.editar".
+  accion        String
+  // Tipo de registro afectado ("poliza", "recibo", "lote", "regla_comision", "usuario").
+  entidad       String
+  entidad_id    String?
+  descripcion   String
+  // Detalle opcional: valores antes/después, conteos, etc.
+  datos         Json?
+
+  @@index([created_at])
+  @@index([entidad, entidad_id])
+  @@map("bitacora")
+}
+
+// Cada "Aplicar conciliación" es un lote: se puede revertir si se subió el archivo equivocado.
+model LoteConciliacion {
+  id             String    @id @default(cuid())
+  created_at     DateTime  @default(now())
+  aseguradora_id String
+  usuario_id     String?
+  usuario_email  String?
+  archivo_nombre String
+  renglones      Int
+  conciliados    Int
+  pagados        Int
+  creados        Int
+  revertido_at   DateTime?
+  revertido_por  String?
+
+  aseguradora Aseguradora  @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
+  cambios     LoteCambio[]
+
+  @@index([created_at])
+  @@map("lotes_conciliacion")
+}
+
+// Qué le hizo un lote a cada recibo, con el estado anterior para poder revertirlo.
+model LoteCambio {
+  id            String  @id @default(cuid())
+  lote_id       String
+  // Null si el recibo ya no existe (p. ej. se eliminó su póliza).
+  recibo_id     String?
+  // "conciliado" | "pagado" | "creado"
+  tipo          String
+  fila          Int
+  poliza_numero String
+  recibo_numero Int
+
+  estado_anterior        EstadoRecibo?
+  comision_anterior      Decimal?      @db.Decimal(14, 2)
+  folio_anterior         String?
+  conciliado_at_anterior DateTime?
+  estado_nuevo           EstadoRecibo
+  comision_nueva         Decimal       @db.Decimal(14, 2)
+
+  lote   LoteConciliacion @relation(fields: [lote_id], references: [id], onDelete: Cascade)
+  recibo Recibo?          @relation(fields: [recibo_id], references: [id], onDelete: SetNull)
+
+  @@index([lote_id])
+  @@index([recibo_id])
+  @@map("lotes_cambios")
+}
+
+// Seguimiento de un recibo PAGADO con diferencia de comisión: reclamos, notas y cierre.
+model NotaAclaracion {
+  id            String   @id @default(cuid())
+  created_at    DateTime @default(now())
+  recibo_id     String
+  usuario_email String?
+  // "reclamo" | "nota" | "pago_adicional" | "aceptada"
+  tipo          String
+  texto         String
+  // Solo en "pago_adicional": comisión adicional recibida.
+  monto         Decimal? @db.Decimal(14, 2)
+
+  recibo Recibo @relation(fields: [recibo_id], references: [id], onDelete: Cascade)
+
+  @@index([recibo_id, created_at])
+  @@map("notas_aclaracion")
 }

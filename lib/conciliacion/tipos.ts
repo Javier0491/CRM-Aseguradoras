@@ -87,3 +87,7 @@ export const MAX_FILAS_ESTADO = 5000;
 
 /** Diferencia máxima (MXN) para considerar que el monto pagado coincide con el esperado. */
 export const TOLERANCIA_MXN = 1;
+
+/** Tipos de seguimiento de una aclaración de comisión (ver NotaAclaracion). */
+export const TIPOS_NOTA = ["nota", "reclamo", "pago_adicional", "aceptada"] as const;
+export type TipoNota = (typeof TIPOS_NOTA)[number];
