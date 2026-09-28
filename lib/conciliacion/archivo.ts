@@ -38,11 +38,63 @@ export async function leerArchivoEstado(archivo: File): Promise<Hoja[]> {
 const texto = (c: Celda) => (c === null || c === undefined ? "" : String(c).replace(/\s+/g, " ").trim());
 
 // Tolerantes a acentos mal decodificados: "Póliza" puede llegar como "PÃ³liza" en CSV de Excel.
-// Cubren PÓLIZA/POLIZA y COMISIÓN/COMISION en cualquier combinación de mayúsculas.
+// Cubren PÓLIZA/POLIZA en cualquier combinación de mayúsculas.
 const ES_POLIZA = /p.{1,2}liza/i;
-const ES_COMISION = /comisi/i;
 const ES_RECIBO = /recibo|no\.?\s*rec/i;
-const NO_ES_MONTO = /%|porcentaje|pct|tasa/i;
+
+/**
+ * Nombre de columna comparable: sin acentos, en mayúsculas y solo letras, dígitos, espacios
+ * y "%". Repara el texto UTF-8 leído como Latin-1 ("COMISIÃ³N" → "COMISION").
+ */
+function claveColumna(nombre: string): string {
+  let t = nombre;
+  if (/[ÃÂ]/.test(t) && [...t].every((c) => c.charCodeAt(0) < 256)) {
+    try {
+      t = new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(t, (c) => c.charCodeAt(0)));
+    } catch {
+      // No era mojibake: se usa tal cual.
+    }
+  }
+  return t
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9% ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * REGLA ESTRICTA: nunca es la columna de dinero, aunque diga "comisión" ("TIPO DE COMISIÓN",
+ * "% COMISIÓN", "PORC. COMISIÓN", "TASA DE COMISIÓN", "ESTATUS COMISIÓN").
+ */
+const NO_ES_MONTO = /\bTIPO\b|%|\bPORCENTAJE\b|\bPORC\b|\bPCT\b|\bTASA\b|\bESTATUS\b|\bSTATUS\b/;
+
+/**
+ * Columna de la comisión pagada, de mayor a menor prioridad. Primero los nombres exactos de
+ * comisión; luego cualquier otra columna de comisión (p. ej. "COMISIÓN DEL AGENTE"); al final
+ * los nombres genéricos de dinero, que solo se usan si el archivo no trae columna de comisión.
+ */
+const PRIORIDAD_MONTO: ((clave: string) => boolean)[] = [
+  (c) => c === "COMISION" || c === "COMISIONES",
+  (c) => c === "IMPORTE COMISION" || c === "IMPORTE DE COMISION" || c === "IMPORTE COMISIONES",
+  (c) => /\bCOMISI/.test(c),
+  (c) => c === "IMPORTE",
+  (c) => c === "PRIMA NETA",
+];
+
+/** Índice de la columna de dinero según PRIORIDAD_MONTO, descartando las de NO_ES_MONTO. */
+function columnaDeMonto(nombres: string[]): number | null {
+  const claves = nombres.map((n) => {
+    const c = claveColumna(n);
+    return NO_ES_MONTO.test(c) ? null : c;
+  });
+  for (const coincide of PRIORIDAD_MONTO) {
+    const i = claves.findIndex((c) => c !== null && coincide(c));
+    if (i >= 0) return i;
+  }
+  return null;
+}
 
 /**
  * Filas que se revisan para encontrar el encabezado (y que ofrece el selector). Algunas
@@ -61,7 +113,7 @@ export function adivinarMapeo(encabezados: Celda[] | undefined): Mapeo {
   };
   return {
     poliza: buscar((n) => ES_POLIZA.test(n) && !/vigor|tipo|ramo/i.test(n)),
-    comision: buscar((n) => ES_COMISION.test(n) && !NO_ES_MONTO.test(n)),
+    comision: columnaDeMonto(nombres),
     recibo: buscar((n) => ES_RECIBO.test(n)),
   };
 }
@@ -76,7 +128,7 @@ export type Estructura = {
 
 /**
  * Auto-detección: la primera fila (de las primeras MAX_FILAS_ENCABEZADO) con una columna de
- * PÓLIZA y otra de COMISIÓN, con sus columnas ya mapeadas. Se exigen celdas distintas para
+ * PÓLIZA y una columna de dinero válida (ver columnaDeMonto), con sus columnas ya mapeadas. Se exigen celdas distintas para
  * no confundir el encabezado con un título del preámbulo ("Estado de cuenta de comisiones,
  * póliza 123"). Si ninguna cumple, la primera fila que mencione la póliza, o la primera.
  */
