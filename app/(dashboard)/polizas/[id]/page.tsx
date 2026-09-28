@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Download, ExternalLink, FileArchive, FileText, FolderOpen } from "lucide-react";
 
 import { ArchivoUploader } from "@/components/archivos/archivo-uploader";
+import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
 import {
   AseguradoraTag,
   estadoRecibo,
@@ -82,6 +83,16 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
           <div className="flex items-center gap-3 text-sm">
             <AseguradoraTag nombre={poliza.aseguradora.nombre} color={poliza.aseguradora.color_hex} />
             <Badge variant="outline">{ramoLabel[poliza.ramo]}</Badge>
+            <EliminarPoliza
+              polizaId={poliza.id}
+              numero={poliza.numeroImpreso}
+              recibos={poliza.recibos.length}
+              conciliados={poliza.recibos.filter((r) => r.estado === "CONCILIADO").length}
+              asegurados={poliza.asegurados.length}
+              archivos={[poliza.caratula_nombre, poliza.negociacion_nombre, poliza.expediente_nombre].filter(
+                (n): n is string => Boolean(n)
+              )}
+            />
           </div>
         </div>
       </div>

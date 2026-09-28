@@ -4,6 +4,7 @@ import {
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   NotFound,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
@@ -50,6 +51,25 @@ export function crearAlmacenR2(): Almacen {
       await s3.send(
         new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: claves.map((Key) => ({ Key })), Quiet: true } })
       );
+    },
+
+    async eliminarCarpeta(prefijo) {
+      let total = 0;
+      let token: string | undefined;
+      do {
+        const lista = await s3.send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix: prefijo, ContinuationToken: token })
+        );
+        const claves = (lista.Contents ?? []).map((o) => o.Key).filter((k): k is string => Boolean(k));
+        if (claves.length > 0) {
+          await s3.send(
+            new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: claves.map((Key) => ({ Key })), Quiet: true } })
+          );
+          total += claves.length;
+        }
+        token = lista.IsTruncated ? lista.NextContinuationToken : undefined;
+      } while (token);
+      return total;
     },
 
     urlDescarga: generarUrlLectura,
