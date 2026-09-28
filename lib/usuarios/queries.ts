@@ -6,8 +6,9 @@ import { db } from "@/lib/db";
 export async function getUsuarios() {
   const [usuarios, accesos] = await Promise.all([
     db.usuario.findMany({
-      orderBy: [{ rol: "asc" }, { nombre: "asc" }],
-      select: { id: true, nombre: true, email: true, rol: true, created_at: true },
+      // Activos primero; dentro de cada grupo, administradores y luego por nombre.
+      orderBy: [{ activo: "desc" }, { rol: "asc" }, { nombre: "asc" }],
+      select: { id: true, nombre: true, email: true, rol: true, activo: true, desactivado_at: true, created_at: true },
     }),
     db.$queryRaw<{ id: string; last_sign_in_at: Date | null }[]>`
       SELECT id::text, last_sign_in_at FROM auth.users`,

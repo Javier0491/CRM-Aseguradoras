@@ -45,11 +45,15 @@ enum Rol {
 // bcrypt) la hace Supabase Auth; aquí solo vive lo que el CRM necesita saber de la persona.
 model Usuario {
   // Mismo id que auth.users en Supabase.
-  id         String   @id
-  nombre     String
-  email      String   @unique
-  rol        Rol      @default(EJECUTIVO)
-  created_at DateTime @default(now())
+  id             String    @id
+  nombre         String
+  email          String    @unique
+  rol            Rol       @default(EJECUTIVO)
+  // Borrado suave: una cuenta desactivada no puede entrar (además se bloquea en Supabase
+  // Auth), pero se conserva para el historial y puede reactivarse.
+  activo         Boolean   @default(true)
+  desactivado_at DateTime?
+  created_at     DateTime  @default(now())
 
   @@map("usuarios")
 }

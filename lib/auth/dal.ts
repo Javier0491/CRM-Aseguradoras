@@ -24,8 +24,10 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
   if (error || !data.user) return null;
   const perfil = await db.usuario.findUnique({
     where: { id: data.user.id },
-    select: { nombre: true, rol: true },
+    select: { nombre: true, rol: true, activo: true },
   });
+  // Cuenta desactivada: su token puede seguir vigente un rato, pero ya no es una sesión válida.
+  if (perfil && !perfil.activo) return null;
   return {
     id: data.user.id,
     email: data.user.email ?? null,

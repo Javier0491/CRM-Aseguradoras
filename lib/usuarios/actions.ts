@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getAdmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { Prisma } from "@/lib/generated/prisma/client";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { MAX_PASSWORD, MIN_PASSWORD, ROLES, type RolUsuario } from "@/lib/usuarios/reglas";
 
@@ -52,8 +53,15 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
   if (!supabase) {
     return { ok: false, error: "Falta SUPABASE_SECRET_KEY en el servidor para poder crear cuentas." };
   }
-  if (await db.usuario.findUnique({ where: { email }, select: { id: true } })) {
-    return { ok: false, error: "Ya existe un usuario con ese correo.", campo: "email" };
+  const existente = await db.usuario.findUnique({ where: { email }, select: { activo: true } });
+  if (existente) {
+    return {
+      ok: false,
+      error: existente.activo
+        ? "Ya existe un usuario con ese correo."
+        : "Ya existe un usuario desactivado con ese correo: reactívalo desde la lista.",
+      campo: "email",
+    };
   }
 
   const { data, error } = await supabase.auth.admin.createUser({
@@ -85,6 +93,116 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
     await supabase.auth.admin.deleteUser(data.user.id);
     console.error("[crearUsuario] Perfil:", e instanceof Error ? e.message : e);
     return { ok: false, error: "No se pudo registrar el usuario. Intenta de nuevo." };
+  }
+
+  revalidatePath("/sistema/usuarios");
+  return { ok: true };
+}
+
+export type EdicionUsuarioInput = { id: string; nombre: string; rol: RolUsuario };
+export type ResultadoEdicion = { ok: true } | { ok: false; error: string; campo?: "nombre" | "rol" };
+
+class ReglaUsuarioError extends Error {}
+
+/** Sin otro administrador activo nadie podría volver a entrar a Usuarios ni a la configuración. */
+async function verificarOtroAdmin(tx: Prisma.TransactionClient, excepto: string, accion: string) {
+  const otros = await tx.usuario.count({ where: { rol: "ADMIN", activo: true, id: { not: excepto } } });
+  if (otros === 0) throw new ReglaUsuarioError(`No se puede ${accion}: es el único administrador activo.`);
+}
+
+function errorDeTransaccion(e: unknown, contexto: string): { ok: false; error: string } {
+  if (e instanceof ReglaUsuarioError) return { ok: false, error: e.message };
+  if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    if (e.code === "P2025") return { ok: false, error: "El usuario ya no existe; recarga la página." };
+    if (e.code === "P2034") return { ok: false, error: "Otra persona modificó los usuarios al mismo tiempo. Intenta de nuevo." };
+  }
+  console.error(`[${contexto}]`, e instanceof Error ? e.message : e);
+  return { ok: false, error: "No se pudo guardar el cambio." };
+}
+
+/** Cambia el nombre y el rol de una cuenta. Un admin no puede quitarse el rol a sí mismo. */
+export async function actualizarUsuario(raw: EdicionUsuarioInput): Promise<ResultadoEdicion> {
+  const admin = await getAdmin();
+  if (!admin) return { ok: false, error: "Solo un administrador puede editar usuarios." };
+  if (typeof raw !== "object" || raw === null || typeof raw.id !== "string" || !raw.id) {
+    return { ok: false, error: "Datos inválidos." };
+  }
+  const nombre = typeof raw.nombre === "string" ? raw.nombre.trim().replace(/\s+/g, " ") : "";
+  if (nombre.length < 2 || nombre.length > 100) {
+    return { ok: false, error: "Escribe el nombre (entre 2 y 100 caracteres).", campo: "nombre" };
+  }
+  if (typeof raw.rol !== "string" || !(ROLES as readonly string[]).includes(raw.rol)) {
+    return { ok: false, error: "Selecciona el rol.", campo: "rol" };
+  }
+  const rol = raw.rol;
+  if (raw.id === admin.id && rol !== "ADMIN") {
+    return { ok: false, error: "No puedes quitarte el rol de administrador a ti mismo.", campo: "rol" };
+  }
+
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const actual = await tx.usuario.findUniqueOrThrow({ where: { id: raw.id }, select: { rol: true, activo: true } });
+        if (actual.rol === "ADMIN" && rol !== "ADMIN" && actual.activo) {
+          await verificarOtroAdmin(tx, raw.id, "quitarle el rol de administrador");
+        }
+        await tx.usuario.update({ where: { id: raw.id }, data: { nombre, rol } });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+  } catch (e) {
+    return errorDeTransaccion(e, "actualizarUsuario");
+  }
+  revalidatePath("/sistema/usuarios");
+  return { ok: true };
+}
+
+/** Duración del bloqueo en Supabase Auth para una cuenta desactivada (~100 años). */
+const BLOQUEO_INDEFINIDO = "876000h";
+
+/**
+ * Desactiva (borrado suave) o reactiva una cuenta. Desactivada: el CRM rechaza su sesión de
+ * inmediato y Supabase Auth la bloquea para que no pueda volver a iniciar sesión. Se conserva
+ * el registro para el historial y para poder reactivarla.
+ */
+export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise<ResultadoEdicion> {
+  const admin = await getAdmin();
+  if (!admin) return { ok: false, error: "Solo un administrador puede desactivar usuarios." };
+  if (typeof id !== "string" || !id || typeof activo !== "boolean") return { ok: false, error: "Datos inválidos." };
+  if (!activo && id === admin.id) return { ok: false, error: "No puedes desactivar tu propia cuenta." };
+
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    return { ok: false, error: "Falta SUPABASE_SECRET_KEY en el servidor para bloquear o desbloquear cuentas." };
+  }
+
+  try {
+    await db.$transaction(
+      async (tx) => {
+        const actual = await tx.usuario.findUniqueOrThrow({ where: { id }, select: { rol: true } });
+        if (!activo && actual.rol === "ADMIN") await verificarOtroAdmin(tx, id, "desactivarlo");
+        await tx.usuario.update({
+          where: { id },
+          data: { activo, desactivado_at: activo ? null : new Date() },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+  } catch (e) {
+    return errorDeTransaccion(e, "cambiarEstadoUsuario");
+  }
+
+  const { error } = await supabase.auth.admin.updateUserById(id, {
+    ban_duration: activo ? "none" : BLOQUEO_INDEFINIDO,
+  });
+  if (error) {
+    // Sin el bloqueo en Supabase el estado quedaría a medias: se revierte el cambio.
+    await db.usuario.update({
+      where: { id },
+      data: { activo: !activo, desactivado_at: activo ? new Date() : null },
+    });
+    console.error("[cambiarEstadoUsuario] Supabase Auth:", error.code, error.message);
+    return { ok: false, error: `No se pudo ${activo ? "desbloquear" : "bloquear"} la cuenta en Supabase Auth.` };
   }
 
   revalidatePath("/sistema/usuarios");
