@@ -58,7 +58,14 @@ export type ResultadoMatch = {
   comisionEsperada: number | null;
   /** comisionPagada − comisionEsperada. */
   diferencia: number | null;
-  porcentaje: { valor: number; origen: "personalizado" | "esquema"; anio: number | null } | null;
+  porcentaje: {
+    valor: number;
+    origen: "personalizado" | "esquema";
+    anio: number | null;
+    /** El año sale de la antigüedad del titular o de las vigencias registradas en el CRM. */
+    anioPor?: "antiguedad" | "vigencias";
+    antiguedad?: string | null;
+  } | null;
 };
 
 export type ResumenMatch = Record<EstatusMatch, number> & {

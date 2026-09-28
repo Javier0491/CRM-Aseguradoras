@@ -76,7 +76,7 @@ import {
   type ResultadoMatch,
   type ResumenMatch,
 } from "@/lib/conciliacion/tipos";
-import { formatMoneda, formatNumero } from "@/lib/format";
+import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import type { Opcion } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
 
@@ -497,6 +497,12 @@ export function ConciliacionWorkspace({
                             : r.porcentaje.anio === 1
                               ? "año 1"
                               : `renovación · año ${r.porcentaje.anio}`}
+                          {r.porcentaje.anioPor === "antiguedad" && r.porcentaje.antiguedad && (
+                            <span title="Año calculado con la fecha de antigüedad del titular">
+                              {" "}
+                              (antigüedad {formatFecha(`${r.porcentaje.antiguedad}T00:00:00Z`)})
+                            </span>
+                          )}
                         </p>
                       )}
                     </TableCell>

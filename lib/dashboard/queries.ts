@@ -3,7 +3,7 @@ import "server-only";
 import { connection } from "next/server";
 
 import {
-  anioDePoliza,
+  anioParaComision,
   comisionEsperada,
   edadDelTitular,
   primaNetaDelRecibo,
@@ -68,8 +68,8 @@ async function tasaRenovacion({ desde, hasta }: Rango, hoy: Date) {
 /**
  * Comisión esperada de los recibos PENDIENTES que vencen en el rango, con la misma regla que
  * la conciliación: (prima neta ÷ número de recibos) × % personalizado de la póliza o de la
- * matriz por aseguradora, ramo y año de la póliza (contado desde la primera vigencia de su
- * cadena). Los recibos sin % aplicable o sin prima neta no suman y se reportan aparte.
+ * matriz por aseguradora, ramo y año de la póliza (por la antigüedad del titular o, sin ella,
+ * desde la primera vigencia de su cadena). Los recibos sin % aplicable o sin prima neta no suman y se reportan aparte.
  */
 async function comisionesPendientes({ desde, hasta }: Rango) {
   const recibos = await db.recibo.findMany({
@@ -88,7 +88,9 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
           forma_pago: true,
           prima_neta: true,
           comision_personalizada_pct: true,
-          asegurados: { select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true } },
+          asegurados: {
+            select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true, antiguedad: true },
+          },
         },
       },
     },
@@ -132,7 +134,12 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
         personalizado: p.comision_personalizada_pct !== null ? Number(p.comision_personalizada_pct) : null,
         ramo: p.ramo,
       },
-      anioDePoliza(inicio, r.fecha_vencimiento),
+      anioParaComision({
+        asegurados: p.asegurados,
+        vigenciaInicio: p.vigencia_inicio,
+        primeraVigencia: inicio,
+        fechaRecibo: r.fecha_vencimiento,
+      }).anio,
       edadDelTitular(p.asegurados, r.fecha_vencimiento),
       esquemas
         .filter((e) => e.aseguradora_id === p.aseguradora_id)

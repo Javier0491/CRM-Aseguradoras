@@ -162,7 +162,8 @@ export function MatrizComisiones({
         <CardDescription>
           Un año sin regla usa la del mayor año definido que no lo exceda: una sola regla de año 1
           es un porcentaje fijo para todos los años. Las reglas con rango de edad (del titular) tienen
-          prioridad sobre las que aplican a todas las edades.
+          prioridad sobre las que aplican a todas las edades. El año de la póliza se cuenta desde la
+          fecha de antigüedad del titular (o, sin ella, desde su primera vigencia en el CRM).
         </CardDescription>
         <CardAction className="flex gap-2">
           <Select value={filtro} onValueChange={setFiltro}>

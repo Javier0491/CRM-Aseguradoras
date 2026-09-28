@@ -33,7 +33,14 @@ export function porcentajeDeEsquema(
   return aplicable ? { porcentaje: aplicable.porcentaje, anioAplicado: aplicable.anio_poliza } : null;
 }
 
-export type PorcentajeAplicado = { valor: number; origen: "personalizado" | "esquema"; anio: number | null };
+export type PorcentajeAplicado = {
+  valor: number;
+  origen: "personalizado" | "esquema";
+  anio: number | null;
+  /** Cómo se obtuvo el año (solo con origen "esquema"). */
+  anioPor?: AnioComision["por"];
+  antiguedad?: string | null;
+};
 
 export type EsquemaResolucion = {
   ramo: string;
@@ -70,16 +77,26 @@ export function resolverPorcentaje(
   return aplicado ? { valor: aplicado.porcentaje, origen: "esquema", anio } : null;
 }
 
+type AseguradoComision = {
+  parentesco: string;
+  orden: number;
+  edad: number | null;
+  fecha_nacimiento: string | null;
+  antiguedad?: string | null;
+};
+
+/** Titular de la póliza; sin titular marcado, el primer asegurado de la carátula. */
+function titularDe<T extends AseguradoComision>(asegurados: readonly T[]): T | undefined {
+  const ordenados = [...asegurados].sort((a, b) => a.orden - b.orden);
+  return ordenados.find((a) => a.parentesco.toLowerCase() === "titular") ?? ordenados[0];
+}
+
 /**
  * Edad del titular en una fecha: por su fecha de nacimiento si se capturó; si no, la edad
  * impresa en la carátula. Sin titular marcado se toma el primer asegurado. null si no hay dato.
  */
-export function edadDelTitular(
-  asegurados: readonly { parentesco: string; orden: number; edad: number | null; fecha_nacimiento: string | null }[],
-  fecha: Date
-): number | null {
-  const ordenados = [...asegurados].sort((a, b) => a.orden - b.orden);
-  const titular = ordenados.find((a) => a.parentesco.toLowerCase() === "titular") ?? ordenados[0];
+export function edadDelTitular(asegurados: readonly AseguradoComision[], fecha: Date): number | null {
+  const titular = titularDe(asegurados);
   if (!titular) return null;
   const nacimiento = titular.fecha_nacimiento?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (nacimiento) {
@@ -89,6 +106,56 @@ export function edadDelTitular(
     if (edad >= 0 && edad <= 130) return edad;
   }
   return titular.edad;
+}
+
+/**
+ * Fecha de antigüedad del titular (YYYY-MM-DD). La captura la guarda así; también se acepta
+ * "22/12/2008". null si no hay titular, no se capturó o el texto no es una fecha.
+ */
+export function antiguedadDelTitular(asegurados: readonly AseguradoComision[]): string | null {
+  const texto = titularDe(asegurados)?.antiguedad?.trim();
+  if (!texto) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(texto);
+  const mx = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(texto);
+  const [y, m, d] = iso ? [+iso[1], +iso[2], +iso[3]] : mx ? [+mx[3], +mx[2], +mx[1]] : [NaN, NaN, NaN];
+  const f = new Date(Date.UTC(y, m - 1, d));
+  if (Number.isNaN(f.getTime()) || f.getUTCMonth() !== m - 1 || f.getUTCDate() !== d || y < 1950) return null;
+  return f.toISOString().slice(0, 10);
+}
+
+export type AnioComision = {
+  anio: number;
+  /** "antiguedad": desde la antigüedad del titular; "vigencias": desde la primera vigencia en el CRM. */
+  por: "antiguedad" | "vigencias";
+  /** Fecha de antigüedad usada (YYYY-MM-DD), si aplica. */
+  antiguedad: string | null;
+};
+
+/**
+ * Año de la póliza para la matriz de comisiones. Con la fecha de antigüedad del titular es el
+ * año cumplido al inicio de la vigencia del recibo: antigüedad 22/12/2008 y vigencia desde
+ * 13/07/2025 → 16 años completos → año 17. Así una póliza con historia anterior al CRM no se
+ * toma como año 1. Sin antigüedad válida (o posterior a la vigencia) se cuenta desde la primera
+ * vigencia registrada de la cadena, como antes.
+ */
+export function anioParaComision({
+  asegurados,
+  vigenciaInicio,
+  primeraVigencia,
+  fechaRecibo,
+}: {
+  asegurados: readonly AseguradoComision[];
+  /** Inicio de la vigencia a la que pertenece el recibo. */
+  vigenciaInicio: Date;
+  /** Primera vigencia de la cadena registrada en el CRM. */
+  primeraVigencia: Date;
+  fechaRecibo: Date;
+}): AnioComision {
+  const antiguedad = antiguedadDelTitular(asegurados);
+  if (antiguedad && antiguedad <= vigenciaInicio.toISOString().slice(0, 10)) {
+    return { anio: anioDePoliza(new Date(`${antiguedad}T00:00:00Z`), vigenciaInicio), por: "antiguedad", antiguedad };
+  }
+  return { anio: anioDePoliza(primeraVigencia, fechaRecibo), por: "vigencias", antiguedad: null };
 }
 
 /**

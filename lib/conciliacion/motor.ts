@@ -1,7 +1,7 @@
 import "server-only";
 
 import {
-  anioDePoliza,
+  anioParaComision,
   comisionEsperada,
   edadDelTitular,
   primaNetaDelRecibo,
@@ -37,6 +37,8 @@ const cubreFecha = (p: { vigencia_inicio: Date; vigencia_fin: Date }, fecha: str
  *   conciliado. Nunca se repite: dos renglones de la misma póliza pagan recibos distintos.
  * - Comisión esperada = (prima neta de la vigencia ÷ número de recibos) × % (personalizado de
  *   la póliza o el de la matriz según aseguradora, ramo, año de la póliza y edad del titular).
+ *   El año sale de la fecha de antigüedad del titular; sin ella, de la primera vigencia de la
+ *   cadena registrada en el CRM (ver anioParaComision).
  *   Nunca sobre la prima total ni el monto cobrado del recibo.
  * - El estado de cuenta es la fuente de la verdad de lo cobrado: si la póliza existe pero el
  *   recibo no, se propone crearlo ya conciliado ("auto_creado"). Solo cuando el renglón trae
@@ -66,7 +68,9 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
         forma_pago: true,
         comision_personalizada_pct: true,
         cliente: { select: { nombre: true } },
-        asegurados: { select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true } },
+        asegurados: {
+          select: { parentesco: true, orden: true, edad: true, fecha_nacimiento: true, antiguedad: true },
+        },
         recibos: {
           orderBy: { fecha_vencimiento: "asc" },
           select: { id: true, numero: true, monto: true, fecha_vencimiento: true, estado: true, folio: true },
@@ -208,11 +212,14 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       recibo: { id: recibo.id, numero: recibo.numero, total: recibo.total, monto },
     };
 
-    const anio = anioDePoliza(
-      primeraVigencia.get(recibo.poliza.polizaVigor ?? recibo.poliza.id) ?? recibo.poliza.vigencia_inicio,
-      recibo.fecha_vencimiento
-    );
-    const porcentaje = resolverPorcentaje(
+    const { anio, por: anioPor, antiguedad } = anioParaComision({
+      asegurados: recibo.poliza.asegurados,
+      vigenciaInicio: recibo.poliza.vigencia_inicio,
+      primeraVigencia:
+        primeraVigencia.get(recibo.poliza.polizaVigor ?? recibo.poliza.id) ?? recibo.poliza.vigencia_inicio,
+      fechaRecibo: recibo.fecha_vencimiento,
+    });
+    const resuelto = resolverPorcentaje(
       {
         personalizado:
           recibo.poliza.comision_personalizada_pct !== null ? Number(recibo.poliza.comision_personalizada_pct) : null,
@@ -222,13 +229,16 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       edadDelTitular(recibo.poliza.asegurados, recibo.fecha_vencimiento),
       esquemasNum
     );
-    if (!porcentaje) {
+    if (!resuelto) {
       return {
         ...conRecibo,
         estatus: "revisar",
-        detalle: `Sin esquema de comisión para este ramo (año ${anio} de la póliza).`,
+        detalle:
+          `Sin esquema de comisión para este ramo (año ${anio} de la póliza` +
+          `${antiguedad ? `, por antigüedad desde ${antiguedad}` : ""}).`,
       };
     }
+    const porcentaje = resuelto.origen === "esquema" ? { ...resuelto, anioPor, antiguedad } : resuelto;
 
     const baseComision = primaNetaDelRecibo(recibo.poliza, recibo.numero);
     if (!baseComision) {
