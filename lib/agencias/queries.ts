@@ -14,11 +14,23 @@ export const getAgencia = cache(async (agenciaId: string) => {
 });
 
 /**
- * Todas las agencias, para el selector del SUPERADMIN. Es la única consulta que cruza agencias:
- * exige el rol aquí mismo (no confía en quien la llame) y solo expone id y nombre.
+ * Todas las agencias con su marca y su tamaño, para el panel del SUPERADMIN. Es la única consulta
+ * que cruza agencias: exige el rol aquí mismo (no confía en quien la llame).
  */
 export async function getAgenciasParaSuperadmin() {
   const user = await getCurrentUser();
   if (!user?.superadmin) return [];
-  return db.agencia.findMany({ orderBy: { nombre: "asc" }, select: { id: true, nombre: true } });
+  return db.agencia.findMany({
+    orderBy: [{ createdAt: "asc" }, { nombre: "asc" }],
+    select: {
+      id: true,
+      nombre: true,
+      logoUrl: true,
+      colorHex: true,
+      tema: true,
+      createdAt: true,
+      _count: { select: { usuarios: true, clientes: true, polizas: true } },
+    },
+  });
 }
+export type AgenciaLobby = Awaited<ReturnType<typeof getAgenciasParaSuperadmin>>[number];

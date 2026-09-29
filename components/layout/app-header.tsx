@@ -1,19 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LayoutGrid, LogOut } from "lucide-react";
 
 import { BusquedaGlobal } from "@/components/layout/busqueda-global";
 import { CampanaAvisos } from "@/components/layout/campana-avisos";
-import { SelectorAgencia, type SelectorAgenciaProps } from "@/components/layout/selector-agencia";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cerrarSesion } from "@/lib/auth/actions";
 import { allNav, isActivePath } from "@/lib/navigation";
+import { cn } from "@/lib/utils";
 
-/** `selectorAgencia` solo llega para un SUPERADMIN. */
-export function AppHeader({ selectorAgencia }: { selectorAgencia?: SelectorAgenciaProps }) {
+/**
+ * `superadmin` solo llega para un SUPERADMIN: botón al panel de agencias. `ajena` = está operando
+ * una agencia que no es la suya (el botón se resalta para que no pase desapercibido).
+ */
+export function AppHeader({ superadmin }: { superadmin?: { ajena: boolean } }) {
   const pathname = usePathname();
   const current =
     allNav.find((item) => isActivePath(pathname, item.href)) ?? allNav[0];
@@ -28,7 +32,20 @@ export function AppHeader({ selectorAgencia }: { selectorAgencia?: SelectorAgenc
       <span className="text-sm font-medium">{current.title}</span>
 
       <div className="ml-auto flex items-center gap-2">
-        {selectorAgencia && <SelectorAgencia {...selectorAgencia} />}
+        {superadmin && (
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            title="Panel de agencias (superadministrador)"
+            className={cn("h-8", superadmin.ajena && "border-primary/50 bg-primary/10 text-primary")}
+          >
+            <Link href="/superadmin">
+              <LayoutGrid />
+              <span className="hidden md:inline">Mis agencias</span>
+            </Link>
+          </Button>
+        )}
         <BusquedaGlobal />
         <CampanaAvisos />
         <form action={cerrarSesion}>

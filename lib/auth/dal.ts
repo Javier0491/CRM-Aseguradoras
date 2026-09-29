@@ -81,6 +81,16 @@ export async function requireAdmin(): Promise<UsuarioSesion> {
 }
 
 /**
+ * Exige el rol de plataforma SUPERADMIN (panel de agencias). El rol viene de la base de datos
+ * (getCurrentUser), nunca del token. Sin sesión redirige a /login; sin el rol, al dashboard.
+ */
+export async function requireSuperadmin(): Promise<UsuarioSesion> {
+  const user = await requireUser();
+  if (!user.superadmin) redirect("/");
+  return user;
+}
+
+/**
  * Agencia del usuario de la sesión, para las funciones de consulta que no reciben el usuario.
  * Sin sesión redirige a /login (en páginas); en Route Handlers verifica la sesión antes.
  */
