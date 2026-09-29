@@ -14,6 +14,7 @@ export const ENTIDADES_BITACORA = {
   poliza: "Pólizas",
   regla_comision: "Matriz de comisiones",
   usuario: "Usuarios",
+  agencia: "Agencia",
 } as const;
 export type EntidadBitacora = keyof typeof ENTIDADES_BITACORA;
 

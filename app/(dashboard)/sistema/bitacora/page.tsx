@@ -40,6 +40,7 @@ function enlace(entidad: string, id: string | null) {
   if (entidad === "recibo") return "/conciliacion/aclaraciones";
   if (entidad === "regla_comision") return "/configuracion/comisiones";
   if (entidad === "usuario") return "/sistema/usuarios";
+  if (entidad === "agencia") return "/configuracion/agencia";
   return null;
 }
 

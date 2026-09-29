@@ -50,7 +50,9 @@
 }
 
 :root {
-  /* PJ MAGNUS — paleta corporativa, exclusivamente modo oscuro */
+  /* Paleta base, exclusivamente modo oscuro. --primary (y su texto, --primary-foreground) es el
+     color de marca: el layout del dashboard lo reemplaza por el de la agencia (TemaAgencia).
+     Todo lo que depende de la marca se deriva de él. */
   --radius: 0.5rem;
   --background: #0a0a0a;
   --foreground: #fafafa;
@@ -71,20 +73,20 @@
   --warning: #f59e0b;
   --border: #27272a;
   --input: #27272a;
-  --ring: #c5a059;
-  --chart-1: #c5a059;
-  --chart-2: #8c7340;
-  --chart-3: #e2c68f;
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: color-mix(in srgb, var(--primary) 70%, #000);
+  --chart-3: color-mix(in srgb, var(--primary) 65%, #fff);
   --chart-4: #52525b;
   --chart-5: #a1a1aa;
   --sidebar: #0f0f0f;
   --sidebar-foreground: #d4d4d8;
-  --sidebar-primary: #c5a059;
-  --sidebar-primary-foreground: #0a0a0a;
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
   --sidebar-accent: #1c1c1e;
   --sidebar-accent-foreground: #fafafa;
   --sidebar-border: #27272a;
-  --sidebar-ring: #c5a059;
+  --sidebar-ring: var(--primary);
   color-scheme: dark;
 }
 

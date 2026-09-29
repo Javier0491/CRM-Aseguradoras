@@ -22,12 +22,13 @@ export const ACCIONES_BITACORA = {
   "usuario.crear": "Creó usuario",
   "usuario.editar": "Editó usuario",
   "usuario.estado": "Activó o desactivó usuario",
+  "agencia.editar": "Editó datos de la agencia",
 } as const;
 export type AccionBitacora = keyof typeof ACCIONES_BITACORA;
 
 export type EntradaBitacora = {
   accion: AccionBitacora;
-  entidad: "poliza" | "recibo" | "lote" | "regla_comision" | "usuario";
+  entidad: "poliza" | "recibo" | "lote" | "regla_comision" | "usuario" | "agencia";
   entidadId?: string | null;
   descripcion: string;
   datos?: Prisma.InputJsonValue;

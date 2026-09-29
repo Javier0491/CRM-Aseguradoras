@@ -1,11 +1,10 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 
-import logoPj from "@/public/logo-pj-icono.png";
+import { LogoAgencia } from "@/components/layout/logo-agencia";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -64,17 +63,19 @@ function inicialesDe(email: string | null) {
   const nombre = email?.split("@")[0] ?? "";
   const partes = nombre.split(/[._-]+/).filter(Boolean);
   const ini = partes.length > 1 ? partes[0][0] + partes[1][0] : nombre.slice(0, 2);
-  return ini.toUpperCase() || "PJ";
+  return ini.toUpperCase() || "?";
 }
 
 export function AppSidebar({
   email,
   nombre,
   esAdmin,
+  agencia,
 }: {
   email: string | null;
   nombre: string | null;
   esAdmin: boolean;
+  agencia: { nombre: string; logoUrl: string | null };
 }) {
   const pathname = usePathname();
   const sistema = navPara(systemNav, esAdmin);
@@ -84,21 +85,13 @@ export function AppSidebar({
       <SidebarHeader className="border-b border-sidebar-border">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild tooltip="PJ MAGNUS">
+            <SidebarMenuButton size="lg" asChild tooltip={agencia.nombre}>
               <Link href="/">
-                {/* Monograma del logo (public/logo-pj-icono.png, recortado de logo-pj.png): 32 px, que
-                    es también el tamaño del botón con el menú colapsado. */}
-                <Image
-                  src={logoPj}
-                  alt="PJ Magnus"
-                  width={32}
-                  height={32}
-                  loading="eager"
-                  className="size-8 shrink-0 object-contain"
-                />
+                {/* 32 px: también es el tamaño del botón con el menú colapsado. */}
+                <LogoAgencia nombre={agencia.nombre} logoUrl={agencia.logoUrl} />
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate text-sm font-semibold tracking-[0.18em] text-foreground">
-                    PJ MAGNUS
+                  <span className="truncate text-sm font-semibold tracking-[0.18em] text-foreground uppercase">
+                    {agencia.nombre}
                   </span>
                   <span className="truncate text-[11px] text-muted-foreground">
                     Broker de Seguros

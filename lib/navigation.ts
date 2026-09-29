@@ -4,6 +4,7 @@ import {
   FileText,
   LayoutDashboard,
   Mail,
+  Palette,
   Percent,
   PlugZap,
   Scale,
@@ -34,6 +35,7 @@ export const mainNav: NavItem[] = [
 ];
 
 export const systemNav: NavItem[] = [
+  { title: "Mi agencia", href: "/configuracion/agencia", icon: Palette, soloAdmin: true },
   { title: "Matriz de comisiones", href: "/configuracion/comisiones", icon: Percent, soloAdmin: true },
   { title: "Integraciones", href: "/configuracion/integraciones", icon: PlugZap, soloAdmin: true },
   { title: "Usuarios", href: "/sistema/usuarios", icon: UserCog, soloAdmin: true },
