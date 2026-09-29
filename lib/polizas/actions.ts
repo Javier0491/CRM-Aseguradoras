@@ -62,8 +62,10 @@ export type EliminarPolizaResultado =
 /**
  * Borra la póliza con sus recibos y asegurados (en cascada) y la carpeta completa de sus
  * archivos en el almacenamiento (R2 o Supabase), incluidos huérfanos de subidas fallidas.
- * El cliente se conserva. Primero la base de datos: si luego fallara el almacenamiento solo
- * quedarían archivos huérfanos, nunca una póliza apuntando a archivos inexistentes.
+ * El cliente se conserva. Los archivos se listan mientras la póliza existe (las políticas de
+ * Storage solo muestran archivos de pólizas vigentes de la agencia) y se borran después de la
+ * base de datos: si fallara el almacenamiento solo quedarían archivos huérfanos, nunca una
+ * póliza apuntando a archivos inexistentes.
  */
 export async function eliminarPoliza(polizaId: string, confirmacion: string): Promise<EliminarPolizaResultado> {
   const user = await getCurrentUser();
@@ -78,6 +80,14 @@ export async function eliminarPoliza(polizaId: string, confirmacion: string): Pr
   // La confirmación también se valida aquí: el navegador no es de fiar.
   if (typeof confirmacion !== "string" || confirmacion.trim().toUpperCase() !== poliza.numeroImpreso.toUpperCase()) {
     return { ok: false, error: "El número escrito no coincide con el de la póliza." };
+  }
+
+  const almacen = getAlmacen();
+  let archivos: string[] | null = null;
+  try {
+    archivos = await almacen.listarCarpeta(`${polizaId}/`);
+  } catch (e) {
+    console.error("[eliminarPoliza] no se listaron los archivos", polizaId, e);
   }
 
   await db.$transaction(async (tx) => {
@@ -97,7 +107,9 @@ export async function eliminarPoliza(polizaId: string, confirmacion: string): Pr
   let archivosBorrados = 0;
   let avisoAlmacen: string | undefined;
   try {
-    archivosBorrados = await getAlmacen().eliminarCarpeta(`${polizaId}/`);
+    if (!archivos) throw new Error("No se pudo listar la carpeta.");
+    await almacen.eliminar(archivos);
+    archivosBorrados = archivos.length;
   } catch (e) {
     console.error("[eliminarPoliza] no se borraron los archivos", polizaId, e);
     avisoAlmacen = "La póliza se eliminó, pero no se pudieron borrar sus archivos del almacenamiento.";

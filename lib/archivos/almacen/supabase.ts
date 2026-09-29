@@ -51,17 +51,11 @@ export function crearAlmacenSupabase(): Almacen {
       if (error) throw new Error(`No se pudo borrar en Storage: ${error.message}`);
     },
 
-    async eliminarCarpeta(prefijo) {
+    async listarCarpeta(prefijo) {
       const carpeta = prefijo.replace(/\/$/, "");
-      const bucket = await storage();
-      const { data, error } = await bucket.list(carpeta, { limit: 1000 });
+      const { data, error } = await (await storage()).list(carpeta, { limit: 1000 });
       if (error) throw new Error(`No se pudo listar ${carpeta}: ${error.message}`);
-      const claves = (data ?? []).map((f) => `${carpeta}/${f.name}`);
-      if (claves.length > 0) {
-        const { error: errorBorrado } = await bucket.remove(claves);
-        if (errorBorrado) throw new Error(`No se pudo borrar en Storage: ${errorBorrado.message}`);
-      }
-      return claves.length;
+      return (data ?? []).map((f) => `${carpeta}/${f.name}`);
     },
 
     async urlDescarga(clave, opciones) {

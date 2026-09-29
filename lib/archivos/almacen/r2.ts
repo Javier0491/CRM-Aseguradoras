@@ -47,29 +47,26 @@ export function crearAlmacenR2(): Almacen {
     },
 
     async eliminar(claves) {
-      if (claves.length === 0) return;
-      await s3.send(
-        new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: claves.map((Key) => ({ Key })), Quiet: true } })
-      );
+      // DeleteObjects acepta hasta 1000 claves por solicitud.
+      for (let i = 0; i < claves.length; i += 1000) {
+        const lote = claves.slice(i, i + 1000);
+        await s3.send(
+          new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: lote.map((Key) => ({ Key })), Quiet: true } })
+        );
+      }
     },
 
-    async eliminarCarpeta(prefijo) {
-      let total = 0;
+    async listarCarpeta(prefijo) {
+      const claves: string[] = [];
       let token: string | undefined;
       do {
         const lista = await s3.send(
           new ListObjectsV2Command({ Bucket: bucket, Prefix: prefijo, ContinuationToken: token })
         );
-        const claves = (lista.Contents ?? []).map((o) => o.Key).filter((k): k is string => Boolean(k));
-        if (claves.length > 0) {
-          await s3.send(
-            new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: claves.map((Key) => ({ Key })), Quiet: true } })
-          );
-          total += claves.length;
-        }
+        claves.push(...(lista.Contents ?? []).map((o) => o.Key).filter((k): k is string => Boolean(k)));
         token = lista.IsTruncated ? lista.NextContinuationToken : undefined;
       } while (token);
-      return total;
+      return claves;
     },
 
     urlDescarga: generarUrlLectura,

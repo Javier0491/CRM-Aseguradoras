@@ -17,8 +17,12 @@ export interface Almacen {
   /** Primeros `n` bytes del objeto (para verificar su firma real), o null si no existe. */
   leerInicio(clave: string, n: number): Promise<Uint8Array | null>;
   eliminar(claves: string[]): Promise<void>;
-  /** Borra todos los objetos bajo `prefijo` (p. ej. "{polizaId}/"); devuelve cuántos borró. */
-  eliminarCarpeta(prefijo: string): Promise<number>;
+  /**
+   * Claves de todos los objetos bajo `prefijo` (p. ej. "{polizaId}/"). Se lista antes de borrar
+   * la póliza: en Supabase, las políticas del bucket solo dejan ver archivos de pólizas de la
+   * agencia que todavía existen.
+   */
+  listarCarpeta(prefijo: string): Promise<string[]>;
   /** URL firmada de lectura de corta vigencia; con `descargarComo`, fuerza la descarga con ese nombre. */
   urlDescarga(clave: string, opciones?: { descargarComo?: string }): Promise<string>;
 }
