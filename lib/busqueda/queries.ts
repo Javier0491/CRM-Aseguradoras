@@ -18,20 +18,23 @@ const POR_TIPO = 5;
  * Búsqueda global del encabezado: clientes (nombre, RFC, teléfono o correo), pólizas (número,
  * póliza vigor o nombre del cliente) y recibos (folio de la aseguradora).
  */
-export async function buscarGlobal(q: string): Promise<ResultadoBusqueda[]> {
+export async function buscarGlobal(agenciaId: string, q: string): Promise<ResultadoBusqueda[]> {
   const texto = q.trim().slice(0, 60);
   if (texto.length < 2) return [];
   const contiene = { contains: texto, mode: "insensitive" as const };
 
   const [clientes, polizas, recibos] = await Promise.all([
     db.cliente.findMany({
-      where: { OR: [{ nombre: contiene }, { rfc: contiene }, { telefono: contiene }, { email: contiene }] },
+      where: { agenciaId, OR: [{ nombre: contiene }, { rfc: contiene }, { telefono: contiene }, { email: contiene }] },
       orderBy: { nombre: "asc" },
       take: POR_TIPO,
       select: { id: true, nombre: true, rfc: true, _count: { select: { polizas: true } } },
     }),
     db.poliza.findMany({
-      where: { OR: [{ numeroImpreso: contiene }, { polizaVigor: contiene }, { cliente: { nombre: contiene } }] },
+      where: {
+        agenciaId,
+        OR: [{ numeroImpreso: contiene }, { polizaVigor: contiene }, { cliente: { nombre: contiene } }],
+      },
       orderBy: { vigencia_fin: "desc" },
       take: POR_TIPO,
       select: {
@@ -42,7 +45,7 @@ export async function buscarGlobal(q: string): Promise<ResultadoBusqueda[]> {
       },
     }),
     db.recibo.findMany({
-      where: { folio: contiene },
+      where: { agenciaId, folio: contiene },
       take: POR_TIPO,
       select: {
         id: true,
@@ -85,13 +88,13 @@ export type Aviso = { clave: string; titulo: string; detalle: string; cantidad: 
  * Avisos de la campana: pólizas por vencer, recibos vencidos sin cobrar y (solo ADMIN)
  * diferencias de comisión por aclarar. Solo los que tienen algo pendiente.
  */
-export async function getAvisos({ esAdmin }: { esAdmin: boolean }): Promise<Aviso[]> {
+export async function getAvisos(agenciaId: string, { esAdmin }: { esAdmin: boolean }): Promise<Aviso[]> {
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER * 86_400_000);
   const [porVencer, vencidos, aclarar] = await Promise.all([
-    db.poliza.count({ where: { vigencia_fin: { gte: hoy, lte: limite } } }),
-    db.recibo.count({ where: { estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } } }),
-    esAdmin ? db.recibo.count({ where: { estado: "PAGADO" } }) : Promise.resolve(0),
+    db.poliza.count({ where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } } }),
+    db.recibo.count({ where: { agenciaId, estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } } }),
+    esAdmin ? db.recibo.count({ where: { agenciaId, estado: "PAGADO" } }) : Promise.resolve(0),
   ]);
   const avisos: Aviso[] = [
     {

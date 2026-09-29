@@ -3,6 +3,7 @@ import "server-only";
 import { connection } from "next/server";
 
 import { type Rango } from "@/lib/dashboard/periodos";
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -13,20 +14,21 @@ export const DIAS_POR_VENCER_REPORTE = 30;
 export const LIMITE_POR_VENCER = 50;
 
 /**
- * Pólizas emitidas en el rango: las que inician vigencia en él (misma definición que el
- * dashboard). Sin rango ("Histórico") son todas.
+ * Pólizas de la agencia emitidas en el rango: las que inician vigencia en él (misma definición
+ * que el dashboard). Sin rango ("Histórico") son todas las de la agencia.
  */
-function whereEmision(rango: Rango | null): Prisma.PolizaWhereInput {
-  return rango ? { vigencia_inicio: { gte: rango.desde, lte: rango.hasta } } : {};
+function whereEmision(agenciaId: string, rango: Rango | null): Prisma.PolizaWhereInput {
+  return rango ? { agenciaId, vigencia_inicio: { gte: rango.desde, lte: rango.hasta } } : { agenciaId };
 }
 
 export async function getReportes(periodo: PeriodoReporte) {
   await connection();
+  const agenciaId = await getAgenciaId();
   const hoyIso = hoyISO();
   const hoy = new Date(`${hoyIso}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER_REPORTE * 86_400_000);
   const rango = rangoReporte(periodo, hoyIso);
-  const emitidas = whereEmision(rango);
+  const emitidas = whereEmision(agenciaId, rango);
 
   const [emision, porRamo, porAseguradora, aseguradoras, porVencer, resumenPorVencer] = await Promise.all([
     db.poliza.aggregate({
@@ -47,9 +49,9 @@ export async function getReportes(periodo: PeriodoReporte) {
       _count: { _all: true },
       _sum: { prima_total: true },
     }),
-    db.aseguradora.findMany({ select: { id: true, nombre: true, color_hex: true } }),
+    db.aseguradora.findMany({ where: { agenciaId }, select: { id: true, nombre: true, color_hex: true } }),
     db.poliza.findMany({
-      where: { vigencia_fin: { gte: hoy, lte: limite } },
+      where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } },
       orderBy: { vigencia_fin: "asc" },
       take: LIMITE_POR_VENCER,
       select: {
@@ -63,7 +65,7 @@ export async function getReportes(periodo: PeriodoReporte) {
       },
     }),
     db.poliza.aggregate({
-      where: { vigencia_fin: { gte: hoy, lte: limite } },
+      where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } },
       _count: { _all: true },
       _sum: { prima_total: true },
     }),
@@ -100,11 +102,11 @@ export async function getReportes(periodo: PeriodoReporte) {
   };
 }
 
-/** Pólizas que componen los números del reporte, para exportarlas a CSV. */
-export async function getPolizasReporte(periodo: PeriodoReporte) {
+/** Pólizas de la agencia que componen los números del reporte, para exportarlas a CSV. */
+export async function getPolizasReporte(agenciaId: string, periodo: PeriodoReporte) {
   await connection();
   const polizas = await db.poliza.findMany({
-    where: whereEmision(rangoReporte(periodo, hoyISO())),
+    where: whereEmision(agenciaId, rangoReporte(periodo, hoyISO())),
     orderBy: [{ vigencia_inicio: "asc" }, { numeroImpreso: "asc" }],
     select: {
       numeroImpreso: true,

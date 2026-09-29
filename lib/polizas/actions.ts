@@ -71,7 +71,7 @@ export async function eliminarPoliza(polizaId: string, confirmacion: string): Pr
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { ok: false, error: "Datos inválidos." };
 
   const poliza = await db.poliza.findUnique({
-    where: { id: polizaId },
+    where: { id: polizaId, agenciaId: user.agenciaId },
     select: { numeroImpreso: true, cliente: { select: { nombre: true } }, _count: { select: { recibos: true } } },
   });
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
@@ -81,7 +81,7 @@ export async function eliminarPoliza(polizaId: string, confirmacion: string): Pr
   }
 
   await db.$transaction(async (tx) => {
-    await tx.poliza.delete({ where: { id: polizaId } });
+    await tx.poliza.delete({ where: { id: polizaId, agenciaId: user.agenciaId } });
     await registrarBitacora(
       user,
       {
@@ -121,7 +121,7 @@ export async function actualizarPrimaNeta(polizaId: string, valor: string): Prom
     return { ok: false, error: "Datos inválidos." };
   }
   const poliza = await db.poliza.findUnique({
-    where: { id: polizaId },
+    where: { id: polizaId, agenciaId: user.agenciaId },
     select: { prima_total: true, prima_neta: true, numeroImpreso: true },
   });
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
@@ -131,7 +131,7 @@ export async function actualizarPrimaNeta(polizaId: string, valor: string): Prom
 
   const nueva = parseNumero(valor).toFixed(2);
   await db.$transaction(async (tx) => {
-    await tx.poliza.update({ where: { id: polizaId }, data: { prima_neta: nueva } });
+    await tx.poliza.update({ where: { id: polizaId, agenciaId: user.agenciaId }, data: { prima_neta: nueva } });
     await registrarBitacora(
       user,
       {

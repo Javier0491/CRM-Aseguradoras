@@ -3,6 +3,7 @@ import "server-only";
 import { connection } from "next/server";
 
 import type { PolizaFormInicial } from "@/components/captura/poliza-form";
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { ramoDesdeDb, seccionesPorRamo } from "@/lib/polizas/ramos";
 import { sumarMeses } from "@/lib/polizas/recibos";
@@ -12,8 +13,9 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 async function cargar(id: string) {
   if (!/^[a-z0-9]+$/i.test(id)) return null;
+  const agenciaId = await getAgenciaId();
   return db.poliza.findUnique({
-    where: { id },
+    where: { id, agenciaId },
     select: {
       id: true,
       numeroImpreso: true,
@@ -139,8 +141,10 @@ export async function getPolizaParaRenovar(id: string, { incluirComision }: { in
 /** Renovación ya capturada de una póliza: otra póliza de su cadena que empieza cuando termina. */
 export async function getRenovacion(poliza: { polizaVigor: string | null; aseguradora_id: string; vigencia_fin: Date }) {
   if (!poliza.polizaVigor) return null;
+  const agenciaId = await getAgenciaId();
   return db.poliza.findFirst({
     where: {
+      agenciaId,
       polizaVigor: poliza.polizaVigor,
       aseguradora_id: poliza.aseguradora_id,
       vigencia_inicio: { gte: poliza.vigencia_fin },

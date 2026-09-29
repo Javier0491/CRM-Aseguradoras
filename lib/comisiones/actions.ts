@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { getAdmin, getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import {
   claveRango,
@@ -66,11 +66,15 @@ function validar(raw: unknown): { ok: true; datos: EsquemaInput & { ramo: Ramo }
 
 const SIN_PERMISO = "Solo un administrador puede modificar la matriz de comisiones.";
 
-async function verificarAdmin(): Promise<ResultadoEsquema | null> {
-  if (await getAdmin()) return null;
+/** El administrador de la sesión (sus cambios son sobre la matriz de su agencia), o el error. */
+async function verificarAdmin(): Promise<{ admin: UsuarioSesion; error?: never } | { admin?: never; error: ResultadoEsquema }> {
+  const admin = await getAdmin();
+  if (admin) return { admin };
   return {
-    ok: false,
-    error: (await getCurrentUser()) ? SIN_PERMISO : "Tu sesión expiró. Vuelve a iniciar sesión.",
+    error: {
+      ok: false,
+      error: (await getCurrentUser()) ? SIN_PERMISO : "Tu sesión expiró. Vuelve a iniciar sesión.",
+    },
   };
 }
 
@@ -114,14 +118,18 @@ function conflictoDeRango(
 /** Crea o actualiza una regla de la matriz de comisiones. */
 export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquema> {
   const acceso = await verificarAdmin();
-  if (acceso) return acceso;
+  if (acceso.error) return acceso.error;
+  const { admin } = acceso;
+  const { agenciaId } = admin;
   const v = validar(raw);
   if (!v.ok) return v;
   const { id, aseguradoraId, ramo, anio, porcentaje, edadMinima, edadMaxima } = v.datos;
   const rango = { edadMinima, edadMaxima };
 
-  const admin = await getAdmin();
-  const aseguradora = await db.aseguradora.findUnique({ where: { id: aseguradoraId }, select: { id: true, nombre: true } });
+  const aseguradora = await db.aseguradora.findUnique({
+    where: { id: aseguradoraId, agenciaId },
+    select: { id: true, nombre: true },
+  });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe.", campo: "aseguradoraId" };
   const describir = (r: { ramo: string; anio_poliza: number; porcentaje: unknown; edad_minima: number | null; edad_maxima: number | null }) =>
     `${aseguradora.nombre} · ${r.ramo} · año ${r.anio_poliza}` +
@@ -129,6 +137,7 @@ export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquem
     ` · ${Number(r.porcentaje)}%`;
 
   const data = {
+    agenciaId,
     aseguradora_id: aseguradoraId,
     ramo,
     anio_poliza: anio,
@@ -142,19 +151,19 @@ export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquem
     const conflicto = await db.$transaction(
       async (tx) => {
         const otras = await tx.esquemaComision.findMany({
-          where: { aseguradora_id: aseguradoraId, ramo, ...(id ? { id: { not: id } } : {}) },
+          where: { agenciaId, aseguradora_id: aseguradoraId, ramo, ...(id ? { id: { not: id } } : {}) },
           select: { anio_poliza: true, edad_minima: true, edad_maxima: true },
         });
         const conflicto = conflictoDeRango(rango, anio, otras);
         if (conflicto) return conflicto;
         const anterior = id
           ? await tx.esquemaComision.findUnique({
-              where: { id },
+              where: { id, agenciaId },
               select: { ramo: true, anio_poliza: true, porcentaje: true, edad_minima: true, edad_maxima: true },
             })
           : null;
         const regla = id
-          ? await tx.esquemaComision.update({ where: { id }, data, select: { id: true } })
+          ? await tx.esquemaComision.update({ where: { id, agenciaId }, data, select: { id: true } })
           : await tx.esquemaComision.create({ data, select: { id: true } });
         await registrarBitacora(
           admin,
@@ -187,12 +196,12 @@ export async function guardarEsquema(raw: EsquemaInput): Promise<ResultadoEsquem
 
 export async function eliminarEsquema(id: string): Promise<ResultadoEsquema> {
   const acceso = await verificarAdmin();
-  if (acceso) return acceso;
+  if (acceso.error) return acceso.error;
+  const { admin } = acceso;
   if (typeof id !== "string" || !id) return { ok: false, error: "Datos inválidos." };
-  const admin = await getAdmin();
   await db.$transaction(async (tx) => {
     const regla = await tx.esquemaComision.findUnique({
-      where: { id },
+      where: { id, agenciaId: admin.agenciaId },
       select: {
         ramo: true,
         anio_poliza: true,
@@ -204,7 +213,7 @@ export async function eliminarEsquema(id: string): Promise<ResultadoEsquema> {
     });
     // Si otra persona ya la borró no es un error.
     if (!regla) return;
-    await tx.esquemaComision.delete({ where: { id } });
+    await tx.esquemaComision.delete({ where: { id, agenciaId: admin.agenciaId } });
     const rango = textoRangoEdad({ edadMinima: regla.edad_minima, edadMaxima: regla.edad_maxima });
     await registrarBitacora(
       admin,

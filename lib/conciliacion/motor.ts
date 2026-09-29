@@ -47,13 +47,14 @@ const cubreFecha = (p: { vigencia_inicio: Date; vigencia_fin: Date }, fecha: str
  *   recibo no, se propone crearlo ya conciliado ("auto_creado"). Solo cuando el renglón trae
  *   folio o número de recibo, para no duplicar recibos al reprocesar un archivo.
  */
-export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonly FilaEstado[]) {
+export async function cruzarEstadoDeCuenta(agenciaId: string, aseguradoraId: string, filas: readonly FilaEstado[]) {
   const vigores = [...new Set(filas.map((f) => extraerPolizaVigor(f.poliza)).filter(Boolean))];
   const impresos = [...new Set(filas.map((f) => f.poliza.trim().toUpperCase()).filter(Boolean))];
 
   const [polizas, esquemas] = await Promise.all([
     db.poliza.findMany({
       where: {
+        agenciaId,
         aseguradora_id: aseguradoraId,
         OR: [{ polizaVigor: { in: vigores } }, { numeroImpreso: { in: impresos } }],
       },
@@ -81,7 +82,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
       },
     }),
     db.esquemaComision.findMany({
-      where: { aseguradora_id: aseguradoraId },
+      where: { agenciaId, aseguradora_id: aseguradoraId },
       select: { ramo: true, anio_poliza: true, porcentaje: true, edad_minima: true, edad_maxima: true },
     }),
   ]);
@@ -97,7 +98,7 @@ export async function cruzarEstadoDeCuenta(aseguradoraId: string, filas: readonl
   const cadenas = vigoresCadena.length
     ? await db.poliza.groupBy({
         by: ["polizaVigor"],
-        where: { aseguradora_id: aseguradoraId, polizaVigor: { in: vigoresCadena } },
+        where: { agenciaId, aseguradora_id: aseguradoraId, polizaVigor: { in: vigoresCadena } },
         _min: { vigencia_inicio: true },
       })
     : [];
@@ -392,9 +393,10 @@ export async function aplicarResultados(
   {
     aseguradoraId,
     archivoNombre,
-    usuario = null,
-  }: { aseguradoraId: string; archivoNombre: string; usuario?: UsuarioSesion | null }
+    usuario,
+  }: { aseguradoraId: string; archivoNombre: string; usuario: UsuarioSesion }
 ) {
+  const { agenciaId } = usuario;
   const conciliar = resultados.filter((r) => r.estatus === "conciliado" && r.recibo);
   const pagar = resultados.filter((r) => r.estatus === "diferencia" && r.recibo);
   const crear = resultados.filter((r) => r.estatus === "auto_creado" && r.nuevoRecibo);
@@ -409,12 +411,12 @@ export async function aplicarResultados(
       const antes = new Map(
         (
           await tx.recibo.findMany({
-            where: { id: { in: [...conciliar, ...pagar].map((r) => r.recibo!.id) } },
+            where: { agenciaId, id: { in: [...conciliar, ...pagar].map((r) => r.recibo!.id) } },
             select: { id: true, estado: true, comision_pagada: true, folio: true, conciliado_at: true },
           })
         ).map((r) => [r.id, r])
       );
-      type Cambio = Omit<Prisma.LoteCambioCreateManyInput, "lote_id">;
+      type Cambio = Omit<Prisma.LoteCambioCreateManyInput, "lote_id" | "agenciaId">;
       const cambios: Cambio[] = [];
 
       let conciliados = 0;
@@ -427,7 +429,7 @@ export async function aplicarResultados(
         const previo = antes.get(r.recibo!.id);
         // El filtro por estado evita conciliar dos veces si otra persona lo hizo en paralelo.
         const { count } = await tx.recibo.updateMany({
-          where: { id: r.recibo!.id, estado: { not: "CONCILIADO" } },
+          where: { agenciaId, id: r.recibo!.id, estado: { not: "CONCILIADO" } },
           data: {
             estado,
             comision_pagada: r.comisionPagada.toFixed(2),
@@ -458,6 +460,7 @@ export async function aplicarResultados(
             data: crear.map((r) => {
               const n = r.nuevoRecibo!;
               return {
+                agenciaId,
                 poliza_id: n.polizaId,
                 numero: n.numero,
                 monto: n.monto,
@@ -489,9 +492,10 @@ export async function aplicarResultados(
 
       const lote = await tx.loteConciliacion.create({
         data: {
+          agenciaId,
           aseguradora_id: aseguradoraId,
-          usuario_id: usuario?.id ?? null,
-          usuario_email: usuario?.email ?? null,
+          usuario_id: usuario.id,
+          usuario_email: usuario.email,
           archivo_nombre: archivoNombre,
           renglones: resultados.length,
           conciliados,
@@ -501,7 +505,7 @@ export async function aplicarResultados(
         select: { id: true, aseguradora: { select: { nombre: true } } },
       });
       if (cambios.length) {
-        await tx.loteCambio.createMany({ data: cambios.map((c) => ({ ...c, lote_id: lote.id })) });
+        await tx.loteCambio.createMany({ data: cambios.map((c) => ({ ...c, agenciaId, lote_id: lote.id })) });
       }
       await registrarBitacora(
         usuario,
@@ -530,13 +534,14 @@ export class LoteNoReversibleError extends Error {}
  * después: otro lote posterior no revertido que tocó los mismos recibos, o un recibo que cambió
  * por una aclaración, bloquean la reversión para no pisar ese trabajo.
  */
-export async function revertirLote(loteId: string, usuario: UsuarioSesion | null) {
+export async function revertirLote(loteId: string, usuario: UsuarioSesion) {
+  const { agenciaId } = usuario;
   return db.$transaction(
     async (tx) => {
       const clave = `lote:${loteId}`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${clave}))`;
       const lote = await tx.loteConciliacion.findUnique({
-        where: { id: loteId },
+        where: { id: loteId, agenciaId },
         select: {
           id: true,
           created_at: true,
@@ -554,6 +559,7 @@ export async function revertirLote(loteId: string, usuario: UsuarioSesion | null
 
       const posteriores = await tx.loteCambio.findMany({
         where: {
+          agenciaId,
           recibo_id: { in: ids },
           lote_id: { not: lote.id },
           lote: { revertido_at: null, created_at: { gt: lote.created_at } },
@@ -572,7 +578,7 @@ export async function revertirLote(loteId: string, usuario: UsuarioSesion | null
       const actuales = new Map(
         (
           await tx.recibo.findMany({
-            where: { id: { in: ids } },
+            where: { agenciaId, id: { in: ids } },
             select: { id: true, estado: true, comision_pagada: true, auto_creado: true },
           })
         ).map((r) => [r.id, r])
@@ -596,11 +602,11 @@ export async function revertirLote(loteId: string, usuario: UsuarioSesion | null
         if (!r) continue; // Se borró por otra vía (p. ej. se eliminó la póliza).
         if (c.tipo === "creado") {
           if (!r.auto_creado) continue;
-          await tx.recibo.delete({ where: { id: c.recibo_id! } });
+          await tx.recibo.delete({ where: { id: c.recibo_id!, agenciaId } });
           borrados++;
         } else {
           await tx.recibo.update({
-            where: { id: c.recibo_id! },
+            where: { id: c.recibo_id!, agenciaId },
             data: {
               estado: c.estado_anterior ?? "PENDIENTE",
               comision_pagada: c.comision_anterior,
@@ -613,8 +619,8 @@ export async function revertirLote(loteId: string, usuario: UsuarioSesion | null
       }
 
       await tx.loteConciliacion.update({
-        where: { id: lote.id },
-        data: { revertido_at: new Date(), revertido_por: usuario?.email ?? null },
+        where: { id: lote.id, agenciaId },
+        data: { revertido_at: new Date(), revertido_por: usuario.email },
       });
       await registrarBitacora(
         usuario,

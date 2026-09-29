@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     if (!usuario.email) return error("Tu usuario no tiene un correo para recibir la prueba.", 400);
     destinatarios = [{ id: "prueba", nombre: "Cliente de prueba", email: usuario.email }];
   } else if (solicitud.destinatarios === "todos") {
-    destinatarios = await getDestinatarios();
+    destinatarios = await getDestinatarios(usuario.agenciaId);
   } else if (
     Array.isArray(solicitud.destinatarios) &&
     solicitud.destinatarios.every((id) => typeof id === "string")
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
     if (solicitud.destinatarios.length > MAX_DESTINATARIOS) {
       return error(`Se pueden enviar como máximo ${MAX_DESTINATARIOS} correos a la vez.`, 400);
     }
-    destinatarios = await getDestinatarios([...new Set(solicitud.destinatarios)]);
+    destinatarios = await getDestinatarios(usuario.agenciaId, [...new Set(solicitud.destinatarios)]);
   } else {
     return error("Destinatarios no válidos.", 400);
   }

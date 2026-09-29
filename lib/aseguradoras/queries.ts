@@ -2,6 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 
@@ -11,20 +12,22 @@ import { hoyISO } from "@/lib/format";
  */
 export async function getAseguradorasCatalogo() {
   await connection();
+  const agenciaId = await getAgenciaId();
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
 
   const [aseguradoras, activas, totales] = await Promise.all([
     db.aseguradora.findMany({
+      where: { agenciaId },
       orderBy: { nombre: "asc" },
       select: { id: true, nombre: true, color_hex: true, url_portal_cobranza: true, estado_api: true },
     }),
     db.poliza.groupBy({
       by: ["aseguradora_id"],
-      where: { vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } },
+      where: { agenciaId, vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } },
       _count: { _all: true },
       _sum: { prima_total: true },
     }),
-    db.poliza.groupBy({ by: ["aseguradora_id"], _count: { _all: true } }),
+    db.poliza.groupBy({ by: ["aseguradora_id"], where: { agenciaId }, _count: { _all: true } }),
   ]);
 
   const activasPor = new Map(activas.map((g) => [g.aseguradora_id, g]));

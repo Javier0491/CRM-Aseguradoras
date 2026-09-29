@@ -44,10 +44,8 @@ enum Rol {
 }
 
 // Broker o agencia cliente del SaaS: dueña de todos sus datos (tenant).
-// TEMPORAL: el agenciaId de cada tabla tiene como default la agencia inicial "PJ MAGNUS"
-// (00000000-0000-4000-8000-000000000001, lib/agencias/constantes.ts) para que el código que
-// aún no toma la agencia de la sesión siga funcionando. Se quitará cuando todas las
-// escrituras usen la agencia del usuario.
+// El agenciaId de cada tabla no tiene default: el código lo toma de la sesión
+// (UsuarioSesion.agenciaId) en cada consulta y escritura.
 model Agencia {
   id        String   @id @default(uuid()) @db.Uuid
   nombre    String
@@ -76,8 +74,8 @@ model Agencia {
 model Usuario {
   // Mismo id que auth.users en Supabase.
   id             String    @id
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId      String    @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId      String    @map("agencia_id") @db.Uuid
   agencia        Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   nombre         String
   email          String    @unique
@@ -94,8 +92,8 @@ model Usuario {
 
 model Cliente {
   id        String  @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId String  @map("agencia_id") @db.Uuid
   agencia   Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   nombre    String
   rfc       String
@@ -111,8 +109,8 @@ model Cliente {
 
 model Aseguradora {
   id                  String  @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId           String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId           String  @map("agencia_id") @db.Uuid
   agencia             Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   nombre              String
   color_hex           String
@@ -137,8 +135,8 @@ model Aseguradora {
 
 model Poliza {
   id                         String    @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId                  String    @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId                  String    @map("agencia_id") @db.Uuid
   agencia                    Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   // Lectura cruda del número tal como aparece en la carátula (lo captura el OCR).
   numeroImpreso              String    @map("numero_poliza_original")
@@ -202,8 +200,8 @@ model Poliza {
 
 model Recibo {
   id                String       @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId         String       @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId         String       @map("agencia_id") @db.Uuid
   agencia           Agencia      @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   poliza_id         String
   // Consecutivo del recibo dentro de la póliza (1..n).
@@ -237,8 +235,8 @@ model Recibo {
 // Personas aseguradas por la póliza (varias en GMM; en Autos o RC, solo el titular).
 model Asegurado {
   id               String  @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId        String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId        String  @map("agencia_id") @db.Uuid
   agencia          Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   poliza_id        String
   // Posición en la lista de la carátula.
@@ -270,8 +268,8 @@ model Asegurado {
 // lib/comisiones/actions.ts, porque un índice único trataría los NULL como distintos.
 model EsquemaComision {
   id             String  @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId      String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId      String  @map("agencia_id") @db.Uuid
   agencia        Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   aseguradora_id String
   ramo           Ramo
@@ -292,8 +290,8 @@ model EsquemaComision {
 // Guarda el correo además del id para seguir siendo legible si la cuenta se desactiva.
 model Bitacora {
   id            String   @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId     String   @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId     String   @map("agencia_id") @db.Uuid
   agencia       Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   created_at    DateTime @default(now())
   usuario_id    String?
@@ -316,8 +314,8 @@ model Bitacora {
 // Cada "Aplicar conciliación" es un lote: se puede revertir si se subió el archivo equivocado.
 model LoteConciliacion {
   id             String    @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId      String    @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId      String    @map("agencia_id") @db.Uuid
   agencia        Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   created_at     DateTime  @default(now())
   aseguradora_id String
@@ -342,8 +340,8 @@ model LoteConciliacion {
 // Qué le hizo un lote a cada recibo, con el estado anterior para poder revertirlo.
 model LoteCambio {
   id            String  @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId     String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId     String  @map("agencia_id") @db.Uuid
   agencia       Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   lote_id       String
   // Null si el recibo ya no existe (p. ej. se eliminó su póliza).
@@ -373,8 +371,8 @@ model LoteCambio {
 // Seguimiento de un recibo PAGADO con diferencia de comisión: reclamos, notas y cierre.
 model NotaAclaracion {
   id            String   @id @default(cuid())
-  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
-  agenciaId     String   @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId     String   @map("agencia_id") @db.Uuid
   agencia       Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   created_at    DateTime @default(now())
   recibo_id     String

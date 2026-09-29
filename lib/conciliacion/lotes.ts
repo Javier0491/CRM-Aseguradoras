@@ -2,6 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 
 export const LIMITE_LOTES = 20;
@@ -9,7 +10,9 @@ export const LIMITE_LOTES = 20;
 /** Últimos lotes de conciliación aplicados, con lo que cambió cada uno. */
 export async function getLotes() {
   await connection();
+  const agenciaId = await getAgenciaId();
   const lotes = await db.loteConciliacion.findMany({
+    where: { agenciaId },
     orderBy: { created_at: "desc" },
     take: LIMITE_LOTES,
     select: {

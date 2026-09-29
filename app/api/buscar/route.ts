@@ -3,7 +3,8 @@ import { buscarGlobal } from "@/lib/busqueda/queries";
 
 /** GET /api/buscar?q=… — resultados del buscador del encabezado. */
 export async function GET(request: Request) {
-  if (!(await getCurrentUser())) return Response.json({ resultados: [] }, { status: 401 });
+  const user = await getCurrentUser();
+  if (!user) return Response.json({ resultados: [] }, { status: 401 });
   const q = new URL(request.url).searchParams.get("q") ?? "";
-  return Response.json({ resultados: await buscarGlobal(q) });
+  return Response.json({ resultados: await buscarGlobal(user.agenciaId, q) });
 }

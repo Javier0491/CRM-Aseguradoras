@@ -41,7 +41,10 @@ export type Esperada =
  * Comisión esperada de varios recibos con la misma regla que la conciliación: (prima neta ÷
  * número de recibos) × % personalizado o de la matriz (aseguradora, ramo, año y edad).
  */
-export async function comisionesEsperadas(recibos: readonly ReciboEsperada[]): Promise<Map<string, Esperada>> {
+export async function comisionesEsperadas(
+  agenciaId: string,
+  recibos: readonly ReciboEsperada[]
+): Promise<Map<string, Esperada>> {
   const resultado = new Map<string, Esperada>();
   if (recibos.length === 0) return resultado;
 
@@ -49,13 +52,13 @@ export async function comisionesEsperadas(recibos: readonly ReciboEsperada[]): P
   const vigores = [...new Set(recibos.map((r) => r.poliza.polizaVigor).filter((v): v is string => Boolean(v)))];
   const [esquemas, cadenas] = await Promise.all([
     db.esquemaComision.findMany({
-      where: { aseguradora_id: { in: aseguradoras } },
+      where: { agenciaId, aseguradora_id: { in: aseguradoras } },
       select: { aseguradora_id: true, ramo: true, anio_poliza: true, porcentaje: true, edad_minima: true, edad_maxima: true },
     }),
     vigores.length
       ? db.poliza.groupBy({
           by: ["aseguradora_id", "polizaVigor"],
-          where: { polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
+          where: { agenciaId, polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
           _min: { vigencia_inicio: true },
         })
       : Promise.resolve([]),

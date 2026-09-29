@@ -56,6 +56,7 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
   if (!supabase) {
     return { ok: false, error: "Falta SUPABASE_SECRET_KEY en el servidor para poder crear cuentas." };
   }
+  // El correo es único en todo el SaaS (una cuenta de Supabase Auth pertenece a una sola agencia).
   const existente = await db.usuario.findUnique({ where: { email }, select: { activo: true } });
   if (existente) {
     return {
@@ -116,9 +117,12 @@ export type ResultadoEdicion = { ok: true } | { ok: false; error: string; campo?
 
 class ReglaUsuarioError extends Error {}
 
-/** Sin otro administrador activo nadie podría volver a entrar a Usuarios ni a la configuración. */
-async function verificarOtroAdmin(tx: Prisma.TransactionClient, excepto: string, accion: string) {
-  const otros = await tx.usuario.count({ where: { rol: "ADMIN", activo: true, id: { not: excepto } } });
+/**
+ * Sin otro administrador activo en la agencia nadie podría volver a entrar a Usuarios ni a la
+ * configuración.
+ */
+async function verificarOtroAdmin(tx: Prisma.TransactionClient, agenciaId: string, excepto: string, accion: string) {
+  const otros = await tx.usuario.count({ where: { agenciaId, rol: "ADMIN", activo: true, id: { not: excepto } } });
   if (otros === 0) throw new ReglaUsuarioError(`No se puede ${accion}: es el único administrador activo.`);
 }
 
@@ -155,13 +159,13 @@ export async function actualizarUsuario(raw: EdicionUsuarioInput): Promise<Resul
     await db.$transaction(
       async (tx) => {
         const actual = await tx.usuario.findUniqueOrThrow({
-          where: { id: raw.id },
+          where: { id: raw.id, agenciaId: admin.agenciaId },
           select: { rol: true, activo: true, nombre: true, email: true },
         });
         if (actual.rol === "ADMIN" && rol !== "ADMIN" && actual.activo) {
-          await verificarOtroAdmin(tx, raw.id, "quitarle el rol de administrador");
+          await verificarOtroAdmin(tx, admin.agenciaId, raw.id, "quitarle el rol de administrador");
         }
-        await tx.usuario.update({ where: { id: raw.id }, data: { nombre, rol } });
+        await tx.usuario.update({ where: { id: raw.id, agenciaId: admin.agenciaId }, data: { nombre, rol } });
         const cambios = [
           actual.nombre !== nombre && `nombre «${actual.nombre}» → «${nombre}»`,
           actual.rol !== rol && `rol ${actual.rol} → ${rol}`,
@@ -206,10 +210,13 @@ export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise
   try {
     email = await db.$transaction(
       async (tx) => {
-        const actual = await tx.usuario.findUniqueOrThrow({ where: { id }, select: { rol: true, email: true } });
-        if (!activo && actual.rol === "ADMIN") await verificarOtroAdmin(tx, id, "desactivarlo");
+        const actual = await tx.usuario.findUniqueOrThrow({
+          where: { id, agenciaId: admin.agenciaId },
+          select: { rol: true, email: true },
+        });
+        if (!activo && actual.rol === "ADMIN") await verificarOtroAdmin(tx, admin.agenciaId, id, "desactivarlo");
         await tx.usuario.update({
-          where: { id },
+          where: { id, agenciaId: admin.agenciaId },
           data: { activo, desactivado_at: activo ? null : new Date() },
         });
         return actual.email;
@@ -226,7 +233,7 @@ export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise
   if (error) {
     // Sin el bloqueo en Supabase el estado quedaría a medias: se revierte el cambio.
     await db.usuario.update({
-      where: { id },
+      where: { id, agenciaId: admin.agenciaId },
       data: { activo: !activo, desactivado_at: activo ? new Date() : null },
     });
     console.error("[cambiarEstadoUsuario] Supabase Auth:", error.code, error.message);

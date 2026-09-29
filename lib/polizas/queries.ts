@@ -2,6 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import type { Prisma, Ramo } from "@/lib/generated/prisma/client";
@@ -11,7 +12,9 @@ export const LIMITE_LISTADO = 200;
 
 export async function getAseguradorasOpciones(): Promise<Opcion[]> {
   await connection();
+  const agenciaId = await getAgenciaId();
   const rows = await db.aseguradora.findMany({
+    where: { agenciaId },
     select: { id: true, nombre: true },
     orderBy: { nombre: "asc" },
   });
@@ -29,10 +32,12 @@ export type FiltrosPolizas = {
 
 export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
   await connection();
+  const agenciaId = await getAgenciaId();
   const q = filtros.q?.trim().slice(0, 100);
   const contiene = (valor: string) => ({ contains: valor, mode: "insensitive" as const });
 
   const where: Prisma.PolizaWhereInput = {
+    agenciaId,
     ...(filtros.ramo && { ramo: filtros.ramo }),
     ...(q && {
       OR: [
@@ -75,16 +80,18 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
       },
     }),
     db.poliza.count({ where }),
-    db.poliza.count(),
-    db.poliza.count({ where: { vigencia_fin: { gte: hoy, lte: limite } } }),
+    db.poliza.count({ where: { agenciaId } }),
+    db.poliza.count({ where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } } }),
   ]);
   return { polizas, total, totalGeneral, porVencer };
 }
 
 export async function getRecibosListado() {
   await connection();
+  const agenciaId = await getAgenciaId();
   const [recibos, total, pendientes] = await Promise.all([
     db.recibo.findMany({
+      where: { agenciaId },
       orderBy: [{ fecha_vencimiento: "asc" }, { numero: "asc" }],
       take: LIMITE_LISTADO,
       select: {
@@ -104,9 +111,9 @@ export async function getRecibosListado() {
         },
       },
     }),
-    db.recibo.count(),
+    db.recibo.count({ where: { agenciaId } }),
     db.recibo.aggregate({
-      where: { estado: "PENDIENTE" },
+      where: { agenciaId, estado: "PENDIENTE" },
       _count: true,
       _sum: { monto: true },
     }),
@@ -120,8 +127,9 @@ export async function getRecibosListado() {
 
 export async function getPolizaDetalle(id: string) {
   await connection();
+  const agenciaId = await getAgenciaId();
   return db.poliza.findUnique({
-    where: { id },
+    where: { id, agenciaId },
     select: {
       id: true,
       numeroImpreso: true,

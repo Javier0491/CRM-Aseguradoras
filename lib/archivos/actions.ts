@@ -41,7 +41,8 @@ export async function prepararSubida(
   tipo: TipoArchivo,
   bytes: number
 ): Promise<PrepararSubidaResultado> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESION_EXPIRADA };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESION_EXPIRADA };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || !esTipoArchivo(tipo)) {
     return { ok: false, error: "Datos inválidos." };
   }
@@ -49,7 +50,7 @@ export async function prepararSubida(
   if (typeof bytes !== "number" || !Number.isInteger(bytes) || bytes <= 0 || bytes > def.maxBytes) {
     return { ok: false, error: "El archivo está vacío o excede el tamaño permitido." };
   }
-  const existe = await db.poliza.findUnique({ where: { id: polizaId }, select: { id: true } });
+  const existe = await db.poliza.findUnique({ where: { id: polizaId, agenciaId: user.agenciaId }, select: { id: true } });
   if (!existe) return { ok: false, error: "La póliza no existe." };
 
   // Clave nueva en cada subida: nunca se sobrescribe un archivo existente.
@@ -74,7 +75,8 @@ export async function vincularArchivo(
   path: string,
   nombreOriginal: string
 ): Promise<VincularArchivoResultado> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESION_EXPIRADA };
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESION_EXPIRADA };
   if (
     typeof polizaId !== "string" ||
     typeof path !== "string" ||
@@ -85,7 +87,7 @@ export async function vincularArchivo(
   }
 
   const poliza = await db.poliza.findUnique({
-    where: { id: polizaId },
+    where: { id: polizaId, agenciaId: user.agenciaId },
     select: { caratula_path: true, negociacion_path: true, expediente_path: true },
   });
   if (!poliza) return { ok: false, error: "La póliza no existe." };
@@ -108,7 +110,7 @@ export async function vincularArchivo(
     `${tipo}.${def.extension}`;
 
   await db.poliza.update({
-    where: { id: polizaId },
+    where: { id: polizaId, agenciaId: user.agenciaId },
     data: camposPoliza(tipo, { path, nombre, bytes: info.bytes, subido: new Date() }),
   });
 

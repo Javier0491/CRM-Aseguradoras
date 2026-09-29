@@ -2,7 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import type { UsuarioSesion } from "@/lib/auth/dal";
+import { getAgenciaId, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { comisionesEsperadas, SELECT_RECIBO_ESPERADA } from "@/lib/conciliacion/esperada";
 import { TOLERANCIA_MXN, type TipoNota } from "@/lib/conciliacion/tipos";
@@ -17,8 +17,9 @@ export type Seguimiento = "por_aclarar" | "reclamada";
  */
 export async function getAclaraciones() {
   await connection();
+  const agenciaId = await getAgenciaId();
   const recibos = await db.recibo.findMany({
-    where: { estado: "PAGADO" },
+    where: { agenciaId, estado: "PAGADO" },
     orderBy: { fecha_vencimiento: "asc" },
     select: {
       ...SELECT_RECIBO_ESPERADA,
@@ -39,7 +40,7 @@ export async function getAclaraciones() {
       },
     },
   });
-  const esperadas = await comisionesEsperadas(recibos);
+  const esperadas = await comisionesEsperadas(agenciaId, recibos);
 
   return recibos.map((r) => {
     const e = esperadas.get(r.id);
@@ -72,7 +73,8 @@ export type Aclaracion = Awaited<ReturnType<typeof getAclaraciones>>[number];
 
 /** Cuántos recibos hay por aclarar (para avisos). */
 export async function contarAclaraciones() {
-  return db.recibo.count({ where: { estado: "PAGADO" } });
+  const agenciaId = await getAgenciaId();
+  return db.recibo.count({ where: { agenciaId, estado: "PAGADO" } });
 }
 
 export class AclaracionError extends Error {}
@@ -92,11 +94,12 @@ const ETIQUETA_NOTA: Record<TipoNota, string> = {
 export async function registrarSeguimiento(
   reciboId: string,
   { tipo, texto, monto }: { tipo: TipoNota; texto: string; monto: number | null },
-  usuario: UsuarioSesion | null
+  usuario: UsuarioSesion
 ) {
+  const { agenciaId } = usuario;
   return db.$transaction(async (tx) => {
     const recibo = await tx.recibo.findUnique({
-      where: { id: reciboId },
+      where: { id: reciboId, agenciaId },
       select: {
         ...SELECT_RECIBO_ESPERADA,
         estado: true,
@@ -110,11 +113,11 @@ export async function registrarSeguimiento(
     let conciliado = tipo === "aceptada";
     const pagada = Math.round((Number(recibo.comision_pagada ?? 0) + (monto ?? 0)) * 100) / 100;
     if (monto !== null) {
-      const esperada = (await comisionesEsperadas([recibo])).get(recibo.id);
+      const esperada = (await comisionesEsperadas(agenciaId, [recibo])).get(recibo.id);
       conciliado = esperada?.esperada != null && Math.abs(pagada - esperada.esperada) <= TOLERANCIA_MXN;
     }
     await tx.recibo.update({
-      where: { id: reciboId },
+      where: { id: reciboId, agenciaId },
       data: {
         ...(monto !== null && { comision_pagada: pagada.toFixed(2) }),
         ...(conciliado && { estado: "CONCILIADO", conciliado_at: new Date() }),
@@ -122,8 +125,9 @@ export async function registrarSeguimiento(
     });
     await tx.notaAclaracion.create({
       data: {
+        agenciaId,
         recibo_id: reciboId,
-        usuario_email: usuario?.email ?? null,
+        usuario_email: usuario.email,
         tipo,
         texto,
         ...(monto !== null && { monto: monto.toFixed(2) }),

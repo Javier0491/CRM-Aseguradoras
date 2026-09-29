@@ -5,5 +5,5 @@ import { getAvisos } from "@/lib/busqueda/queries";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return Response.json({ avisos: [] }, { status: 401 });
-  return Response.json({ avisos: await getAvisos({ esAdmin: esAdmin(user) }) });
+  return Response.json({ avisos: await getAvisos(user.agenciaId, { esAdmin: esAdmin(user) }) });
 }

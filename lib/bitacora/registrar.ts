@@ -34,18 +34,19 @@ export type EntradaBitacora = {
 };
 
 /**
- * Registra una acción en la bitácora. Pasa el cliente de la transacción (`tx`) cuando la
+ * Registra una acción en la bitácora de la agencia del usuario. Pasa el cliente de la transacción (`tx`) cuando la
  * acción es parte de una: así el registro y el cambio se guardan o se descartan juntos.
  */
 export async function registrarBitacora(
-  usuario: Pick<UsuarioSesion, "id" | "email"> | null,
+  usuario: Pick<UsuarioSesion, "id" | "email" | "agenciaId">,
   entrada: EntradaBitacora,
   tx: Prisma.TransactionClient = db
 ) {
   await tx.bitacora.create({
     data: {
-      usuario_id: usuario?.id ?? null,
-      usuario_email: usuario?.email ?? null,
+      agenciaId: usuario.agenciaId,
+      usuario_id: usuario.id,
+      usuario_email: usuario.email,
       accion: entrada.accion,
       entidad: entrada.entidad,
       entidad_id: entrada.entidadId ?? null,

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { getAdmin, getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
 import { AclaracionError, registrarSeguimiento } from "@/lib/conciliacion/aclaraciones";
 import { agruparPorFolio } from "@/lib/conciliacion/agrupar";
 import {
@@ -54,28 +54,35 @@ function sanitizarFilas(raw: unknown): FilaEstado[] | null {
   return filas;
 }
 
-type Validacion = { ok: true; aseguradoraId: string; filas: FilaEstado[] } | { ok: false; error: string };
+type Validacion =
+  | { ok: true; admin: UsuarioSesion; aseguradoraId: string; filas: FilaEstado[] }
+  | { ok: false; error: string };
 
 async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Validacion> {
-  if (!(await getAdmin())) {
+  const admin = await getAdmin();
+  if (!admin) {
     return (await getCurrentUser())
       ? { ok: false, error: "Solo un administrador puede conciliar comisiones." }
       : { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
   if (typeof aseguradoraId !== "string") return { ok: false, error: "Selecciona la aseguradora." };
-  const aseguradora = await db.aseguradora.findUnique({ where: { id: aseguradoraId }, select: { id: true } });
+  // Solo aseguradoras de la agencia del administrador.
+  const aseguradora = await db.aseguradora.findUnique({
+    where: { id: aseguradoraId, agenciaId: admin.agenciaId },
+    select: { id: true },
+  });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe." };
   const filas = sanitizarFilas(rawFilas);
   if (!filas) return { ok: false, error: `El archivo no tiene renglones válidos (máximo ${MAX_FILAS_ESTADO}).` };
   // El navegador ya agrupa los folios repetidos; se repite aquí porque no se confía en él.
-  return { ok: true, aseguradoraId: aseguradora.id, filas: agruparPorFolio(filas).filas };
+  return { ok: true, admin, aseguradoraId: aseguradora.id, filas: agruparPorFolio(filas).filas };
 }
 
 /** Cruza el estado de cuenta contra la base de datos sin modificar nada. */
 export async function analizarConciliacion(aseguradoraId: string, filas: FilaEstado[]): Promise<AnalisisResultado> {
   const v = await validar(aseguradoraId, filas);
   if (!v.ok) return { ok: false, error: v.error };
-  const { resultados, resumen } = await cruzarEstadoDeCuenta(v.aseguradoraId, v.filas);
+  const { resultados, resumen } = await cruzarEstadoDeCuenta(v.admin.agenciaId, v.aseguradoraId, v.filas);
   return { ok: true, resultados, resumen };
 }
 
@@ -98,12 +105,12 @@ export async function aplicarConciliacion(
   if (!v.ok) return { ok: false, error: v.error };
   const nombre = typeof archivoNombre === "string" && archivoNombre.trim() ? archivoNombre.trim().slice(0, 200) : "archivo sin nombre";
 
-  const { resultados } = await cruzarEstadoDeCuenta(v.aseguradoraId, v.filas);
+  const { resultados } = await cruzarEstadoDeCuenta(v.admin.agenciaId, v.aseguradoraId, v.filas);
   try {
     const { loteId, conciliados, pagados, creados } = await aplicarResultados(resultados, {
       aseguradoraId: v.aseguradoraId,
       archivoNombre: nombre,
-      usuario: await getAdmin(),
+      usuario: v.admin,
     });
 
     revalidarCobranza();

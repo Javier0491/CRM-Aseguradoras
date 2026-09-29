@@ -11,7 +11,8 @@ import { db } from "@/lib/db";
  * `?descargar=1`; el expediente ZIP siempre se descarga.
  */
 export async function GET(req: NextRequest, ctx: RouteContext<"/polizas/[id]/archivos/[tipo]">) {
-  if (!(await getCurrentUser())) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }
 
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/polizas/[id]/arc
   }
 
   const poliza = await db.poliza.findUnique({
-    where: { id },
+    where: { id, agenciaId: user.agenciaId },
     select: {
       caratula_path: true,
       caratula_nombre: true,

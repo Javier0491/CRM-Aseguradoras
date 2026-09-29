@@ -66,7 +66,8 @@ function errorDeExtraccion(e: unknown) {
  * (ver CONTEXTOS_OCR). La IA cruza todos los documentos y devuelve una sola extracción.
  */
 export async function POST(request: Request) {
-  if (!(await getCurrentUser())) return error("No autenticado.", 401);
+  const user = await getCurrentUser();
+  if (!user) return error("No autenticado.", 401);
 
   let formData: FormData;
   try {
@@ -106,9 +107,13 @@ export async function POST(request: Request) {
 
   try {
     const extractor = getExtractor();
-    // La IA solo puede elegir entre las aseguradoras registradas.
+    // La IA solo puede elegir entre las aseguradoras registradas en la agencia.
     const aseguradoras = (
-      await db.aseguradora.findMany({ select: { nombre: true }, orderBy: { nombre: "asc" } })
+      await db.aseguradora.findMany({
+        where: { agenciaId: user.agenciaId },
+        select: { nombre: true },
+        orderBy: { nombre: "asc" },
+      })
     ).map((a) => a.nombre);
 
     const datos = await extractor.extraer(archivos, aseguradoras, contexto as ContextoOcr | undefined);

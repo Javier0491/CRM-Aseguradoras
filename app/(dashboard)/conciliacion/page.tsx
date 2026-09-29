@@ -16,10 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function ConciliacionPage() {
-  await requireAdmin();
+  const { agenciaId } = await requireAdmin();
   const [aseguradoras, conEsquema, lotes, aclaraciones] = await Promise.all([
     getAseguradorasOpciones(),
-    db.esquemaComision.findMany({ distinct: ["aseguradora_id"], select: { aseguradora_id: true } }),
+    db.esquemaComision.findMany({ where: { agenciaId }, distinct: ["aseguradora_id"], select: { aseguradora_id: true } }),
     getLotes(),
     contarAclaraciones(),
   ]);

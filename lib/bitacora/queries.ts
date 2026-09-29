@@ -2,6 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -22,8 +23,10 @@ export const esEntidadBitacora = (v: unknown): v is EntidadBitacora =>
 /** Movimientos más recientes; `q` busca en la descripción y en el correo de quien lo hizo. */
 export async function getBitacora({ q = "", entidad }: { q?: string; entidad?: EntidadBitacora }) {
   await connection();
+  const agenciaId = await getAgenciaId();
   const texto = q.trim().slice(0, 100);
   const where: Prisma.BitacoraWhereInput = {
+    agenciaId,
     ...(entidad && { entidad }),
     ...(texto && {
       OR: [

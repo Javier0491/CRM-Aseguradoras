@@ -12,10 +12,11 @@ export const metadata: Metadata = {
 };
 
 export default async function MatrizComisionesPage() {
-  await requireAdmin();
+  const { agenciaId } = await requireAdmin();
   const [aseguradoras, esquemas] = await Promise.all([
     getAseguradorasOpciones(),
     db.esquemaComision.findMany({
+      where: { agenciaId },
       orderBy: [
         { aseguradora: { nombre: "asc" } },
         { ramo: "asc" },

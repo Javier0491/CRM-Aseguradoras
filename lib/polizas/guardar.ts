@@ -122,6 +122,7 @@ function columnasPoliza(input: PolizaInput, g: Valores) {
  */
 async function obtenerCliente(
   tx: Prisma.TransactionClient,
+  agenciaId: string,
   g: Valores,
   { actualizarContacto }: { actualizarContacto: "completar" | "reemplazar" }
 ) {
@@ -131,19 +132,19 @@ async function obtenerCliente(
   const email = g.email.trim().toLowerCase();
   const generico = RFC_GENERICOS.has(rfc);
   const claveCliente = generico ? `${rfc}|${claveNombre(nombre)}` : rfc;
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cliente:${claveCliente}`}))`;
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cliente:${agenciaId}:${claveCliente}`}))`;
 
   const seleccion = { id: true, nombre: true, telefono: true, email: true } as const;
   const existente = generico
     ? // El nombre se compara sin acentos, mayúsculas ni signos: "HÉCTOR  MORALES" = "Hector Morales".
-      (await tx.cliente.findMany({ where: { rfc }, select: seleccion })).find(
+      (await tx.cliente.findMany({ where: { agenciaId, rfc }, select: seleccion })).find(
         (c) => claveNombre(c.nombre) === claveNombre(nombre)
       )
-    : await tx.cliente.findFirst({ where: { rfc }, orderBy: { id: "asc" }, select: seleccion });
+    : await tx.cliente.findFirst({ where: { agenciaId, rfc }, orderBy: { id: "asc" }, select: seleccion });
 
   if (!existente) {
     const creado = await tx.cliente.create({
-      data: { nombre, rfc, telefono, email },
+      data: { agenciaId, nombre, rfc, telefono, email },
       select: { id: true, nombre: true },
     });
     return { ...creado, nuevo: true };
@@ -162,14 +163,17 @@ async function obtenerCliente(
           ...(!existente.email && email && { email }),
         };
   if (Object.keys(cambios).length > 0) {
-    await tx.cliente.update({ where: { id: existente.id }, data: cambios });
+    await tx.cliente.update({ where: { id: existente.id, agenciaId }, data: cambios });
   }
   return { id: existente.id, nombre: cambios.nombre ?? existente.nombre, nuevo: false };
 }
 
-/** Valida el formulario con las mismas reglas que el navegador. */
-async function validarFormulario(input: PolizaInput, g: Valores): Promise<Errores> {
-  const aseguradoras = await db.aseguradora.findMany({ select: { id: true } });
+/**
+ * Valida el formulario con las mismas reglas que el navegador. Solo acepta aseguradoras de la
+ * agencia: una póliza nunca puede apuntar al catálogo de otra.
+ */
+async function validarFormulario(agenciaId: string, input: PolizaInput, g: Valores): Promise<Errores> {
+  const aseguradoras = await db.aseguradora.findMany({ where: { agenciaId }, select: { id: true } });
   return {
     ...validarPoliza(input.ramo, g, input.especificos, aseguradoras.map((a) => a.id), input.sumaAseguradaIlimitada),
     ...validarAsegurados(input.asegurados),
@@ -196,20 +200,21 @@ export async function registrarPoliza(
   raw: unknown,
   {
     permitirComision,
-    usuario = null,
+    usuario,
     renuevaA,
-  }: { permitirComision: boolean; usuario?: UsuarioSesion | null; renuevaA?: string }
+  }: { permitirComision: boolean; usuario: UsuarioSesion; renuevaA?: string }
 ): Promise<GuardarPolizaResultado> {
   const input = sanitizarPolizaInput(raw);
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
   let g = permitirComision ? input.generales : { ...input.generales, comisionPersonalizadaPct: "" };
+  const { agenciaId } = usuario;
 
   // Renovación: misma aseguradora, misma póliza vigor e inicio posterior a la vigencia anterior.
   let anterior: { id: string; numeroImpreso: string } | null = null;
   if (renuevaA !== undefined) {
     if (typeof renuevaA !== "string" || !/^[a-z0-9]+$/i.test(renuevaA)) return { ok: false, error: "Datos inválidos." };
     const original = await db.poliza.findUnique({
-      where: { id: renuevaA },
+      where: { id: renuevaA, agenciaId },
       select: {
         id: true,
         numeroImpreso: true,
@@ -224,6 +229,7 @@ export async function registrarPoliza(
     const yaRenovada = original.polizaVigor
       ? await db.poliza.findFirst({
           where: {
+            agenciaId,
             polizaVigor: original.polizaVigor,
             aseguradora_id: original.aseguradora_id,
             vigencia_inicio: { gte: original.vigencia_fin },
@@ -247,20 +253,21 @@ export async function registrarPoliza(
     anterior = { id: original.id, numeroImpreso: original.numeroImpreso };
   }
 
-  const errores = await validarFormulario(input, g);
+  const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const datos = columnasPoliza(input, g);
   const recibos = recibosData(g);
 
   try {
     const resultado = await db.$transaction(async (tx) => {
-      const cliente = await obtenerCliente(tx, g, { actualizarContacto: "completar" });
+      const cliente = await obtenerCliente(tx, agenciaId, g, { actualizarContacto: "completar" });
       const poliza = await tx.poliza.create({
         data: {
           ...datos,
+          agenciaId,
           cliente_id: cliente.id,
-          asegurados: { create: aseguradosData(input.asegurados) },
-          recibos: { create: recibos },
+          asegurados: { create: aseguradosData(input.asegurados).map((a) => ({ ...a, agenciaId })) },
+          recibos: { create: recibos.map((r) => ({ ...r, agenciaId })) },
         },
         select: { id: true, numeroImpreso: true },
       });
@@ -337,9 +344,10 @@ export async function actualizarPoliza(
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { ok: false, error: "Datos inválidos." };
   const input = sanitizarPolizaInput(raw);
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
+  const { agenciaId } = usuario;
 
   const actual = await db.poliza.findUnique({
-    where: { id: polizaId },
+    where: { id: polizaId, agenciaId },
     select: {
       numeroImpreso: true,
       polizaVigor: true,
@@ -367,7 +375,7 @@ export async function actualizarPoliza(
         comisionPersonalizadaPct:
           actual.comision_personalizada_pct === null ? "" : Number(actual.comision_personalizada_pct).toFixed(2),
       };
-  const errores = await validarFormulario(input, g);
+  const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 
   const datos = columnasPoliza(input, g);
@@ -395,17 +403,19 @@ export async function actualizarPoliza(
 
   try {
     await db.$transaction(async (tx) => {
-      const cliente = await obtenerCliente(tx, g, { actualizarContacto: "reemplazar" });
+      const cliente = await obtenerCliente(tx, agenciaId, g, { actualizarContacto: "reemplazar" });
       const nuevo = { ...datos, cliente_id: cliente.id };
-      await tx.poliza.update({ where: { id: polizaId }, data: nuevo });
-      await tx.asegurado.deleteMany({ where: { poliza_id: polizaId } });
+      await tx.poliza.update({ where: { id: polizaId, agenciaId }, data: nuevo });
+      await tx.asegurado.deleteMany({ where: { agenciaId, poliza_id: polizaId } });
       if (input.asegurados.length > 0) {
-        await tx.asegurado.createMany({ data: aseguradosData(input.asegurados).map((a) => ({ ...a, poliza_id: polizaId })) });
+        await tx.asegurado.createMany({
+          data: aseguradosData(input.asegurados).map((a) => ({ ...a, agenciaId, poliza_id: polizaId })),
+        });
       }
       if (cambiaCalendario) {
         // Sin cobros todos los recibos siguen pendientes: se rehace el calendario completo.
-        await tx.recibo.deleteMany({ where: { poliza_id: polizaId } });
-        await tx.recibo.createMany({ data: recibosData(g).map((r) => ({ ...r, poliza_id: polizaId })) });
+        await tx.recibo.deleteMany({ where: { agenciaId, poliza_id: polizaId } });
+        await tx.recibo.createMany({ data: recibosData(g).map((r) => ({ ...r, agenciaId, poliza_id: polizaId })) });
       }
 
       const cambios = Object.keys(ETIQUETAS_CAMBIO).filter(

@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
 
-import { AGENCIA_INICIAL_ID } from "@/lib/agencias/constantes";
 import { sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
 import { db } from "@/lib/db";
 import type { Rol } from "@/lib/generated/prisma/client";
@@ -36,21 +35,18 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
     where: { id: data.user.id },
     select: { nombre: true, rol: true, activo: true, agenciaId: true },
   });
-  // Cuenta desactivada: su token puede seguir vigente un rato, pero ya no es una sesión válida.
-  if (perfil && !perfil.activo) return null;
-  // La agencia vive en `usuarios` (fuente de verdad). TEMPORAL: una cuenta sin perfil cae en la
-  // agencia inicial, igual que el default de las tablas.
-  const agenciaId = perfil?.agenciaId ?? AGENCIA_INICIAL_ID;
-  // Mantiene el claim del JWT al día para RLS (solo escribe si no coincide; p. ej. sesiones
-  // abiertas antes del multi-tenant). El token nuevo llega en el siguiente refresh.
-  if (perfil) await sincronizarAgenciaEnAuth(data.user, agenciaId);
+  // Sin perfil no hay agencia (y por lo tanto ningún dato que pueda ver); desactivada: su token
+  // puede seguir vigente un rato, pero ya no es una sesión válida.
+  if (!perfil || !perfil.activo) return null;
+  // La agencia vive en `usuarios` (fuente de verdad). Se mantiene también en el claim del JWT
+  // para RLS (solo escribe si no coincide); el token nuevo llega en el siguiente refresh.
+  await sincronizarAgenciaEnAuth(data.user, perfil.agenciaId);
   return {
     id: data.user.id,
     email: data.user.email ?? null,
-    nombre: perfil?.nombre ?? null,
-    // Una cuenta sin perfil en `usuarios` recibe el mínimo privilegio.
-    rol: perfil?.rol ?? "EJECUTIVO",
-    agenciaId,
+    nombre: perfil.nombre,
+    rol: perfil.rol,
+    agenciaId: perfil.agenciaId,
   };
 });
 
@@ -71,6 +67,14 @@ export async function requireAdmin(): Promise<UsuarioSesion> {
   const user = await requireUser();
   if (!esAdmin(user)) redirect("/");
   return user;
+}
+
+/**
+ * Agencia del usuario de la sesión, para las funciones de consulta que no reciben el usuario.
+ * Sin sesión redirige a /login (en páginas); en Route Handlers verifica la sesión antes.
+ */
+export async function getAgenciaId(): Promise<string> {
+  return (await requireUser()).agenciaId;
 }
 
 /** Para Server Actions y Route Handlers: el admin de la sesión, o null. */

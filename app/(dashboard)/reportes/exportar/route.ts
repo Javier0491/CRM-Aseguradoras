@@ -16,13 +16,14 @@ function celda(valor: string) {
 
 /** GET /reportes/exportar?periodo=… — CSV con las pólizas emitidas en el periodo del reporte. */
 export async function GET(req: NextRequest) {
-  if (!(await getCurrentUser())) {
+  const user = await getCurrentUser();
+  if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }
 
   const param = req.nextUrl.searchParams.get("periodo");
   const periodo = esPeriodoReporte(param) ? param : PERIODO_REPORTE_PREDETERMINADO;
-  const polizas = await getPolizasReporte(periodo);
+  const polizas = await getPolizasReporte(user.agenciaId, periodo);
 
   const filas = [
     [

@@ -10,6 +10,7 @@ import {
   resolverPorcentaje,
 } from "@/lib/conciliacion/comisiones";
 import { rangoDePeriodo, type Periodo, type Rango } from "@/lib/dashboard/periodos";
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 
@@ -22,27 +23,27 @@ const variacion = (actual: number, anterior: number) =>
   anterior > 0 ? ((actual - anterior) / anterior) * 100 : null;
 
 /** Primas de las pólizas cuya vigencia inicia en el rango (la emisión de la póliza). */
-async function primasEmitidas({ desde, hasta }: Rango) {
+async function primasEmitidas(agenciaId: string, { desde, hasta }: Rango) {
   const r = await db.poliza.aggregate({
-    where: { vigencia_inicio: { gte: desde, lte: hasta } },
+    where: { agenciaId, vigencia_inicio: { gte: desde, lte: hasta } },
     _sum: { prima_total: true },
   });
   return Number(r._sum.prima_total ?? 0);
 }
 
 /** Pólizas cuya vigencia se traslapa con el rango. */
-function polizasActivas({ desde, hasta }: Rango) {
-  return db.poliza.count({ where: { vigencia_inicio: { lte: hasta }, vigencia_fin: { gte: desde } } });
+function polizasActivas(agenciaId: string, { desde, hasta }: Rango) {
+  return db.poliza.count({ where: { agenciaId, vigencia_inicio: { lte: hasta }, vigencia_fin: { gte: desde } } });
 }
 
 /**
  * De las pólizas que vencieron en el rango, cuántas se renovaron: existe otra póliza con la
  * misma póliza vigor y aseguradora que inicia después. null si ninguna venció.
  */
-async function tasaRenovacion({ desde, hasta }: Rango, hoy: Date) {
+async function tasaRenovacion(agenciaId: string, { desde, hasta }: Rango, hoy: Date) {
   const tope = hasta < hoy ? hasta : hoy;
   const vencidas = await db.poliza.findMany({
-    where: { vigencia_fin: { gte: desde, lte: tope } },
+    where: { agenciaId, vigencia_fin: { gte: desde, lte: tope } },
     select: { polizaVigor: true, aseguradora_id: true, vigencia_inicio: true },
   });
   if (vencidas.length === 0) return { tasa: null, vencidas: 0, renovadas: 0 };
@@ -50,7 +51,7 @@ async function tasaRenovacion({ desde, hasta }: Rango, hoy: Date) {
   const vigores = [...new Set(vencidas.map((p) => p.polizaVigor).filter((v): v is string => Boolean(v)))];
   const candidatas = vigores.length
     ? await db.poliza.findMany({
-        where: { polizaVigor: { in: vigores } },
+        where: { agenciaId, polizaVigor: { in: vigores } },
         select: { polizaVigor: true, aseguradora_id: true, vigencia_inicio: true },
       })
     : [];
@@ -71,9 +72,9 @@ async function tasaRenovacion({ desde, hasta }: Rango, hoy: Date) {
  * matriz por aseguradora, ramo y año de la póliza (por la antigüedad del titular o, sin ella,
  * desde la primera vigencia de su cadena). Los recibos sin % aplicable o sin prima neta no suman y se reportan aparte.
  */
-async function comisionesPendientes({ desde, hasta }: Rango) {
+async function comisionesPendientes(agenciaId: string, { desde, hasta }: Rango) {
   const recibos = await db.recibo.findMany({
-    where: { estado: "PENDIENTE", fecha_vencimiento: { gte: desde, lte: hasta } },
+    where: { agenciaId, estado: "PENDIENTE", fecha_vencimiento: { gte: desde, lte: hasta } },
     select: {
       numero: true,
       fecha_vencimiento: true,
@@ -101,7 +102,7 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
   const vigores = [...new Set(recibos.map((r) => r.poliza.polizaVigor).filter((v): v is string => Boolean(v)))];
   const [esquemas, cadenas] = await Promise.all([
     db.esquemaComision.findMany({
-      where: { aseguradora_id: { in: aseguradoras } },
+      where: { agenciaId, aseguradora_id: { in: aseguradoras } },
       select: {
         aseguradora_id: true,
         ramo: true,
@@ -114,7 +115,7 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
     vigores.length
       ? db.poliza.groupBy({
           by: ["aseguradora_id", "polizaVigor"],
-          where: { polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
+          where: { agenciaId, polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
           _min: { vigencia_inicio: true },
         })
       : Promise.resolve([]),
@@ -154,16 +155,16 @@ async function comisionesPendientes({ desde, hasta }: Rango) {
   return { valor: Math.round(valor * 100) / 100, recibos: recibos.length, sinPorcentaje, sinPrimaNeta };
 }
 
-async function produccionPorAseguradora({ desde, hasta }: Rango) {
+async function produccionPorAseguradora(agenciaId: string, { desde, hasta }: Rango) {
   const grupos = await db.poliza.groupBy({
     by: ["aseguradora_id"],
-    where: { vigencia_inicio: { gte: desde, lte: hasta } },
+    where: { agenciaId, vigencia_inicio: { gte: desde, lte: hasta } },
     _sum: { prima_total: true },
     _count: { _all: true },
   });
   if (grupos.length === 0) return [];
   const aseguradoras = await db.aseguradora.findMany({
-    where: { id: { in: grupos.map((g) => g.aseguradora_id) } },
+    where: { agenciaId, id: { in: grupos.map((g) => g.aseguradora_id) } },
     select: { id: true, nombre: true },
   });
   const nombre = new Map(aseguradoras.map((a) => [a.id, a.nombre]));
@@ -176,10 +177,11 @@ async function produccionPorAseguradora({ desde, hasta }: Rango) {
     .sort((a, b) => b.prima - a.prima);
 }
 
-function recibosConciliados({ desde, hasta }: Rango) {
+function recibosConciliados(agenciaId: string, { desde, hasta }: Rango) {
   return db.recibo.findMany({
     // Conciliados dentro del periodo (fin de día incluido), los más recientes primero.
     where: {
+      agenciaId,
       estado: "CONCILIADO",
       conciliado_at: { gte: desde, lt: new Date(hasta.getTime() + 86_400_000) },
     },
@@ -207,10 +209,10 @@ function recibosConciliados({ desde, hasta }: Rango) {
 }
 
 /** Próximos vencimientos a partir de hoy; no dependen del periodo (es una alerta). */
-function proximosVencimientos(hoy: Date) {
+function proximosVencimientos(agenciaId: string, hoy: Date) {
   const limite = new Date(hoy.getTime() + DIAS_PROXIMOS_VENCIMIENTOS * 86_400_000);
   return db.poliza.findMany({
-    where: { vigencia_fin: { gte: hoy, lte: limite } },
+    where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } },
     orderBy: { vigencia_fin: "asc" },
     take: LIMITE_VENCIMIENTOS,
     select: {
@@ -228,22 +230,23 @@ function proximosVencimientos(hoy: Date) {
 /** `incluirComisiones` es false para los ejecutivos: las comisiones ni siquiera se calculan. */
 export async function getDashboard(periodo: Periodo, { incluirComisiones }: { incluirComisiones: boolean }) {
   await connection();
+  const agenciaId = await getAgenciaId();
   const hoyIso = hoyISO();
   const hoy = new Date(`${hoyIso}T00:00:00Z`);
   const { actual, anterior } = rangoDePeriodo(periodo, hoyIso);
 
   const [primas, primasAnt, activas, activasAnt, renovacion, produccion, recibos, vencimientos, totalPolizas, pendientes] =
     await Promise.all([
-      primasEmitidas(actual),
-      primasEmitidas(anterior),
-      polizasActivas(actual),
-      polizasActivas(anterior),
-      tasaRenovacion(actual, hoy),
-      produccionPorAseguradora(actual),
-      recibosConciliados(actual),
-      proximosVencimientos(hoy),
-      db.poliza.count(),
-      incluirComisiones ? comisionesPendientes(actual) : null,
+      primasEmitidas(agenciaId, actual),
+      primasEmitidas(agenciaId, anterior),
+      polizasActivas(agenciaId, actual),
+      polizasActivas(agenciaId, anterior),
+      tasaRenovacion(agenciaId, actual, hoy),
+      produccionPorAseguradora(agenciaId, actual),
+      recibosConciliados(agenciaId, actual),
+      proximosVencimientos(agenciaId, hoy),
+      db.poliza.count({ where: { agenciaId } }),
+      incluirComisiones ? comisionesPendientes(agenciaId, actual) : null,
     ]);
 
   return {

@@ -2,6 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
+import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -10,11 +11,12 @@ export const LIMITE_CLIENTES = 200;
 /** Directorio de clientes con su número de pólizas; `q` busca en nombre, RFC, teléfono y correo. */
 export async function getClientesListado(q = "") {
   await connection();
+  const agenciaId = await getAgenciaId();
   const texto = q.trim().slice(0, 100);
   const contiene = { contains: texto, mode: "insensitive" as const };
   const where: Prisma.ClienteWhereInput = texto
-    ? { OR: [{ nombre: contiene }, { rfc: contiene }, { telefono: contiene }, { email: contiene }] }
-    : {};
+    ? { agenciaId, OR: [{ nombre: contiene }, { rfc: contiene }, { telefono: contiene }, { email: contiene }] }
+    : { agenciaId };
 
   const [clientes, total, totalGeneral] = await Promise.all([
     db.cliente.findMany({
@@ -31,7 +33,7 @@ export async function getClientesListado(q = "") {
       },
     }),
     db.cliente.count({ where }),
-    db.cliente.count(),
+    db.cliente.count({ where: { agenciaId } }),
   ]);
   return { clientes, total, totalGeneral };
 }
@@ -40,8 +42,9 @@ export async function getClientesListado(q = "") {
 export async function getClienteExpediente(id: string) {
   await connection();
   if (!/^[a-z0-9]+$/i.test(id)) return null;
+  const agenciaId = await getAgenciaId();
   return db.cliente.findUnique({
-    where: { id },
+    where: { id, agenciaId },
     select: {
       id: true,
       nombre: true,
