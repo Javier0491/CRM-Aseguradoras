@@ -1,4 +1,6 @@
-// Esquema de datos del CRM PJ MAGNUS.
+// Esquema de datos del CRM (SaaS multi-agencia).
+// Cada registro de negocio pertenece a una Agencia (agenciaId). Los datos existentes de antes
+// del multi-tenant quedaron en la agencia inicial "PJ MAGNUS" (migración 20260929100000).
 // Docs: https://pris.ly/d/prisma-schema
 
 generator client {
@@ -41,11 +43,42 @@ enum Rol {
   EJECUTIVO
 }
 
+// Broker o agencia cliente del SaaS: dueña de todos sus datos (tenant).
+// TEMPORAL: el agenciaId de cada tabla tiene como default la agencia inicial "PJ MAGNUS"
+// (00000000-0000-4000-8000-000000000001, lib/agencias/constantes.ts) para que el código que
+// aún no toma la agencia de la sesión siga funcionando. Se quitará cuando todas las
+// escrituras usen la agencia del usuario.
+model Agencia {
+  id        String   @id @default(uuid()) @db.Uuid
+  nombre    String
+  logoUrl   String?  @map("logo_url")
+  colorHex  String?  @map("color_hex")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  usuarios          Usuario[]
+  clientes          Cliente[]
+  aseguradoras      Aseguradora[]
+  polizas           Poliza[]
+  recibos           Recibo[]
+  asegurados        Asegurado[]
+  esquemasComision  EsquemaComision[]
+  bitacora          Bitacora[]
+  lotesConciliacion LoteConciliacion[]
+  lotesCambios      LoteCambio[]
+  notasAclaracion   NotaAclaracion[]
+
+  @@map("agencias")
+}
+
 // Perfil y rol de cada cuenta del equipo. La autenticación (correo y contraseña, guardada con
 // bcrypt) la hace Supabase Auth; aquí solo vive lo que el CRM necesita saber de la persona.
 model Usuario {
   // Mismo id que auth.users en Supabase.
   id             String    @id
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId      String    @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia        Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   nombre         String
   email          String    @unique
   rol            Rol       @default(EJECUTIVO)
@@ -55,25 +88,33 @@ model Usuario {
   desactivado_at DateTime?
   created_at     DateTime  @default(now())
 
+  @@index([agenciaId])
   @@map("usuarios")
 }
 
 model Cliente {
-  id       String @id @default(cuid())
-  nombre   String
-  rfc      String
-  telefono String
-  email    String
+  id        String  @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia   Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  nombre    String
+  rfc       String
+  telefono  String
+  email     String
 
   polizas Poliza[]
 
   @@index([rfc])
+  @@index([agenciaId])
   @@map("clientes")
 }
 
 model Aseguradora {
   id                  String  @id @default(cuid())
-  nombre              String  @unique
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId           String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia             Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  nombre              String
   color_hex           String
   url_portal_cobranza String?
   notas_acceso        String?
@@ -90,13 +131,17 @@ model Aseguradora {
   esquemas EsquemaComision[]
   lotes    LoteConciliacion[]
 
+  @@unique([agenciaId, nombre])
   @@map("aseguradoras")
 }
 
 model Poliza {
   id                         String    @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId                  String    @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia                    Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   // Lectura cruda del número tal como aparece en la carátula (lo captura el OCR).
-  numeroImpreso              String    @unique @map("numero_poliza_original")
+  numeroImpreso              String    @map("numero_poliza_original")
   // Póliza raíz: clave exacta de cobranza, derivada de numeroImpreso con
   // extraerPolizaVigor() (lib/polizas/polizaParser.ts). No es única: las
   // renovaciones (-01, -02, ...) comparten la misma póliza raíz.
@@ -146,6 +191,7 @@ model Poliza {
   recibos     Recibo[]
   asegurados  Asegurado[]
 
+  @@unique([agenciaId, numeroImpreso])
   @@index([polizaVigor])
   @@index([cliente_id])
   @@index([aseguradora_id])
@@ -156,6 +202,9 @@ model Poliza {
 
 model Recibo {
   id                String       @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId         String       @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia           Agencia      @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   poliza_id         String
   // Consecutivo del recibo dentro de la póliza (1..n).
   numero            Int
@@ -181,12 +230,16 @@ model Recibo {
   @@unique([poliza_id, folio])
   @@index([fecha_vencimiento])
   @@index([estado, fecha_vencimiento])
+  @@index([agenciaId])
   @@map("recibos")
 }
 
 // Personas aseguradas por la póliza (varias en GMM; en Autos o RC, solo el titular).
 model Asegurado {
   id               String  @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId        String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia          Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   poliza_id        String
   // Posición en la lista de la carátula.
   orden            Int     @default(0)
@@ -204,6 +257,7 @@ model Asegurado {
   poliza Poliza @relation(fields: [poliza_id], references: [id], onDelete: Cascade)
 
   @@index([poliza_id])
+  @@index([agenciaId])
   @@map("asegurados")
 }
 
@@ -216,6 +270,9 @@ model Asegurado {
 // lib/comisiones/actions.ts, porque un índice único trataría los NULL como distintos.
 model EsquemaComision {
   id             String  @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId      String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia        Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   aseguradora_id String
   ramo           Ramo
   anio_poliza    Int
@@ -227,6 +284,7 @@ model EsquemaComision {
   aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
 
   @@index([aseguradora_id, ramo, anio_poliza])
+  @@index([agenciaId])
   @@map("esquemas_comision")
 }
 
@@ -234,6 +292,9 @@ model EsquemaComision {
 // Guarda el correo además del id para seguir siendo legible si la cuenta se desactiva.
 model Bitacora {
   id            String   @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId     String   @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia       Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   created_at    DateTime @default(now())
   usuario_id    String?
   usuario_email String?
@@ -248,12 +309,16 @@ model Bitacora {
 
   @@index([created_at])
   @@index([entidad, entidad_id])
+  @@index([agenciaId])
   @@map("bitacora")
 }
 
 // Cada "Aplicar conciliación" es un lote: se puede revertir si se subió el archivo equivocado.
 model LoteConciliacion {
   id             String    @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId      String    @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia        Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   created_at     DateTime  @default(now())
   aseguradora_id String
   usuario_id     String?
@@ -270,12 +335,16 @@ model LoteConciliacion {
   cambios     LoteCambio[]
 
   @@index([created_at])
+  @@index([agenciaId])
   @@map("lotes_conciliacion")
 }
 
 // Qué le hizo un lote a cada recibo, con el estado anterior para poder revertirlo.
 model LoteCambio {
   id            String  @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId     String  @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia       Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   lote_id       String
   // Null si el recibo ya no existe (p. ej. se eliminó su póliza).
   recibo_id     String?
@@ -297,12 +366,16 @@ model LoteCambio {
 
   @@index([lote_id])
   @@index([recibo_id])
+  @@index([agenciaId])
   @@map("lotes_cambios")
 }
 
 // Seguimiento de un recibo PAGADO con diferencia de comisión: reclamos, notas y cierre.
 model NotaAclaracion {
   id            String   @id @default(cuid())
+  // Agencia dueña del registro (default TEMPORAL: ver modelo Agencia).
+  agenciaId     String   @default("00000000-0000-4000-8000-000000000001") @map("agencia_id") @db.Uuid
+  agencia       Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   created_at    DateTime @default(now())
   recibo_id     String
   usuario_email String?
@@ -315,5 +388,6 @@ model NotaAclaracion {
   recibo Recibo @relation(fields: [recibo_id], references: [id], onDelete: Cascade)
 
   @@index([recibo_id, created_at])
+  @@index([agenciaId])
   @@map("notas_aclaracion")
 }

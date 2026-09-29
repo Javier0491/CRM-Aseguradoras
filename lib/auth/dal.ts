@@ -4,15 +4,25 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
 
+import { AGENCIA_INICIAL_ID } from "@/lib/agencias/constantes";
+import { sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
 import { db } from "@/lib/db";
 import type { Rol } from "@/lib/generated/prisma/client";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export type UsuarioSesion = { id: string; email: string | null; nombre: string | null; rol: Rol };
+export type UsuarioSesion = {
+  id: string;
+  email: string | null;
+  nombre: string | null;
+  rol: Rol;
+  /** Agencia (tenant) del usuario: todas sus consultas deben filtrarse por ella. */
+  agenciaId: string;
+};
 
 /**
- * Usuario autenticado de la solicitud actual, verificado contra Supabase Auth, con su rol.
+ * Usuario autenticado de la solicitud actual, verificado contra Supabase Auth, con su rol y
+ * su agencia.
  * Memoizado por render para no repetir la consulta.
  */
 export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
@@ -24,16 +34,23 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
   if (error || !data.user) return null;
   const perfil = await db.usuario.findUnique({
     where: { id: data.user.id },
-    select: { nombre: true, rol: true, activo: true },
+    select: { nombre: true, rol: true, activo: true, agenciaId: true },
   });
   // Cuenta desactivada: su token puede seguir vigente un rato, pero ya no es una sesión válida.
   if (perfil && !perfil.activo) return null;
+  // La agencia vive en `usuarios` (fuente de verdad). TEMPORAL: una cuenta sin perfil cae en la
+  // agencia inicial, igual que el default de las tablas.
+  const agenciaId = perfil?.agenciaId ?? AGENCIA_INICIAL_ID;
+  // Mantiene el claim del JWT al día para RLS (solo escribe si no coincide; p. ej. sesiones
+  // abiertas antes del multi-tenant). El token nuevo llega en el siguiente refresh.
+  if (perfil) await sincronizarAgenciaEnAuth(data.user, agenciaId);
   return {
     id: data.user.id,
     email: data.user.email ?? null,
     nombre: perfil?.nombre ?? null,
     // Una cuenta sin perfil en `usuarios` recibe el mínimo privilegio.
     rol: perfil?.rol ?? "EJECUTIVO",
+    agenciaId,
   };
 });
 

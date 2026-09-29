@@ -2,6 +2,8 @@
 
 import { redirect } from "next/navigation";
 
+import { sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
+import { db } from "@/lib/db";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -27,11 +29,18 @@ export async function iniciarSesion(_prev: LoginState, formData: FormData): Prom
   }
 
   const supabase = await createSupabaseServerClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
     // Mensaje genérico: no revela si el correo existe.
     return { error: "Correo o contraseña incorrectos.", email };
+  }
+
+  // La agencia del usuario va en el JWT (app_metadata.agencia_id) para filtrar por agencia y
+  // aplicar RLS. Si hubo que escribirla, se refresca la sesión para que el token ya la traiga.
+  const perfil = await db.usuario.findUnique({ where: { id: data.user.id }, select: { agenciaId: true } });
+  if (perfil && (await sincronizarAgenciaEnAuth(data.user, perfil.agenciaId))) {
+    await supabase.auth.refreshSession();
   }
 
   redirect(destinoSeguro(formData.get("next")));

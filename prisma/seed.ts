@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 
+import { AGENCIA_INICIAL_ID } from "../lib/agencias/constantes";
 import { PrismaClient } from "../lib/generated/prisma/client";
 
 // El seed corre desde el CLI, así que usa la conexión de sesión (DIRECT_URL).
@@ -46,19 +47,23 @@ const esquemasComision: {
 ];
 
 async function main() {
-  // Upsert por nombre (único): el seed es idempotente y puede ejecutarse varias veces.
+  // El catálogo y la matriz de ejemplo son de la agencia inicial (la crea la migración).
+  const agenciaId = AGENCIA_INICIAL_ID;
+  // Upsert por nombre (único dentro de la agencia): el seed es idempotente y puede ejecutarse varias veces.
   // En las existentes solo se actualiza el color: no se toca el estado de su integración.
   for (const a of aseguradoras) {
     await db.aseguradora.upsert({
-      where: { nombre: a.nombre },
+      where: { agenciaId_nombre: { agenciaId, nombre: a.nombre } },
       update: { color_hex: a.color_hex },
-      create: { ...a, estado_api: "INACTIVA" },
+      create: { ...a, agenciaId, estado_api: "INACTIVA" },
     });
   }
   // Solo se crean los porcentajes que faltan: nunca se sobrescribe uno ya ajustado.
   let creados = 0;
   for (const e of esquemasComision) {
-    const aseguradora = await db.aseguradora.findUniqueOrThrow({ where: { nombre: e.aseguradora } });
+    const aseguradora = await db.aseguradora.findUniqueOrThrow({
+      where: { agenciaId_nombre: { agenciaId, nombre: e.aseguradora } },
+    });
     const clave = { aseguradora_id: aseguradora.id, ramo: e.ramo, anio_poliza: e.anio };
     // Las reglas del seed aplican a todas las edades.
     const existe = await db.esquemaComision.findFirst({
@@ -66,7 +71,7 @@ async function main() {
       select: { id: true },
     });
     if (!existe) {
-      await db.esquemaComision.create({ data: { ...clave, porcentaje: e.porcentaje } });
+      await db.esquemaComision.create({ data: { ...clave, agenciaId, porcentaje: e.porcentaje } });
       creados++;
     }
   }

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { CLAIM_AGENCIA } from "@/lib/agencias/constantes";
 import { getAdmin } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
@@ -72,6 +73,8 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
     // Lo da de alta un administrador: no hace falta confirmar el correo para entrar.
     email_confirm: true,
     user_metadata: { nombre },
+    // La cuenta nueva pertenece a la agencia del administrador que la crea.
+    app_metadata: { [CLAIM_AGENCIA]: admin.agenciaId },
   });
   if (error || !data.user) {
     if (error?.code === "email_exists" || error?.code === "user_already_exists") {
@@ -90,7 +93,7 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.usuario.create({ data: { id: data.user.id, nombre, email, rol } });
+      await tx.usuario.create({ data: { id: data.user.id, agenciaId: admin.agenciaId, nombre, email, rol } });
       await registrarBitacora(
         admin,
         { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rol}` },
