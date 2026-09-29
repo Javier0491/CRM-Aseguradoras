@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 
-import { sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
+import { agenciaEfectiva, SELECT_AGENCIA_SESION, sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
 import { db } from "@/lib/db";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -38,8 +38,8 @@ export async function iniciarSesion(_prev: LoginState, formData: FormData): Prom
 
   // La agencia del usuario va en el JWT (app_metadata.agencia_id) para filtrar por agencia y
   // aplicar RLS. Si hubo que escribirla, se refresca la sesión para que el token ya la traiga.
-  const perfil = await db.usuario.findUnique({ where: { id: data.user.id }, select: { agenciaId: true } });
-  if (perfil && (await sincronizarAgenciaEnAuth(data.user, perfil.agenciaId))) {
+  const perfil = await db.usuario.findUnique({ where: { id: data.user.id }, select: SELECT_AGENCIA_SESION });
+  if (perfil && (await sincronizarAgenciaEnAuth(data.user, agenciaEfectiva(perfil)))) {
     await supabase.auth.refreshSession();
   }
 

@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 const tonos: Record<Aviso["tono"], string> = {
   warning: "bg-warning/15 text-warning",
   destructive: "bg-destructive/15 text-destructive",
-  info: "bg-sky-500/15 text-sky-400",
+  info: "bg-sky-500/15 text-sky-600 dark:text-sky-400",
 };
 
 /** Campana del encabezado: pendientes que requieren acción. Se actualiza al navegar y al abrirla. */

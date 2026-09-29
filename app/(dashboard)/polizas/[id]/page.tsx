@@ -228,7 +228,7 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
                         {r.numero}/{poliza.recibos.length}
                         {r.folio && <p className="font-mono text-[11px]">folio {r.folio}</p>}
                         {r.auto_creado && (
-                          <p className="text-[11px] text-sky-400" title="Lo creó la conciliación; el monto es estimado">
+                          <p className="text-[11px] text-sky-600 dark:text-sky-400" title="Lo creó la conciliación; el monto es estimado">
                             auto-creado
                           </p>
                         )}

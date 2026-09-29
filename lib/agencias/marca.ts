@@ -3,8 +3,17 @@
 /** Color de marca cuando la agencia no ha elegido uno (el dorado original del CRM). */
 export const COLOR_MARCA_PREDETERMINADO = "#C5A059";
 
-/** Fondo de la interfaz (modo oscuro); se usa para advertir colores con poco contraste. */
-export const FONDO_INTERFAZ = "#0A0A0A";
+/** Fondo de la interfaz: "dark" (el original) o "light". */
+export const TEMAS = [
+  { value: "dark", label: "Modo oscuro" },
+  { value: "light", label: "Modo claro" },
+] as const;
+export type Tema = (typeof TEMAS)[number]["value"];
+export const TEMA_PREDETERMINADO: Tema = "dark";
+export const esTema = (v: unknown): v is Tema => typeof v === "string" && TEMAS.some((t) => t.value === v);
+
+/** Fondo de cada tema (globals.css); se usa para advertir colores de marca con poco contraste. */
+export const FONDO_TEMA: Record<Tema, string> = { dark: "#0A0A0A", light: "#FFFFFF" };
 
 /** Bucket público de Supabase Storage con los logos: {agenciaId}/logo-{uuid}.{ext}. */
 export const LOGOS_BUCKET = "marcas";

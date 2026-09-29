@@ -5,13 +5,15 @@ import { LogOut } from "lucide-react";
 
 import { BusquedaGlobal } from "@/components/layout/busqueda-global";
 import { CampanaAvisos } from "@/components/layout/campana-avisos";
+import { SelectorAgencia, type SelectorAgenciaProps } from "@/components/layout/selector-agencia";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { cerrarSesion } from "@/lib/auth/actions";
 import { allNav, isActivePath } from "@/lib/navigation";
 
-export function AppHeader() {
+/** `selectorAgencia` solo llega para un SUPERADMIN. */
+export function AppHeader({ selectorAgencia }: { selectorAgencia?: SelectorAgenciaProps }) {
   const pathname = usePathname();
   const current =
     allNav.find((item) => isActivePath(pathname, item.href)) ?? allNav[0];
@@ -26,6 +28,7 @@ export function AppHeader() {
       <span className="text-sm font-medium">{current.title}</span>
 
       <div className="ml-auto flex items-center gap-2">
+        {selectorAgencia && <SelectorAgencia {...selectorAgencia} />}
         <BusquedaGlobal />
         <CampanaAvisos />
         <form action={cerrarSesion}>

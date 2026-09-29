@@ -130,7 +130,7 @@ export default async function AclaracionesPage() {
                         variant="outline"
                         className={
                           a.seguimiento === "reclamada"
-                            ? "border-sky-500/30 bg-sky-500/10 text-sky-400"
+                            ? "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400"
                             : "border-warning/30 bg-warning/10 text-warning"
                         }
                       >

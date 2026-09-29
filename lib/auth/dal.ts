@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
 
-import { sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
+import { agenciaEfectiva, SELECT_AGENCIA_SESION, sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
 import { db } from "@/lib/db";
 import type { Rol } from "@/lib/generated/prisma/client";
 import { getSupabaseConfig } from "@/lib/supabase/config";
@@ -15,8 +15,15 @@ export type UsuarioSesion = {
   email: string | null;
   nombre: string | null;
   rol: Rol;
-  /** Agencia (tenant) del usuario: todas sus consultas deben filtrarse por ella. */
+  /**
+   * Agencia (tenant) que opera la sesión: todas sus consultas deben filtrarse por ella. Es la
+   * del usuario, o la que eligió un SUPERADMIN.
+   */
   agenciaId: string;
+  /** Agencia a la que pertenece la cuenta (distinta de agenciaId si un SUPERADMIN entró a otra). */
+  agenciaPropiaId: string;
+  /** Rol de plataforma SUPERADMIN: puede cambiar de agencia y actúa como ADMIN en cualquiera. */
+  superadmin: boolean;
 };
 
 /**
@@ -33,20 +40,24 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
   if (error || !data.user) return null;
   const perfil = await db.usuario.findUnique({
     where: { id: data.user.id },
-    select: { nombre: true, rol: true, activo: true, agenciaId: true },
+    select: { nombre: true, rol: true, activo: true, ...SELECT_AGENCIA_SESION },
   });
   // Sin perfil no hay agencia (y por lo tanto ningún dato que pueda ver); desactivada: su token
   // puede seguir vigente un rato, pero ya no es una sesión válida.
   if (!perfil || !perfil.activo) return null;
   // La agencia vive en `usuarios` (fuente de verdad). Se mantiene también en el claim del JWT
   // para RLS (solo escribe si no coincide); el token nuevo llega en el siguiente refresh.
-  await sincronizarAgenciaEnAuth(data.user, perfil.agenciaId);
+  const agenciaId = agenciaEfectiva(perfil);
+  await sincronizarAgenciaEnAuth(data.user, agenciaId);
+  const superadmin = perfil.rolSistema === "SUPERADMIN";
   return {
     id: data.user.id,
     email: data.user.email ?? null,
     nombre: perfil.nombre,
-    rol: perfil.rol,
-    agenciaId: perfil.agenciaId,
+    rol: superadmin ? "ADMIN" : perfil.rol,
+    agenciaId,
+    agenciaPropiaId: perfil.agenciaId,
+    superadmin,
   };
 });
 

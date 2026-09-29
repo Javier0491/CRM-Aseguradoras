@@ -49,10 +49,12 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  /* Paleta base, exclusivamente modo oscuro. --primary (y su texto, --primary-foreground) es el
-     color de marca: el layout del dashboard lo reemplaza por el de la agencia (TemaAgencia).
-     Todo lo que depende de la marca se deriva de él. */
+:root,
+.dark {
+  /* Paleta base: modo oscuro (<html class="dark">); el modo claro la redefine abajo. --primary (y
+     su texto, --primary-foreground) es el color de marca: el layout del dashboard lo reemplaza
+     por el de la agencia (TemaAgencia) en ambos modos. Todo lo que depende de la marca se deriva
+     de él. */
   --radius: 0.5rem;
   --background: #0a0a0a;
   --foreground: #fafafa;
@@ -88,6 +90,40 @@
   --sidebar-border: #27272a;
   --sidebar-ring: var(--primary);
   color-scheme: dark;
+}
+
+/* Modo claro (Agencia.tema = "light"): el layout raíz pone <html class="light">, así que las
+   variantes dark: de los componentes quedan inactivas. Solo cambian los neutros y los estados;
+   la marca (--primary y derivados) es la misma. Las clases .dark/.light también sirven en un
+   contenedor (vista previa de "Mi agencia"). */
+html.light,
+.light {
+  --background: #f7f7f8;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --secondary: #f1f1f3;
+  --secondary-foreground: #18181b;
+  --muted: #f1f1f3;
+  --muted-foreground: #63636b;
+  --accent: #ececef;
+  --accent-foreground: #0a0a0a;
+  /* Tonos más oscuros: los del modo oscuro no se leen sobre blanco. */
+  --destructive: #dc2626;
+  --success: #15803d;
+  --warning: #b45309;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --chart-4: #a1a1aa;
+  --chart-5: #d4d4d8;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #3f3f46;
+  --sidebar-accent: #f1f1f3;
+  --sidebar-accent-foreground: #0a0a0a;
+  --sidebar-border: #e4e4e7;
+  color-scheme: light;
 }
 
 @layer base {

@@ -23,6 +23,7 @@ export const ACCIONES_BITACORA = {
   "usuario.editar": "Editó usuario",
   "usuario.estado": "Activó o desactivó usuario",
   "agencia.editar": "Editó datos de la agencia",
+  "agencia.entrar_superadmin": "Superadmin entró a la agencia",
 } as const;
 export type AccionBitacora = keyof typeof ACCIONES_BITACORA;
 

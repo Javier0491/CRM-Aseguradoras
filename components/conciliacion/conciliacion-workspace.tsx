@@ -82,7 +82,7 @@ import { cn } from "@/lib/utils";
 
 const estatusConfig: Record<EstatusMatch, { label: string; icono: LucideIcon; clase: string }> = {
   conciliado: { label: "Conciliado", icono: CheckCircle2, clase: "border-success/30 bg-success/10 text-success" },
-  auto_creado: { label: "Auto-creado y Conciliado", icono: FilePlus2, clase: "border-sky-500/30 bg-sky-500/10 text-sky-400" },
+  auto_creado: { label: "Auto-creado y Conciliado", icono: FilePlus2, clase: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400" },
   diferencia: { label: "Diferencia", icono: CircleAlert, clase: "border-warning/30 bg-warning/10 text-warning" },
   no_encontrado: { label: "No encontrado", icono: SearchX, clase: "border-destructive/30 bg-destructive/10 text-destructive" },
   revisar: { label: "Revisar", icono: CircleHelp, clase: "border-border bg-muted text-muted-foreground" },
@@ -380,7 +380,7 @@ export function ConciliacionWorkspace({
                 )}
                 {conversion.agrupadas.length > 0 && (
                   <details open>
-                    <summary className="cursor-pointer text-sky-400 hover:text-foreground">
+                    <summary className="cursor-pointer text-sky-600 dark:text-sky-400 hover:text-foreground">
                       {conversion.agrupadas.length}{" "}
                       {conversion.agrupadas.length === 1 ? "renglón repetía" : "renglones repetían"} el folio de otro y
                       se agruparon
@@ -452,7 +452,7 @@ export function ConciliacionWorkspace({
               <span>Diferencia</span>
               <span className="tabular-nums">{formatMoneda(analisis.resumen.pagada - analisis.resumen.esperada)}</span>
             </div>
-            <div className="flex justify-between gap-2 text-sky-400">
+            <div className="flex justify-between gap-2 text-sky-600 dark:text-sky-400">
               <span title="Comisión pagada de los recibos que se auto-crean">Pagado en auto-creados</span>
               <span className="tabular-nums">{formatMoneda(analisis.resumen.pagadaAutoCreada)}</span>
             </div>
@@ -500,7 +500,7 @@ export function ConciliacionWorkspace({
                       {r.recibo ? (
                         `${r.recibo.numero}/${r.recibo.total}`
                       ) : r.nuevoRecibo ? (
-                        <span className="text-sky-400">{r.nuevoRecibo.numero} · nuevo</span>
+                        <span className="text-sky-600 dark:text-sky-400">{r.nuevoRecibo.numero} · nuevo</span>
                       ) : (
                         "—"
                       )}

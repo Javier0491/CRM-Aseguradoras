@@ -57,17 +57,17 @@ export function Vencimiento({ fecha, estado, hoy }: { fecha: Date; estado: Estad
   );
 }
 
-// Colores sutiles por ramo: fondo y borde translúcidos, texto claro (tema oscuro).
+// Colores sutiles por ramo: fondo y borde translúcidos; texto oscuro en modo claro y claro en oscuro.
 const ramoEstilo: Record<Ramo, string> = {
-  AUTOS: "border-blue-500/30 bg-blue-500/10 text-blue-300",
-  GMM_INDIVIDUAL: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  GMM_COLECTIVO: "border-purple-500/30 bg-purple-500/10 text-purple-300",
-  VIDA_INDIVIDUAL: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-  VIDA_GRUPO: "border-pink-500/30 bg-pink-500/10 text-pink-300",
-  DANOS: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-  RC_PROFESIONAL: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300",
-  HOGAR: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  OTROS: "border-zinc-500/30 bg-zinc-500/10 text-zinc-300",
+  AUTOS: "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  GMM_INDIVIDUAL: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  GMM_COLECTIVO: "border-purple-500/30 bg-purple-500/10 text-purple-700 dark:text-purple-300",
+  VIDA_INDIVIDUAL: "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+  VIDA_GRUPO: "border-pink-500/30 bg-pink-500/10 text-pink-700 dark:text-pink-300",
+  DANOS: "border-orange-500/30 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  RC_PROFESIONAL: "border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300",
+  HOGAR: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  OTROS: "border-zinc-500/30 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
 };
 
 export function RamoBadge({ ramo }: { ramo: Ramo }) {

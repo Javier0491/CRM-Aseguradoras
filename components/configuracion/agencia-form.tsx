@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, ImageUp, Loader2, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ImageUp, Loader2, Moon, Sun, Trash2 } from "lucide-react";
 
 import { LogoAgencia } from "@/components/layout/logo-agencia";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,13 @@ import { Label } from "@/components/ui/label";
 import { actualizarAgencia, type AgenciaFormState } from "@/lib/agencias/actions";
 import {
   COLOR_MARCA_PREDETERMINADO,
-  FONDO_INTERFAZ,
+  esTema,
+  FONDO_TEMA,
   LOGO_FORMATOS,
   LOGO_MAX_BYTES,
+  TEMA_PREDETERMINADO,
+  TEMAS,
+  type Tema,
 } from "@/lib/agencias/marca";
 import { colorTextoSobre, contraste, normalizarHex } from "@/lib/color";
 import { cn } from "@/lib/utils";
@@ -24,13 +28,16 @@ const SUGERIDOS = ["#C5A059", "#3B82F6", "#10B981", "#EF4444", "#A855F7", "#F973
 /** Debajo de 3:1 el color de marca, usado como texto e íconos, cuesta leerlo sobre el fondo. */
 const CONTRASTE_MINIMO = 3;
 
-type Agencia = { nombre: string; logoUrl: string | null; colorHex: string | null };
+type Agencia = { nombre: string; logoUrl: string | null; colorHex: string | null; tema: string };
+
+const ICONO_TEMA = { dark: Moon, light: Sun } satisfies Record<Tema, unknown>;
 
 export function AgenciaForm({ agencia }: { agencia: Agencia }) {
   const [nombre, setNombre] = React.useState(agencia.nombre);
   const [color, setColor] = React.useState(normalizarHex(agencia.colorHex) ?? COLOR_MARCA_PREDETERMINADO);
   // Lo que se escribe en el campo hex; solo se aplica al color cuando es válido.
   const [colorTexto, setColorTexto] = React.useState(color);
+  const [tema, setTema] = React.useState<Tema>(esTema(agencia.tema) ? agencia.tema : TEMA_PREDETERMINADO);
   const [archivo, setArchivo] = React.useState<{ file: File; url: string } | null>(null);
   const [quitarLogo, setQuitarLogo] = React.useState(false);
   const [errorArchivo, setErrorArchivo] = React.useState<string | null>(null);
@@ -91,7 +98,7 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
 
   const logoVista = archivo?.url ?? (quitarLogo ? null : agencia.logoUrl);
   const nombreVista = nombre.trim() || agencia.nombre;
-  const poco = contraste(color, FONDO_INTERFAZ) < CONTRASTE_MINIMO;
+  const poco = contraste(color, FONDO_TEMA[tema]) < CONTRASTE_MINIMO;
   // Vista previa: el color elegido solo dentro de este recuadro, sin tocar el resto de la página.
   const estiloVista = {
     "--primary": color,
@@ -196,11 +203,59 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
             {state.errores?.colorHex && <p className="text-xs text-destructive">{state.errores.colorHex}</p>}
             {poco && (
               <p className="flex items-center gap-1.5 text-xs text-warning">
-                <AlertTriangle className="size-3.5" /> Este color tiene poco contraste con el fondo oscuro: textos e
-                íconos de marca costarán trabajo leerse. Prueba un tono más claro.
+                <AlertTriangle className="size-3.5 shrink-0" /> Este color tiene poco contraste con el fondo{" "}
+                {tema === "dark" ? "oscuro" : "claro"}: textos e íconos de marca costarán trabajo leerse. Prueba un
+                tono más {tema === "dark" ? "claro" : "oscuro"}.
               </p>
             )}
           </div>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Fondo de la interfaz</legend>
+            <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+              {TEMAS.map((t) => {
+                const Icono = ICONO_TEMA[t.value];
+                const elegido = tema === t.value;
+                return (
+                  <label
+                    key={t.value}
+                    className={cn(
+                      "cursor-pointer rounded-lg border p-2 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+                      elegido ? "border-primary ring-1 ring-primary" : "hover:border-muted-foreground/40"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="tema"
+                      value={t.value}
+                      checked={elegido}
+                      onChange={() => setTema(t.value)}
+                      className="sr-only"
+                    />
+                    {/* Miniatura con la paleta real del modo (clases .dark/.light de globals.css). */}
+                    <div
+                      style={estiloVista}
+                      className={cn(t.value, "flex h-16 overflow-hidden rounded-md border bg-background")}
+                    >
+                      <div className="w-1/3 space-y-1 border-r bg-sidebar p-1.5">
+                        <div className="h-1.5 w-3/4 rounded-full bg-primary" />
+                        <div className="h-1.5 w-full rounded-full bg-muted" />
+                        <div className="h-1.5 w-2/3 rounded-full bg-muted" />
+                      </div>
+                      <div className="flex-1 space-y-1.5 p-1.5">
+                        <div className="h-5 rounded border bg-card" />
+                        <div className="h-1.5 w-1/2 rounded-full bg-muted-foreground/40" />
+                      </div>
+                    </div>
+                    <span className="mt-2 flex items-center gap-1.5 text-sm">
+                      <Icono className="size-3.5 text-muted-foreground" /> {t.label}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {state.errores?.tema && <p className="text-xs text-destructive">{state.errores.tema}</p>}
+          </fieldset>
         </CardContent>
       </Card>
 
@@ -210,7 +265,8 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
             <CardTitle className="text-base">Vista previa</CardTitle>
           </CardHeader>
           <CardContent>
-            <div style={estiloVista} className="space-y-3 rounded-lg border bg-sidebar p-3">
+            {/* Con la clase del tema elegido, la vista previa usa su paleta aunque la página siga en la otra. */}
+            <div style={estiloVista} className={cn(tema, "space-y-3 rounded-lg border bg-sidebar p-3 text-foreground")}>
               <div className="flex items-center gap-2 border-b pb-3">
                 <LogoAgencia nombre={nombreVista} logoUrl={logoVista} />
                 <div className="grid leading-tight">
