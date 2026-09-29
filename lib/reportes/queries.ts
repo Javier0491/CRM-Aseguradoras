@@ -2,40 +2,52 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { rangoDePeriodo, type Rango } from "@/lib/dashboard/periodos";
+import { type Rango } from "@/lib/dashboard/periodos";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
+import type { Prisma } from "@/lib/generated/prisma/client";
+import { rangoReporte, type PeriodoReporte } from "@/lib/reportes/periodos";
 
 /** Días hacia adelante que cubre la lista de pólizas por vencer. */
 export const DIAS_POR_VENCER_REPORTE = 30;
 export const LIMITE_POR_VENCER = 50;
 
-/** Prima y número de pólizas cuya vigencia inicia en el rango (misma definición que el dashboard). */
-async function emision({ desde, hasta }: Rango) {
-  const r = await db.poliza.aggregate({
-    where: { vigencia_inicio: { gte: desde, lte: hasta } },
-    _sum: { prima_total: true },
-    _count: { _all: true },
-  });
-  return { prima: Number(r._sum.prima_total ?? 0), polizas: r._count._all };
+/**
+ * Pólizas emitidas en el rango: las que inician vigencia en él (misma definición que el
+ * dashboard). Sin rango ("Histórico") son todas.
+ */
+function whereEmision(rango: Rango | null): Prisma.PolizaWhereInput {
+  return rango ? { vigencia_inicio: { gte: rango.desde, lte: rango.hasta } } : {};
 }
 
-export async function getReportes() {
+export async function getReportes(periodo: PeriodoReporte) {
   await connection();
   const hoyIso = hoyISO();
   const hoy = new Date(`${hoyIso}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER_REPORTE * 86_400_000);
-  const vigentes = { vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } };
+  const rango = rangoReporte(periodo, hoyIso);
+  const emitidas = whereEmision(rango);
 
-  const [mes, anio, porRamo, porVencer, resumenPorVencer] = await Promise.all([
-    emision(rangoDePeriodo("mes", hoyIso).actual),
-    emision(rangoDePeriodo("anio", hoyIso).actual),
+  const [emision, porRamo, porAseguradora, aseguradoras, porVencer, resumenPorVencer] = await Promise.all([
+    db.poliza.aggregate({
+      where: emitidas,
+      _sum: { prima_total: true },
+      _count: { _all: true },
+      _min: { vigencia_inicio: true },
+    }),
     db.poliza.groupBy({
       by: ["ramo"],
-      where: vigentes,
+      where: emitidas,
       _count: { _all: true },
       _sum: { prima_total: true },
     }),
+    db.poliza.groupBy({
+      by: ["aseguradora_id"],
+      where: emitidas,
+      _count: { _all: true },
+      _sum: { prima_total: true },
+    }),
+    db.aseguradora.findMany({ select: { id: true, nombre: true, color_hex: true } }),
     db.poliza.findMany({
       where: { vigencia_fin: { gte: hoy, lte: limite } },
       orderBy: { vigencia_fin: "asc" },
@@ -59,15 +71,57 @@ export async function getReportes() {
 
   const distribucion = porRamo
     .map((g) => ({ ramo: g.ramo, polizas: g._count._all, prima: Number(g._sum.prima_total ?? 0) }))
-    .sort((a, b) => b.polizas - a.polizas || b.prima - a.prima);
+    .sort((a, b) => b.prima - a.prima || b.polizas - a.polizas);
+
+  const aseguradoraPorId = new Map(aseguradoras.map((a) => [a.id, a]));
+  const distribucionAseguradora = porAseguradora
+    .map((g) => {
+      const a = aseguradoraPorId.get(g.aseguradora_id);
+      return {
+        id: g.aseguradora_id,
+        nombre: a?.nombre ?? "Sin aseguradora",
+        color: a?.color_hex ?? "",
+        polizas: g._count._all,
+        prima: Number(g._sum.prima_total ?? 0),
+      };
+    })
+    .sort((a, b) => b.prima - a.prima || b.polizas - a.polizas);
 
   return {
     hoy: hoyIso,
-    mes,
-    anio,
+    // En "Histórico" el periodo arranca en la primera póliza emitida.
+    rango: rango ?? (emision._min.vigencia_inicio ? { desde: emision._min.vigencia_inicio, hasta: hoy } : null),
+    emision: { prima: Number(emision._sum.prima_total ?? 0), polizas: emision._count._all },
     distribucion,
+    distribucionAseguradora,
     porVencer: porVencer.map((p) => ({ ...p, prima_total: Number(p.prima_total) })),
     totalPorVencer: resumenPorVencer._count._all,
     primaPorVencer: Number(resumenPorVencer._sum.prima_total ?? 0),
   };
+}
+
+/** Pólizas que componen los números del reporte, para exportarlas a CSV. */
+export async function getPolizasReporte(periodo: PeriodoReporte) {
+  await connection();
+  const polizas = await db.poliza.findMany({
+    where: whereEmision(rangoReporte(periodo, hoyISO())),
+    orderBy: [{ vigencia_inicio: "asc" }, { numeroImpreso: "asc" }],
+    select: {
+      numeroImpreso: true,
+      polizaVigor: true,
+      ramo: true,
+      forma_pago: true,
+      vigencia_inicio: true,
+      vigencia_fin: true,
+      prima_neta: true,
+      prima_total: true,
+      cliente: { select: { nombre: true } },
+      aseguradora: { select: { nombre: true } },
+    },
+  });
+  return polizas.map((p) => ({
+    ...p,
+    prima_neta: p.prima_neta === null ? null : Number(p.prima_neta),
+    prima_total: Number(p.prima_total),
+  }));
 }

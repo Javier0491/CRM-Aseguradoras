@@ -13,20 +13,35 @@ import {
 } from "@/components/ui/select";
 import { PERIODO_PREDETERMINADO, PERIODOS, type Periodo } from "@/lib/dashboard/periodos";
 
-/** Filtro global del dashboard: vive en la URL (?periodo=…) y recalcula todo en el servidor. */
-export function PeriodoSelector({ periodo }: { periodo: Periodo }) {
+type Opcion = { readonly value: string; readonly label: string };
+
+/**
+ * Filtro global de periodo: vive en la URL (?periodo=…) y recalcula todo en el servidor.
+ * Por omisión usa los periodos del dashboard; Reportes pasa los suyos.
+ */
+export function PeriodoSelector<P extends string = Periodo>({
+  periodo,
+  opciones = PERIODOS,
+  predeterminado = PERIODO_PREDETERMINADO,
+  etiqueta = "Periodo del dashboard",
+}: {
+  periodo: P;
+  opciones?: readonly Opcion[];
+  predeterminado?: string;
+  etiqueta?: string;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [pendiente, startTransition] = React.useTransition();
 
   function cambiar(valor: string) {
-    const destino = valor === PERIODO_PREDETERMINADO ? pathname : `${pathname}?periodo=${valor}`;
+    const destino = valor === predeterminado ? pathname : `${pathname}?periodo=${valor}`;
     startTransition(() => router.replace(destino, { scroll: false }));
   }
 
   return (
     <Select value={periodo} onValueChange={cambiar}>
-      <SelectTrigger className="w-48 bg-card" aria-label="Periodo del dashboard">
+      <SelectTrigger className="w-48 bg-card" aria-label={etiqueta}>
         {pendiente ? (
           <Loader2 className="size-4 animate-spin text-muted-foreground" />
         ) : (
@@ -35,7 +50,7 @@ export function PeriodoSelector({ periodo }: { periodo: Periodo }) {
         <SelectValue />
       </SelectTrigger>
       <SelectContent align="end">
-        {PERIODOS.map((p) => (
+        {opciones.map((p) => (
           <SelectItem key={p.value} value={p.value}>
             {p.label}
           </SelectItem>
