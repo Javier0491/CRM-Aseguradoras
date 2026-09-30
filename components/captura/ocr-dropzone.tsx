@@ -90,6 +90,7 @@ export function OcrDropzone({
   const abortRef = React.useRef<AbortController | null>(null);
   const previewsRef = React.useRef<Map<File, string>>(new Map());
   const [arrastrando, setArrastrando] = React.useState(false);
+  const [arrastrandoAgregar, setArrastrandoAgregar] = React.useState(false);
   const [previews, setPreviews] = React.useState<Map<File, string>>(new Map());
   const [estado, setEstado] = React.useState<Estado>({ status: "idle" });
 
@@ -179,6 +180,11 @@ export function OcrDropzone({
     procesar(Array.from(e.dataTransfer.files));
   }
 
+  /** Suma documentos a los ya leídos (p. ej. la factura tras la carátula) y vuelve a leer todos. */
+  function agregar(nuevos: File[]) {
+    if (nuevos.length) procesar([...archivos, ...nuevos]);
+  }
+
   const archivos = estado.status === "idle" ? [] : estado.archivos;
   const puedeAgregar =
     estado.status !== "procesando" && archivos.length > 0 && archivos.length < OCR_MAX_ARCHIVOS;
@@ -214,9 +220,13 @@ export function OcrDropzone({
           }}
           onDragOver={(e) => {
             e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
             setArrastrando(true);
           }}
-          onDragLeave={() => setArrastrando(false)}
+          onDragLeave={(e) => {
+            if (!salioDeLaZona(e)) return;
+            setArrastrando(false);
+          }}
           onDrop={onDrop}
           className={cn(
             "group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-10 text-center transition-colors outline-none",
@@ -236,7 +246,9 @@ export function OcrDropzone({
             <p className="text-sm font-medium">
               {arrastrando
                 ? "Suelta los archivos aquí"
-                : "Arrastra uno o varios PDF o imágenes, o haz clic para seleccionar"}
+                : archivos.length > 0
+                  ? "Arrastra aquí para empezar de nuevo con otros documentos"
+                  : "Arrastra uno o varios PDF o imágenes, o haz clic para seleccionar"}
             </p>
             <p className="text-xs text-muted-foreground">
               Carátula, recibo, constancia fiscal… · hasta {OCR_MAX_ARCHIVOS} archivos de 10 MB
@@ -288,14 +300,33 @@ export function OcrDropzone({
             </ul>
             {puedeAgregar && (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full text-muted-foreground"
+                <button
+                  type="button"
                   onClick={() => agregarRef.current?.click()}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                    setArrastrandoAgregar(true);
+                  }}
+                  onDragLeave={(e) => {
+                    if (salioDeLaZona(e)) setArrastrandoAgregar(false);
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setArrastrandoAgregar(false);
+                    agregar(Array.from(e.dataTransfer.files));
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-4 text-sm text-muted-foreground transition-colors outline-none",
+                    "hover:border-primary/60 hover:bg-primary/[0.03] hover:text-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40",
+                    arrastrandoAgregar && "border-primary bg-primary/[0.06] text-primary"
+                  )}
                 >
-                  <Plus /> Agregar otro documento y volver a leer
-                </Button>
+                  <Plus className="size-4 shrink-0" />
+                  {arrastrandoAgregar
+                    ? "Suelta para agregarlo y volver a leer"
+                    : "Arrastra aquí la factura u otro documento, o haz clic, para agregarlo y volver a leer"}
+                </button>
                 <input
                   ref={agregarRef}
                   type="file"
@@ -306,7 +337,7 @@ export function OcrDropzone({
                   onChange={(e) => {
                     const nuevos = Array.from(e.target.files ?? []);
                     e.target.value = "";
-                    if (nuevos.length) procesar([...archivos, ...nuevos]);
+                    agregar(nuevos);
                   }}
                 />
               </>
@@ -335,6 +366,9 @@ export function OcrDropzone({
     </Card>
   );
 }
+
+/** dragleave también salta al pasar sobre los hijos de la zona: solo cuenta salir de ella. */
+const salioDeLaZona = (e: React.DragEvent) => !e.currentTarget.contains(e.relatedTarget as Node | null);
 
 function EstadoBadge({ estado }: { estado: Estado }) {
   switch (estado.status) {
