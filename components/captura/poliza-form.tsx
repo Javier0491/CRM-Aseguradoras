@@ -60,6 +60,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
+import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
 import { subirArchivo } from "@/lib/archivos/subir";
 import { hoyISO } from "@/lib/format";
 import { editarPoliza, guardarPoliza } from "@/lib/polizas/actions";
@@ -424,6 +425,21 @@ export function PolizaForm({
 
   const onSubmit = handleSubmit(async (values) => {
     limpiarAvisos();
+    try {
+      await enviar(values);
+    } catch (e) {
+      // Sin esto, un error del navegador (p. ej. un archivo que ya no se puede leer) solo se ve en
+      // la consola y el formulario se queda sin respuesta.
+      console.error("[PolizaForm]", e);
+      setErrorGeneral(
+        esArchivoIlegible(e)
+          ? `Uno de los documentos ${MENSAJE_ARCHIVO_PERDIDO}`
+          : "Ocurrió un error inesperado al guardar. Revisa si la póliza aparece en Pólizas antes de volver a intentarlo."
+      );
+    }
+  });
+
+  async function enviar(values: FormValues) {
     for (const [tipo, archivo] of [["caratula", caratula], ["negociacion", negociacion]] as const) {
       const error = archivo ? await validarArchivo(tipo, archivo) : null;
       if (error) {
@@ -480,7 +496,7 @@ export function PolizaForm({
     for (const [nombre, message] of Object.entries(res.errores ?? ({} as Errores))) {
       setError(rutaCampo(nombre, values.ramo), { type: "server", message });
     }
-  });
+  }
 
   const bloqueado = isSubmitting || extrayendo;
   const totalErrores =

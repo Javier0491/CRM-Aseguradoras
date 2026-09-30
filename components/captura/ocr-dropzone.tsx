@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { copiarTodosEnMemoria } from "@/lib/archivos/memoria";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import {
   OCR_MAX_ARCHIVOS,
@@ -113,14 +114,23 @@ export function OcrDropzone({
     []
   );
 
-  async function procesar(archivos: File[]) {
-    if (archivos.length === 0) return;
-    const invalido = validarArchivos(archivos);
+  async function procesar(seleccion: File[]) {
+    if (seleccion.length === 0) return;
+    const invalido = validarArchivos(seleccion);
     if (invalido) {
       actualizarPreviews([]);
-      setEstado({ status: "error", archivos, mensaje: invalido });
+      setEstado({ status: "error", archivos: seleccion, mensaje: invalido });
       return;
     }
+    // Copia en memoria: la carátula se vuelve a leer al guardar la póliza, y para entonces el
+    // archivo original pudo desaparecer (p. ej. si se arrastró desde dentro de un ZIP).
+    const copia = await copiarTodosEnMemoria(seleccion);
+    if (!copia.ok) {
+      actualizarPreviews([]);
+      setEstado({ status: "error", archivos: seleccion, mensaje: copia.error });
+      return;
+    }
+    const archivos = copia.archivos;
 
     abortRef.current?.abort();
     const controller = new AbortController();

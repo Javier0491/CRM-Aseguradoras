@@ -1,6 +1,7 @@
 // Archivos de una póliza en Supabase Storage: carátula (PDF), formato de negociación de
 // GMM Colectivo (PDF) y expediente completo (ZIP).
 // Reglas compartidas por cliente y servidor.
+import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
 
 /** Bucket privado; ver supabase/storage-expedientes.sql. */
 export const ARCHIVOS_BUCKET = "expedientes";
@@ -105,7 +106,13 @@ export async function validarArchivo(tipo: TipoArchivo, archivo: File): Promise<
   if (archivo.size === 0) return "El archivo está vacío.";
   if (archivo.size > def.maxBytes) return `Excede el límite de ${formatBytes(def.maxBytes)}.`;
 
-  const inicio = new Uint8Array(await archivo.slice(0, 4).arrayBuffer());
+  let inicio: Uint8Array;
+  try {
+    inicio = new Uint8Array(await archivo.slice(0, 4).arrayBuffer());
+  } catch (e) {
+    if (esArchivoIlegible(e)) return `El archivo ${MENSAJE_ARCHIVO_PERDIDO}`;
+    throw e;
+  }
   const valido = def.firmas.some((firma) => firma.every((b, i) => inicio[i] === b));
   return valido ? null : `El archivo no es un ${def.extension.toUpperCase()} válido.`;
 }

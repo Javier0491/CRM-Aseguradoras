@@ -5,6 +5,7 @@ import { FileArchive, FileText, UploadCloud, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ARCHIVOS, formatBytes, type TipoArchivo } from "@/lib/archivos/config";
+import { copiarTodosEnMemoria } from "@/lib/archivos/memoria";
 import { cn } from "@/lib/utils";
 
 /** Selector de un archivo de póliza (arrastrar o clic). La validación la hace quien lo usa. */
@@ -32,7 +33,17 @@ export function ArchivoInput({
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [arrastrando, setArrastrando] = React.useState(false);
+  const [errorLectura, setErrorLectura] = React.useState<string | null>(null);
   const def = ARCHIVOS[tipo];
+
+  // Se entrega una copia en memoria: el archivo se sube más tarde (al guardar) y para entonces
+  // el original pudo desaparecer (p. ej. un PDF arrastrado desde dentro de un ZIP).
+  async function elegir(archivo: File | undefined) {
+    if (!archivo) return;
+    const copia = await copiarTodosEnMemoria([archivo]);
+    setErrorLectura(copia.ok ? null : copia.error);
+    if (copia.ok) onChange(copia.archivos[0]);
+  }
   const Icono = def.verEnLinea ? FileText : FileArchive;
 
   if (value) {
@@ -88,15 +99,14 @@ export function ArchivoInput({
         onDrop={(e) => {
           e.preventDefault();
           setArrastrando(false);
-          const archivo = e.dataTransfer.files[0];
-          if (archivo && !disabled) onChange(archivo);
+          if (!disabled) void elegir(e.dataTransfer.files[0]);
         }}
         className={cn(
           "flex w-full items-center gap-3 rounded-lg border border-dashed bg-background/60 px-4 py-3 text-left transition-colors outline-none",
           "hover:border-primary/60 hover:bg-primary/[0.03] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40",
           "disabled:pointer-events-none disabled:opacity-50",
           arrastrando && "border-primary bg-primary/[0.06]",
-          invalid && "border-destructive"
+          (invalid || errorLectura) && "border-destructive"
         )}
       >
         <UploadCloud className="size-5 shrink-0 text-muted-foreground" />
@@ -119,8 +129,12 @@ export function ArchivoInput({
         accept={def.accept}
         className="sr-only"
         tabIndex={-1}
-        onChange={(e) => onChange(e.target.files?.[0] ?? null)}
+        onChange={(e) => {
+          void elegir(e.target.files?.[0]);
+          e.target.value = "";
+        }}
       />
+      {errorLectura && <p className="mt-1.5 text-xs text-destructive">{errorLectura}</p>}
     </>
   );
 }
