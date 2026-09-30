@@ -1,9 +1,12 @@
 import { formatFecha, formatMoneda } from "@/lib/format";
+import { sumarDias } from "@/lib/polizas/gracia";
 
 export const VARIABLES = [
   { clave: "nombre_cliente", label: "Nombre del cliente" },
   { clave: "monto_adeudo", label: "Monto del adeudo" },
   { clave: "fecha_vencimiento", label: "Fecha de vencimiento" },
+  { clave: "fecha_limite_pago", label: "Fecha límite de pago (con gracia)" },
+  { clave: "dias_gracia", label: "Días de gracia" },
   { clave: "numero_poliza", label: "Número de póliza" },
   { clave: "aseguradora", label: "Aseguradora" },
 ] as const;
@@ -26,6 +29,8 @@ export type ReciboCobranza = {
   aseguradora: string;
   monto: number;
   fechaVencimiento: string; // ISO yyyy-mm-dd
+  /** Días de gracia de la aseguradora (Reglas de cobranza). */
+  diasGracia: number;
 };
 
 export type Token =
@@ -41,6 +46,8 @@ export function valoresDeRecibo(recibo: ReciboCobranza): ValoresVariables {
     nombre_cliente: recibo.cliente,
     monto_adeudo: formatMoneda(recibo.monto),
     fecha_vencimiento: formatFecha(recibo.fechaVencimiento),
+    fecha_limite_pago: formatFecha(sumarDias(recibo.fechaVencimiento, recibo.diasGracia)),
+    dias_gracia: `${recibo.diasGracia} ${recibo.diasGracia === 1 ? "día" : "días"}`,
     numero_poliza: recibo.poliza,
     aseguradora: recibo.aseguradora,
   };

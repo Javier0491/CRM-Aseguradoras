@@ -239,7 +239,12 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
                         )}
                       </TableCell>
                       <TableCell>
-                        <Vencimiento fecha={r.fecha_vencimiento} estado={r.estado} hoy={hoy} />
+                        <Vencimiento
+                          fecha={r.fecha_vencimiento}
+                          estado={r.estado}
+                          hoy={hoy}
+                          diasGracia={poliza.aseguradora.diasGracia}
+                        />
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatMoneda(Number(r.monto))}

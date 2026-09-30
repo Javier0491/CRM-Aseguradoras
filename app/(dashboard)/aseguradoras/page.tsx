@@ -99,25 +99,28 @@ export default async function AseguradorasPage() {
                     <dd className="pt-1.5 text-sm font-medium tabular-nums">{formatMoneda(a.primaActiva)}</dd>
                   </div>
                 </dl>
-                {(!a.usaPolizaVigor || a.ignoraRecibosDuplicados || puedeEditar) && (
-                  <div className="-mt-1 flex flex-wrap items-center gap-1.5">
-                    {!a.usaPolizaVigor && (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Sin póliza vigor
-                      </Badge>
-                    )}
-                    {a.ignoraRecibosDuplicados && (
-                      <Badge variant="outline" className="text-muted-foreground">
-                        Ignora recibos duplicados
-                      </Badge>
-                    )}
-                    {puedeEditar && (
-                      <span className="ml-auto">
-                        <ReglasCobranzaDialog aseguradora={a} />
-                      </span>
-                    )}
-                  </div>
-                )}
+                <div className="-mt-1 flex flex-wrap items-center gap-1.5">
+                  <Badge variant="outline" className="text-muted-foreground">
+                    {a.diasGracia > 0
+                      ? `${a.diasGracia} ${a.diasGracia === 1 ? "día" : "días"} de gracia`
+                      : "Sin días de gracia"}
+                  </Badge>
+                  {!a.usaPolizaVigor && (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Sin póliza vigor
+                    </Badge>
+                  )}
+                  {a.ignoraRecibosDuplicados && (
+                    <Badge variant="outline" className="text-muted-foreground">
+                      Ignora recibos duplicados
+                    </Badge>
+                  )}
+                  {puedeEditar && (
+                    <span className="ml-auto">
+                      <ReglasCobranzaDialog aseguradora={a} />
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {formatNumero(a.polizasTotales)} {a.polizasTotales === 1 ? "póliza registrada" : "pólizas registradas"}{" "}
                   en total ·{" "}

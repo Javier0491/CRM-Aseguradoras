@@ -27,6 +27,7 @@ export async function getAseguradorasCatalogo() {
         estado_api: true,
         usaPolizaVigor: true,
         ignoraRecibosDuplicados: true,
+        diasGracia: true,
       },
     }),
     db.poliza.groupBy({

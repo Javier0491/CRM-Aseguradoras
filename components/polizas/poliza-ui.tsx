@@ -2,6 +2,7 @@
 import { normalizarHex } from "@/lib/color";
 import type { EstadoRecibo, FormaPago, Ramo } from "@/lib/generated/prisma/client";
 import { diasDesdeHoy, formatFecha } from "@/lib/format";
+import { situacionCobro } from "@/lib/polizas/gracia";
 
 export const ramoLabel: Record<Ramo, string> = {
   AUTOS: "Autos",
@@ -42,12 +43,37 @@ export function AseguradoraTag({ nombre, color }: { nombre: string; color: strin
   );
 }
 
-export function Vencimiento({ fecha, estado, hoy }: { fecha: Date; estado: EstadoRecibo; hoy: string }) {
+/**
+ * Fecha de pago de un recibo y, si sigue pendiente, su situación según los días de gracia de la
+ * aseguradora: por vencer, en periodo de gracia (con la fecha límite) o en riesgo de cancelación.
+ */
+export function Vencimiento({
+  fecha,
+  estado,
+  hoy,
+  diasGracia,
+}: {
+  fecha: Date;
+  estado: EstadoRecibo;
+  hoy: string;
+  diasGracia: number;
+}) {
   const dias = diasDesdeHoy(fecha, hoy);
   let nota: React.ReactNode = null;
   if (estado === "PENDIENTE") {
-    if (dias < 0) nota = <span className="text-destructive">Vencido hace {-dias} d</span>;
-    else if (dias <= 15) nota = <span className="text-warning">{dias === 0 ? "Vence hoy" : `En ${dias} d`}</span>;
+    const { situacion, fechaLimite, diasRestantes } = situacionCobro(fecha.toISOString().slice(0, 10), diasGracia, hoy);
+    if (situacion === "riesgo") {
+      nota = <span className="font-medium text-destructive">Riesgo de cancelación · venció hace {-dias} d</span>;
+    } else if (situacion === "gracia") {
+      nota = (
+        <span className="font-medium text-warning">
+          En gracia · paga antes del {formatFecha(`${fechaLimite}T00:00:00Z`)} (
+          {diasRestantes === 0 ? "último día" : `quedan ${diasRestantes} d`})
+        </span>
+      );
+    } else if (dias <= 15) {
+      nota = <span className="text-warning">{dias === 0 ? "Vence hoy" : `En ${dias} d`}</span>;
+    }
   }
   return (
     <div className="flex flex-col">

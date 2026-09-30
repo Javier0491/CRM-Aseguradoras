@@ -21,20 +21,39 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { diasParaVencer } from "@/lib/comunicaciones/data";
+import { diasParaVencer, FECHA_CORTE } from "@/lib/comunicaciones/data";
 import type { ReciboCobranza } from "@/lib/comunicaciones/plantillas";
 import { formatFecha, formatMoneda } from "@/lib/format";
+import { situacionCobro, type SituacionCobro } from "@/lib/polizas/gracia";
 import { cn } from "@/lib/utils";
 
 export type RegistroEnvio = { plantilla: string; hora: string };
 
-type Filtro = "todos" | "vencidos" | "por_vencer";
+type Filtro = "todos" | SituacionCobro;
 
-function EstadoVencimiento({ dias }: { dias: number }) {
-  if (dias < 0) {
+function EstadoVencimiento({
+  dias,
+  situacion,
+  fechaLimite,
+  diasRestantes,
+}: {
+  dias: number;
+  situacion: SituacionCobro;
+  fechaLimite: string;
+  diasRestantes: number;
+}) {
+  if (situacion === "riesgo") {
     return (
       <Badge variant="outline" className="border-destructive/30 bg-destructive/10 text-destructive">
-        Vencido hace {Math.abs(dias)} d
+        Riesgo de cancelación · venció hace {Math.abs(dias)} d
+      </Badge>
+    );
+  }
+  if (situacion === "gracia") {
+    return (
+      <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning">
+        En gracia hasta el {formatFecha(fechaLimite)} ·{" "}
+        {diasRestantes === 0 ? "último día" : `quedan ${diasRestantes} d`}
       </Badge>
     );
   }
@@ -70,14 +89,16 @@ export function RecibosPanel({
   const conDias = React.useMemo(
     () =>
       recibos
-        .map((r) => ({ ...r, dias: diasParaVencer(r.fechaVencimiento) }))
+        .map((r) => ({
+          ...r,
+          dias: diasParaVencer(r.fechaVencimiento),
+          ...situacionCobro(r.fechaVencimiento, r.diasGracia, FECHA_CORTE),
+        }))
         .sort((a, b) => a.dias - b.dias),
     [recibos]
   );
-  const vencidos = conDias.filter((r) => r.dias < 0);
-  const porVencer = conDias.filter((r) => r.dias >= 0);
-  const visibles =
-    filtro === "vencidos" ? vencidos : filtro === "por_vencer" ? porVencer : conDias;
+  const cuantos = (s: SituacionCobro) => conDias.filter((r) => r.situacion === s).length;
+  const visibles = filtro === "todos" ? conDias : conDias.filter((r) => r.situacion === filtro);
   const totalVisible = visibles.reduce((s, r) => s + r.monto, 0);
 
   return (
@@ -92,8 +113,9 @@ export function RecibosPanel({
         <Tabs value={filtro} onValueChange={(v) => setFiltro(v as Filtro)}>
           <TabsList>
             <TabsTrigger value="todos">Todos · {conDias.length}</TabsTrigger>
-            <TabsTrigger value="vencidos">Vencidos · {vencidos.length}</TabsTrigger>
-            <TabsTrigger value="por_vencer">Por vencer · {porVencer.length}</TabsTrigger>
+            <TabsTrigger value="riesgo">En riesgo · {cuantos("riesgo")}</TabsTrigger>
+            <TabsTrigger value="gracia">En gracia · {cuantos("gracia")}</TabsTrigger>
+            <TabsTrigger value="por_vencer">Por vencer · {cuantos("por_vencer")}</TabsTrigger>
           </TabsList>
         </Tabs>
       </CardHeader>
@@ -131,7 +153,12 @@ export function RecibosPanel({
                   <TableCell>
                     <div className="flex flex-col items-start gap-1">
                       <span className="text-xs tabular-nums">{formatFecha(r.fechaVencimiento)}</span>
-                      <EstadoVencimiento dias={r.dias} />
+                      <EstadoVencimiento
+                        dias={r.dias}
+                        situacion={r.situacion}
+                        fechaLimite={r.fechaLimite}
+                        diasRestantes={r.diasRestantes}
+                      />
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-medium tabular-nums">

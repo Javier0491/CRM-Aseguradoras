@@ -85,15 +85,37 @@ export async function buscarGlobal(agenciaId: string, q: string): Promise<Result
 export type Aviso = { clave: string; titulo: string; detalle: string; cantidad: number; href: string; tono: "warning" | "destructive" | "info" };
 
 /**
- * Avisos de la campana: pólizas por vencer, recibos vencidos sin cobrar y (solo ADMIN)
+ * Avisos de la campana: pólizas por vencer, recibos vencidos (en gracia o en riesgo) y (solo ADMIN)
  * diferencias de comisión por aclarar. Solo los que tienen algo pendiente.
  */
+/**
+ * Recibos pendientes cuyo plazo de gracia ya terminó: vencimiento + días de gracia de su
+ * aseguradora anterior a hoy. Las aseguradoras se agrupan por sus días de gracia.
+ */
+async function contarRecibosEnRiesgo(agenciaId: string, hoy: Date) {
+  const aseguradoras = await db.aseguradora.findMany({ where: { agenciaId }, select: { id: true, diasGracia: true } });
+  const porGracia = new Map<number, string[]>();
+  for (const a of aseguradoras) porGracia.set(a.diasGracia, [...(porGracia.get(a.diasGracia) ?? []), a.id]);
+  if (porGracia.size === 0) return 0;
+  return db.recibo.count({
+    where: {
+      agenciaId,
+      estado: "PENDIENTE",
+      OR: [...porGracia].map(([dias, ids]) => ({
+        poliza: { aseguradora_id: { in: ids } },
+        fecha_vencimiento: { lt: new Date(hoy.getTime() - dias * 86_400_000) },
+      })),
+    },
+  });
+}
+
 export async function getAvisos(agenciaId: string, { esAdmin }: { esAdmin: boolean }): Promise<Aviso[]> {
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER * 86_400_000);
-  const [porVencer, vencidos, aclarar] = await Promise.all([
+  const [porVencer, vencidos, riesgo, aclarar] = await Promise.all([
     db.poliza.count({ where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } } }),
     db.recibo.count({ where: { agenciaId, estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } } }),
+    contarRecibosEnRiesgo(agenciaId, hoy),
     esAdmin ? db.recibo.count({ where: { agenciaId, estado: "PAGADO" } }) : Promise.resolve(0),
   ]);
   const avisos: Aviso[] = [
@@ -106,12 +128,20 @@ export async function getAvisos(agenciaId: string, { esAdmin }: { esAdmin: boole
       tono: "warning",
     },
     {
-      clave: "recibos-vencidos",
-      titulo: "Recibos vencidos sin cobrar",
-      detalle: "Su fecha de pago ya pasó y siguen pendientes.",
-      cantidad: vencidos,
+      clave: "recibos-riesgo",
+      titulo: "Recibos en riesgo de cancelación",
+      detalle: "Vencidos y fuera de los días de gracia de su aseguradora.",
+      cantidad: riesgo,
       href: "/polizas",
       tono: "destructive",
+    },
+    {
+      clave: "recibos-gracia",
+      titulo: "Recibos en periodo de gracia",
+      detalle: "Vencidos, pero su aseguradora aún permite pagarlos.",
+      cantidad: vencidos - riesgo,
+      href: "/polizas",
+      tono: "warning",
     },
     {
       clave: "aclaraciones",

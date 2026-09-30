@@ -14,9 +14,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { actualizarReglasCobranza, type ReglasCobranza } from "@/lib/aseguradoras/actions";
+import { MAX_DIAS_GRACIA } from "@/lib/polizas/gracia";
 
 /** Diálogo (solo ADMIN) con las reglas de cobranza de una aseguradora. */
 export function ReglasCobranzaDialog({
@@ -28,21 +30,34 @@ export function ReglasCobranzaDialog({
   const [reglas, setReglas] = React.useState<ReglasCobranza>({
     usaPolizaVigor: aseguradora.usaPolizaVigor,
     ignoraRecibosDuplicados: aseguradora.ignoraRecibosDuplicados,
+    diasGracia: aseguradora.diasGracia,
   });
+  // Texto del campo: se permite vaciarlo mientras se escribe.
+  const [diasTexto, setDiasTexto] = React.useState(String(aseguradora.diasGracia));
   const [error, setError] = React.useState<string | null>(null);
   const [guardando, startGuardar] = React.useTransition();
 
   function abrir(v: boolean) {
     setAbierto(v);
     if (v) {
-      setReglas({ usaPolizaVigor: aseguradora.usaPolizaVigor, ignoraRecibosDuplicados: aseguradora.ignoraRecibosDuplicados });
+      setReglas({
+        usaPolizaVigor: aseguradora.usaPolizaVigor,
+        ignoraRecibosDuplicados: aseguradora.ignoraRecibosDuplicados,
+        diasGracia: aseguradora.diasGracia,
+      });
+      setDiasTexto(String(aseguradora.diasGracia));
       setError(null);
     }
   }
 
   function guardar() {
+    const diasGracia = diasTexto.trim() === "" ? 0 : Number(diasTexto);
+    if (!Number.isInteger(diasGracia) || diasGracia < 0 || diasGracia > MAX_DIAS_GRACIA) {
+      setError(`Los días de gracia deben ser un número entero entre 0 y ${MAX_DIAS_GRACIA}.`);
+      return;
+    }
     startGuardar(async () => {
-      const r = await actualizarReglasCobranza(aseguradora.id, reglas);
+      const r = await actualizarReglasCobranza(aseguradora.id, { ...reglas, diasGracia });
       if (r.ok) setAbierto(false);
       else setError(r.error);
     });
@@ -59,10 +74,34 @@ export function ReglasCobranzaDialog({
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Reglas de cobranza · {aseguradora.nombre}</DialogTitle>
-          <DialogDescription>Cambian cómo se capturan sus pólizas y cómo se lee su estado de cuenta.</DialogDescription>
+          <DialogDescription>
+            Cambian cómo se capturan sus pólizas, cómo se lee su estado de cuenta y cuándo un recibo sin pagar está en
+            riesgo.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <Label htmlFor={`${id}-gracia`}>Días de gracia para pagar</Label>
+              <p className="text-xs text-muted-foreground">
+                Días después del vencimiento de un recibo en que el cliente aún puede pagar sin que se cancele la
+                póliza (p. ej. MetLife 30). Con 0, un recibo vencido pasa directo a riesgo de cancelación (p. ej.
+                Quálitas).
+              </p>
+            </div>
+            <Input
+              id={`${id}-gracia`}
+              type="number"
+              inputMode="numeric"
+              min={0}
+              max={MAX_DIAS_GRACIA}
+              step={1}
+              value={diasTexto}
+              onChange={(e) => setDiasTexto(e.target.value)}
+              className="w-20 shrink-0 text-right tabular-nums"
+            />
+          </div>
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <Label htmlFor={`${id}-vigor`}>Usa póliza vigor</Label>

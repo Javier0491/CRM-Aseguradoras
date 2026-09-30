@@ -148,6 +148,9 @@ model Aseguradora {
   // true (p. ej. Quálitas): el estado de cuenta repite renglones; del mismo recibo de la misma
   // póliza (p. ej. "1/12") solo cuenta el primero.
   ignoraRecibosDuplicados Boolean @default(false) @map("ignora_recibos_duplicados")
+  // Días después del vencimiento de un recibo en que aún se puede pagar sin que se cancele la
+  // póliza (p. ej. MetLife 30, Quálitas 0). Pasado ese plazo el recibo está en riesgo.
+  diasGracia              Int     @default(0) @map("dias_gracia")
 
   polizas  Poliza[]
   esquemas EsquemaComision[]

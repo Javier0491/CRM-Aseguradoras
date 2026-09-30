@@ -12,13 +12,13 @@ export function diasParaVencer(fechaVencimiento: string, corte = FECHA_CORTE) {
 }
 
 export const recibosPorCobrar: ReciboCobranza[] = [
-  { folio: "REC-24-009102", poliza: "GNP-GM-1033871", cliente: "Patricia Elena Villarreal", email: "pvillarreal@correo.mx", aseguradora: "GNP", monto: 18_450.0, fechaVencimiento: "2026-09-08" },
-  { folio: "REC-24-009087", poliza: "QUA-AU-7712093", cliente: "Logística Express del Norte", email: "pagos@logexnorte.mx", aseguradora: "Quálitas", monto: 96_310.5, fechaVencimiento: "2026-09-15" },
-  { folio: "REC-24-009095", poliza: "MET-VI-5524410", cliente: "Jorge Iván Castañeda", email: "jcastaneda@correo.mx", aseguradora: "MetLife", monto: 4_820.0, fechaVencimiento: "2026-09-19" },
-  { folio: "REC-24-009110", poliza: "AXA-DA-3305512", cliente: "Comercializadora Alfa Bajío", email: "tesoreria@alfabajio.mx", aseguradora: "AXA", monto: 152_900.0, fechaVencimiento: "2026-09-24" },
-  { folio: "REC-24-009118", poliza: "GNP-VI-2290017", cliente: "Daniela Ruiz Esparza", email: "druiz@correo.mx", aseguradora: "GNP", monto: 7_615.2, fechaVencimiento: "2026-09-27" },
-  { folio: "REC-24-009121", poliza: "MAP-HG-4475510", cliente: "Fernando Olvera Paz", email: "folvera@correo.mx", aseguradora: "Mapfre", monto: 3_240.0, fechaVencimiento: "2026-09-30" },
-  { folio: "REC-24-009126", poliza: "MET-GM-6614480", cliente: "Consultores Asociados MX", email: "rh@consultoresmx.mx", aseguradora: "MetLife", monto: 131_926.9, fechaVencimiento: "2026-10-03" },
+  { folio: "REC-24-009102", poliza: "GNP-GM-1033871", cliente: "Patricia Elena Villarreal", email: "pvillarreal@correo.mx", aseguradora: "GNP", monto: 18_450.0, fechaVencimiento: "2026-09-08", diasGracia: 0 },
+  { folio: "REC-24-009087", poliza: "QUA-AU-7712093", cliente: "Logística Express del Norte", email: "pagos@logexnorte.mx", aseguradora: "Quálitas", monto: 96_310.5, fechaVencimiento: "2026-09-15", diasGracia: 0 },
+  { folio: "REC-24-009095", poliza: "MET-VI-5524410", cliente: "Jorge Iván Castañeda", email: "jcastaneda@correo.mx", aseguradora: "MetLife", monto: 4_820.0, fechaVencimiento: "2026-09-19", diasGracia: 30 },
+  { folio: "REC-24-009110", poliza: "AXA-DA-3305512", cliente: "Comercializadora Alfa Bajío", email: "tesoreria@alfabajio.mx", aseguradora: "AXA", monto: 152_900.0, fechaVencimiento: "2026-09-24", diasGracia: 0 },
+  { folio: "REC-24-009118", poliza: "GNP-VI-2290017", cliente: "Daniela Ruiz Esparza", email: "druiz@correo.mx", aseguradora: "GNP", monto: 7_615.2, fechaVencimiento: "2026-09-27", diasGracia: 0 },
+  { folio: "REC-24-009121", poliza: "MAP-HG-4475510", cliente: "Fernando Olvera Paz", email: "folvera@correo.mx", aseguradora: "Mapfre", monto: 3_240.0, fechaVencimiento: "2026-09-30", diasGracia: 0 },
+  { folio: "REC-24-009126", poliza: "MET-GM-6614480", cliente: "Consultores Asociados MX", email: "rh@consultoresmx.mx", aseguradora: "MetLife", monto: 131_926.9, fechaVencimiento: "2026-10-03", diasGracia: 30 },
 ];
 
 export const plantillasIniciales: Plantilla[] = [
@@ -43,7 +43,7 @@ Equipo de Cobranza · PJ MAGNUS`,
 
 Nuestros registros indican que el recibo de tu póliza {{numero_poliza}} con {{aseguradora}}, por un monto de {{monto_adeudo}}, venció el {{fecha_vencimiento}}.
 
-Para evitar la cancelación de tu cobertura, te pedimos regularizar el pago a la brevedad. Estamos a tus órdenes para cualquier aclaración.
+{{aseguradora}} te da {{dias_gracia}} de gracia: para evitar la cancelación de tu cobertura, realiza el pago a más tardar el {{fecha_limite_pago}}. Estamos a tus órdenes para cualquier aclaración.
 
 Atentamente,
 Equipo de Cobranza · PJ MAGNUS`,

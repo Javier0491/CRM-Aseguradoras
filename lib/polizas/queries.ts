@@ -123,7 +123,7 @@ export async function getRecibosListado() {
             numeroImpreso: true,
             _count: { select: { recibos: true } },
             cliente: { select: { nombre: true } },
-            aseguradora: { select: { nombre: true, color_hex: true } },
+            aseguradora: { select: { nombre: true, color_hex: true, diasGracia: true } },
           },
         },
       },
@@ -175,7 +175,7 @@ export async function getPolizaDetalle(id: string) {
       expediente_bytes: true,
       expediente_subido_at: true,
       cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
-      aseguradora: { select: { nombre: true, color_hex: true } },
+      aseguradora: { select: { nombre: true, color_hex: true, diasGracia: true } },
       asegurados: {
         orderBy: { orden: "asc" },
         select: {
