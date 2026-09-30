@@ -68,6 +68,31 @@ function esFechaValida(v: string) {
   return !Number.isNaN(d.getTime()) && d.toISOString().startsWith(v);
 }
 
+const RFC_GENERICO = /^X[AE]XX010101000$/;
+
+/**
+ * Fecha de nacimiento (AAAA-MM-DD) codificada en el RFC de una persona física: 4 letras y
+ * luego AAMMDD. null si el RFC es de persona moral (3 letras) o la fecha no existe. El siglo
+ * se elige para que la fecha no quede en el futuro respecto de `hoy`.
+ */
+export function fechaNacimientoDeRfc(rfc: string, hoy: string): string | null {
+  const limpio = rfc.replace(/[\s-]/g, "").toUpperCase();
+  const m = /^[A-ZÑ&]{4}(\d{2})(\d{2})(\d{2})[A-Z\d]{3}$/.exec(limpio);
+  // Los genéricos (público en general, extranjeros) no son de una persona.
+  if (!m || RFC_GENERICO.test(limpio)) return null;
+  const [, aa, mm, dd] = m;
+  const actual = `20${aa}-${mm}-${dd}`;
+  const fecha = actual > hoy ? `19${aa}-${mm}-${dd}` : actual;
+  return esFechaValida(fecha) ? fecha : null;
+}
+
+/** Años cumplidos a la fecha `al` (ambas AAAA-MM-DD). null si alguna fecha es inválida. */
+export function edadAl(fechaNacimiento: string, al: string): number | null {
+  if (!esFechaValida(fechaNacimiento) || !esFechaValida(al) || fechaNacimiento > al) return null;
+  const anios = Number(al.slice(0, 4)) - Number(fechaNacimiento.slice(0, 4));
+  return al.slice(5) < fechaNacimiento.slice(5) ? anios - 1 : anios;
+}
+
 /**
  * Valida la lista. Las claves del resultado usan la ruta del formulario,
  * p. ej. "asegurados.2.nombre".

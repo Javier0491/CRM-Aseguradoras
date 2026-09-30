@@ -61,10 +61,13 @@ import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { subirArchivo } from "@/lib/archivos/subir";
+import { hoyISO } from "@/lib/format";
 import { editarPoliza, guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
 import {
   aseguradoVacio,
+  edadAl,
+  fechaNacimientoDeRfc,
   PARENTESCOS,
   parentescoLabels,
   SEXOS,
@@ -1039,6 +1042,35 @@ function AseguradosFieldArray({
     asegurados?.[i]?.parentesco === "Titular" &&
     asegurados[i].nombre.replace(/\s+/g, " ").trim().toLowerCase() === contratante.toLowerCase();
 
+  // Datos que el formulario llenó solo (por asegurado): se actualizan mientras nadie los edite.
+  const rfc = useWatch({ control, name: "generales.rfcCliente" }) ?? "";
+  const inicioVigencia = useWatch({ control, name: "generales.vigenciaInicio" }) ?? "";
+  const autollenado = React.useRef<Record<string, { fecha?: string; edad?: string }>>({});
+
+  // El RFC de persona física trae la fecha de nacimiento del contratante; con ella (o con la
+  // capturada) se calcula la edad al inicio de vigencia. Nunca pisa un valor escrito a mano.
+  React.useEffect(() => {
+    const hoy = hoyISO();
+    const fechaRfc = fechaNacimientoDeRfc(rfc, hoy);
+    const opciones = { shouldDirty: true, shouldValidate: validar };
+    fields.forEach((field, i) => {
+      const a = asegurados?.[i];
+      if (!a) return;
+      const previo = autollenado.current[field.id] ?? {};
+      let fecha = a.fecha_nacimiento;
+      if (esContratante(i) && fechaRfc && (!fecha || fecha === previo.fecha)) {
+        if (fecha !== fechaRfc) setValue(`asegurados.${i}.fecha_nacimiento`, fechaRfc, opciones);
+        fecha = previo.fecha = fechaRfc;
+      }
+      const edad = edadAl(fecha, inicioVigencia || hoy);
+      if (edad !== null && (!a.edad || a.edad === previo.edad)) {
+        if (a.edad !== String(edad)) setValue(`asegurados.${i}.edad`, String(edad), opciones);
+        previo.edad = String(edad);
+      }
+      autollenado.current[field.id] = previo;
+    });
+  });
+
   function marcarContratante(i: number, activo: boolean) {
     const opciones = { shouldDirty: true, shouldValidate: validar };
     // Al desactivar se deshace lo que hizo la casilla.
@@ -1157,7 +1189,7 @@ const CAMPOS_ASEGURADO_UI: { campo: keyof AseguradoValores; definicion: CampoDef
     },
   },
   { campo: "sexo", definicion: { name: "sexo", label: "Sexo", type: "select", options: [...SEXOS] } },
-  { campo: "edad", definicion: { name: "edad", label: "Edad", type: "number", placeholder: "Años" } },
-  { campo: "fecha_nacimiento", definicion: { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date" } },
+  { campo: "edad", definicion: { name: "edad", label: "Edad", type: "number", placeholder: "Años", hint: "Se calcula con la fecha de nacimiento." } },
+  { campo: "fecha_nacimiento", definicion: { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date", hint: "Del contratante asegurado, se toma de su RFC." } },
   { campo: "antiguedad", definicion: { name: "antiguedad", label: "Antigüedad", type: "text", placeholder: "Ej. 2015-03-01" } },
 ];
