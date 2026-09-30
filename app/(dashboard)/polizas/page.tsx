@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { CalendarClock, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
 
+import { PolizasConciliadas, PolizasSinConciliar } from "@/components/polizas/conciliacion-polizas";
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
 import {
   AseguradoraTag,
@@ -26,8 +27,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
+import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
 import {
   DIAS_POR_VENCER,
   getPolizasListado,
@@ -82,9 +85,13 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
   const [
     { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto },
     { recibos, total: totalRecibos, pendientes },
+    conciliacion,
+    user,
   ] = await Promise.all([
     getPolizasListado({ q, ramo, faltaContacto: soloFaltaContacto }),
     getRecibosListado(),
+    getEstadoConciliacion(),
+    requireUser(),
   ]);
   const hoy = hoyISO();
 
@@ -146,6 +153,12 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
               Pólizas · {formatNumero(filtrando ? totalPolizas : totalGeneral)}
             </TabsTrigger>
             <TabsTrigger value="recibos">Recibos · {formatNumero(totalRecibos)}</TabsTrigger>
+            <TabsTrigger value="conciliadas">
+              Conciliadas · {formatNumero(conciliacion.conciliadas.length)}
+            </TabsTrigger>
+            <TabsTrigger value="sin-conciliar">
+              Sin conciliar · {formatNumero(conciliacion.sinConciliar.length)}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="polizas" className="space-y-4">
@@ -266,6 +279,19 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
               )}
               <NotaLimite mostrados={polizas.length} total={totalPolizas} />
             </Card>
+          </TabsContent>
+
+          <TabsContent value="conciliadas">
+            <PolizasConciliadas polizas={conciliacion.conciliadas} limite={LIMITE_LISTADO} />
+          </TabsContent>
+
+          <TabsContent value="sin-conciliar">
+            <PolizasSinConciliar
+              polizas={conciliacion.sinConciliar}
+              noEncontradas={conciliacion.noEncontradas}
+              verComisiones={esAdmin(user)}
+              limite={LIMITE_LISTADO}
+            />
           </TabsContent>
 
           <TabsContent value="recibos">

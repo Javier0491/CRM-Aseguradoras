@@ -228,6 +228,8 @@ export function ConciliacionWorkspace({
   const porAplicar = analisis
     ? analisis.resumen.conciliado + analisis.resumen.diferencia + analisis.resumen.auto_creado
     : 0;
+  // Se guardan al aplicar para el reporte de Pólizas → Sin conciliar.
+  const sinConciliar = analisis ? analisis.resumen.no_encontrado + analisis.resumen.revisar : 0;
   const visibles = analisis
     ? analisis.resultados.filter((r) => filtro === "todos" || r.estatus === filtro)
     : [];
@@ -576,14 +578,15 @@ export function ConciliacionWorkspace({
               ) : (
                 <span className="text-muted-foreground">
                   Se aplican los conciliados, los auto-creados y las diferencias (quedan como Pagado para
-                  aclarar la comisión); no encontrados y por revisar no se modifican.
+                  aclarar la comisión); los no encontrados y por revisar se guardan para el reporte de Pólizas →
+                  Sin conciliar.
                 </span>
               )}
             </div>
             <Button
               onClick={() => setConfirmar(true)}
               // Ya aplicado: para volver a aplicar hay que analizar de nuevo.
-              disabled={porAplicar === 0 || aplicando || aplicados !== null}
+              disabled={porAplicar + sinConciliar === 0 || aplicando || aplicados !== null}
             >
               <CheckCircle2 /> Aplicar Conciliación ({porAplicar})
             </Button>
@@ -612,7 +615,7 @@ export function ConciliacionWorkspace({
                 </>
               )}{" "}
               Se guardará la comisión pagada y el folio de cada uno. Los no encontrados y los renglones por
-              revisar no se modifican.
+              revisar no modifican ningún recibo: se guardan para explicarlos en Pólizas → Sin conciliar.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -68,6 +68,7 @@ model Agencia {
   bitacora           Bitacora[]
   lotesConciliacion  LoteConciliacion[]
   lotesCambios       LoteCambio[]
+  lotesRenglones     LoteRenglon[]
   notasAclaracion    NotaAclaracion[]
 
   @@map("agencias")
@@ -217,6 +218,8 @@ model Poliza {
   aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Restrict)
   recibos     Recibo[]
   asegurados  Asegurado[]
+  // Renglones de estados de cuenta que la conciliación asoció a esta póliza sin poder conciliarlos.
+  renglonesConciliacion LoteRenglon[]
 
   @@unique([agenciaId, numeroImpreso])
   @@index([polizaVigor])
@@ -360,6 +363,7 @@ model LoteConciliacion {
 
   aseguradora Aseguradora  @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
   cambios     LoteCambio[]
+  sinConciliar LoteRenglon[]
 
   @@index([created_at])
   @@index([agenciaId])
@@ -398,6 +402,37 @@ model LoteCambio {
 }
 
 // Seguimiento de un recibo PAGADO con diferencia de comisión: reclamos, notas y cierre.
+/**
+ * Renglón de un estado de cuenta que la conciliación no pudo aplicar: la póliza no está en el
+ * CRM (no_encontrado) o hay que revisarlo a mano (revisar). Explica en Pólizas → Sin conciliar
+ * por qué una póliza no se concilió. Los de un lote revertido se ignoran.
+ */
+model LoteRenglon {
+  id              String  @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId       String  @map("agencia_id") @db.Uuid
+  agencia         Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  lote_id         String
+  fila            Int
+  // Número de póliza tal como venía en el archivo.
+  poliza_archivo  String
+  // "no_encontrado" | "revisar"
+  estatus         String
+  detalle         String?
+  comision_pagada Decimal @db.Decimal(14, 2)
+  folio           String?
+  // Póliza del CRM con la que se cruzó (solo en "revisar"); null si no se encontró.
+  poliza_id       String?
+
+  lote   LoteConciliacion @relation(fields: [lote_id], references: [id], onDelete: Cascade)
+  poliza Poliza?          @relation(fields: [poliza_id], references: [id], onDelete: SetNull)
+
+  @@index([lote_id])
+  @@index([poliza_id])
+  @@index([agenciaId])
+  @@map("lotes_renglones")
+}
+
 model NotaAclaracion {
   id            String   @id @default(cuid())
   // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.

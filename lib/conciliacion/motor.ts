@@ -408,7 +408,9 @@ export async function aplicarResultados(
   const conciliar = resultados.filter((r) => r.estatus === "conciliado" && r.recibo);
   const pagar = resultados.filter((r) => r.estatus === "diferencia" && r.recibo);
   const crear = resultados.filter((r) => r.estatus === "auto_creado" && r.nuevoRecibo);
-  if (conciliar.length === 0 && pagar.length === 0 && crear.length === 0) {
+  // Lo que no se pudo aplicar se guarda para explicar en Pólizas → Sin conciliar por qué no se concilió.
+  const sinConciliar = resultados.filter((r) => r.estatus === "no_encontrado" || r.estatus === "revisar");
+  if (conciliar.length === 0 && pagar.length === 0 && crear.length === 0 && sinConciliar.length === 0) {
     return { loteId: null, conciliados: 0, pagados: 0, creados: 0 };
   }
 
@@ -515,6 +517,21 @@ export async function aplicarResultados(
       if (cambios.length) {
         await tx.loteCambio.createMany({ data: cambios.map((c) => ({ ...c, agenciaId, lote_id: lote.id })) });
       }
+      if (sinConciliar.length) {
+        await tx.loteRenglon.createMany({
+          data: sinConciliar.map((r) => ({
+            agenciaId,
+            lote_id: lote.id,
+            fila: r.fila,
+            poliza_archivo: r.polizaArchivo,
+            estatus: r.estatus,
+            detalle: r.detalle,
+            comision_pagada: r.comisionPagada.toFixed(2),
+            folio: r.folio,
+            poliza_id: r.poliza?.id ?? null,
+          })),
+        });
+      }
       await registrarBitacora(
         usuario,
         {
@@ -523,7 +540,8 @@ export async function aplicarResultados(
           entidadId: lote.id,
           descripcion:
             `Aplicó «${archivoNombre}» de ${lote.aseguradora.nombre}: ${conciliados} conciliados, ` +
-            `${pagados} pagados con diferencia y ${creados} auto-creados`,
+            `${pagados} pagados con diferencia y ${creados} auto-creados` +
+            (sinConciliar.length ? `; ${sinConciliar.length} renglones sin conciliar` : ""),
         },
         tx
       );
