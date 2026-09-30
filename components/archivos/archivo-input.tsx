@@ -17,6 +17,7 @@ export function ArchivoInput({
   disabled,
   invalid,
   describedBy,
+  accion = "seleccionar",
 }: {
   tipo: TipoArchivo;
   id: string;
@@ -26,6 +27,8 @@ export function ArchivoInput({
   disabled?: boolean;
   invalid?: boolean;
   describedBy?: string;
+  /** Verbo del texto de la zona: "seleccionar" o "reemplazar" (ya hay un archivo guardado). */
+  accion?: "seleccionar" | "reemplazar";
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [arrastrando, setArrastrando] = React.useState(false);
@@ -75,9 +78,13 @@ export function ArchivoInput({
         onBlur={onBlur}
         onDragOver={(e) => {
           e.preventDefault();
+          e.dataTransfer.dropEffect = "copy";
           setArrastrando(true);
         }}
-        onDragLeave={() => setArrastrando(false)}
+        // Pasar sobre el ícono o el texto también dispara dragleave: solo cuenta salir de la zona.
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastrando(false);
+        }}
         onDrop={(e) => {
           e.preventDefault();
           setArrastrando(false);
@@ -97,7 +104,9 @@ export function ArchivoInput({
           <span className="block text-sm font-medium">
             {arrastrando
               ? "Suelta el archivo aquí"
-              : `Arrastra el ${def.extension.toUpperCase()} o haz clic para seleccionar`}
+              : accion === "reemplazar"
+                ? `Arrastra otro ${def.extension.toUpperCase()} aquí o haz clic para reemplazarlo`
+                : `Arrastra el ${def.extension.toUpperCase()} o haz clic para seleccionar`}
           </span>
           <span className="block text-xs text-muted-foreground">
             Solo .{def.extension} · máximo {formatBytes(def.maxBytes)}

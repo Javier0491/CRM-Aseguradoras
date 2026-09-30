@@ -341,14 +341,7 @@ function DocumentoPoliza({
               </Button>
             )}
           </div>
-          <details>
-            <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
-              Reemplazar archivo
-            </summary>
-            <div className="pt-3">
-              <ArchivoUploader polizaId={polizaId} tipo={tipo} reemplazar />
-            </div>
-          </details>
+          <ArchivoUploader polizaId={polizaId} tipo={tipo} reemplazar />
         </>
       ) : (
         <>

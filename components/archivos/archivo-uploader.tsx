@@ -55,6 +55,7 @@ export function ArchivoUploader({
         }}
         disabled={subiendo}
         invalid={Boolean(error)}
+        accion={reemplazar ? "reemplazar" : "seleccionar"}
       />
       {error && (
         <p className="flex items-center gap-1.5 text-xs text-destructive">
