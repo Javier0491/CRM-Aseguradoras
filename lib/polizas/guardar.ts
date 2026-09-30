@@ -168,6 +168,23 @@ async function obtenerCliente(
   return { id: existente.id, nombre: cambios.nombre ?? existente.nombre, nuevo: false };
 }
 
+/** Número impreso reducido a letras y dígitos (formato de la póliza vigor). */
+const soloAlfanumerico = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+/**
+ * Aseguradoras sin póliza vigor (p. ej. Quálitas): el formulario no la pide y su cobranza usa el
+ * número impreso. La póliza vigor solo encadena renovaciones: la de la póliza que se renueva o
+ * que se edita (`heredada`) o, si no hay, el número impreso de esta póliza.
+ */
+async function aplicarReglaVigor(agenciaId: string, g: Valores, heredada: string | null): Promise<Valores> {
+  const aseguradora = await db.aseguradora.findUnique({
+    where: { id: g.aseguradora, agenciaId },
+    select: { usaPolizaVigor: true },
+  });
+  if (!aseguradora || aseguradora.usaPolizaVigor) return g;
+  return { ...g, polizaVigor: heredada ?? soloAlfanumerico(g.numeroImpreso) };
+}
+
 /**
  * Valida el formulario con las mismas reglas que el navegador. Solo acepta aseguradoras de la
  * agencia: una póliza nunca puede apuntar al catálogo de otra.
@@ -253,6 +270,7 @@ export async function registrarPoliza(
     anterior = { id: original.id, numeroImpreso: original.numeroImpreso };
   }
 
+  g = await aplicarReglaVigor(agenciaId, g, anterior ? g.polizaVigor : null);
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const datos = columnasPoliza(input, g);
@@ -368,13 +386,15 @@ export async function actualizarPoliza(
   if (!actual) return { ok: false, error: "La póliza ya no existe." };
 
   // Un ejecutivo no ve ni cambia el % personalizado: se conserva el que tenía.
-  const g: Valores = permitirComision
+  const conComision: Valores = permitirComision
     ? input.generales
     : {
         ...input.generales,
         comisionPersonalizadaPct:
           actual.comision_personalizada_pct === null ? "" : Number(actual.comision_personalizada_pct).toFixed(2),
       };
+  // Sin póliza vigor se conserva la clave con la que ya está encadenada.
+  const g = await aplicarReglaVigor(agenciaId, conComision, actual.polizaVigor);
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 

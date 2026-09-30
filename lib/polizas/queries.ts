@@ -10,15 +10,23 @@ import type { Opcion } from "@/lib/polizas/ramos";
 
 export const LIMITE_LISTADO = 200;
 
-export async function getAseguradorasOpciones(): Promise<Opcion[]> {
+/** Opción del selector de aseguradora, con sus reglas de cobranza (captura y conciliación). */
+export type OpcionAseguradora = Opcion & { usaPolizaVigor: boolean; ignoraRecibosDuplicados: boolean };
+
+export async function getAseguradorasOpciones(): Promise<OpcionAseguradora[]> {
   await connection();
   const agenciaId = await getAgenciaId();
   const rows = await db.aseguradora.findMany({
     where: { agenciaId },
-    select: { id: true, nombre: true },
+    select: { id: true, nombre: true, usaPolizaVigor: true, ignoraRecibosDuplicados: true },
     orderBy: { nombre: "asc" },
   });
-  return rows.map((a) => ({ value: a.id, label: a.nombre }));
+  return rows.map((a) => ({
+    value: a.id,
+    label: a.nombre,
+    usaPolizaVigor: a.usaPolizaVigor,
+    ignoraRecibosDuplicados: a.ignoraRecibosDuplicados,
+  }));
 }
 
 /** Días antes del fin de vigencia en que una póliza se considera "por vencer". */

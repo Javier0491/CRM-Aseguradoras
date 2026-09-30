@@ -140,7 +140,13 @@ CAMPOS ESPECÍFICOS
   La cantidad es sumaAseguradaValor en GMM (deja también sumaAseguradaUnidad en null) o
   sumaAsegurada en los demás ramos. Si la suma asegurada trae una cantidad o no aparece,
   sumaAseguradaIlimitada es false. Se refiere solo a la suma asegurada principal de la póliza, no
-  a coberturas adicionales ni al deducible o al coaseguro.
+  a coberturas adicionales ni al deducible o al coaseguro. No aplica a Autos.
+- sumaAseguradaDanos (Autos): la suma asegurada de Daños Materiales en MXN. En la tabla de
+  coberturas es la cantidad que está a la IZQUIERDA del porcentaje de deducible, en el renglón de
+  Daños Materiales ("DAÑOS MATERIALES  $350,000.00  5%" → sumaAseguradaDanos 350000 y
+  deducibleDanos 5). Si en lugar de una cantidad dice "VALOR COMERCIAL", "V.C." o "VALOR
+  CONVENIDO" sin monto, déjala en null. No uses la suma de Responsabilidad Civil ni la de Gastos
+  Médicos.
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
 - redMedica (GMM Individual y Colectivo): ver RED MÉDICA.
 - condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma

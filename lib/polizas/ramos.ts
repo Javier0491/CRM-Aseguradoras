@@ -224,6 +224,13 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
       campos: [
         { name: "uso", label: "Uso", type: "select", required: true, options: ["Particular", "Comercial", "Servicio público", "Flotilla"] },
         { name: "cobertura", label: "Paquete", type: "select", required: true, options: ["Amplia", "Limitada", "Responsabilidad Civil"] },
+        {
+          name: "sumaAseguradaDanos",
+          label: "Suma asegurada daños materiales",
+          type: "currency",
+          placeholder: "0.00",
+          hint: "En MXN; en la carátula va a la izquierda del porcentaje de deducible.",
+        },
         { name: "deducibleDanos", label: "Deducible daños materiales", type: "percent", placeholder: "Ej. 5" },
         { name: "deducibleRobo", label: "Deducible robo total", type: "percent", placeholder: "Ej. 10" },
       ],

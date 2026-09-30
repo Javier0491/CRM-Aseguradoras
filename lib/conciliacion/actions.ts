@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getAdmin, getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
 import { AclaracionError, registrarSeguimiento } from "@/lib/conciliacion/aclaraciones";
-import { agruparPorFolio } from "@/lib/conciliacion/agrupar";
+import { agruparPorFolio, descartarRecibosDuplicados } from "@/lib/conciliacion/agrupar";
 import {
   aplicarResultados,
   cruzarEstadoDeCuenta,
@@ -69,13 +69,16 @@ async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Valid
   // Solo aseguradoras de la agencia del administrador.
   const aseguradora = await db.aseguradora.findUnique({
     where: { id: aseguradoraId, agenciaId: admin.agenciaId },
-    select: { id: true },
+    select: { id: true, ignoraRecibosDuplicados: true },
   });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe." };
   const filas = sanitizarFilas(rawFilas);
   if (!filas) return { ok: false, error: `El archivo no tiene renglones válidos (máximo ${MAX_FILAS_ESTADO}).` };
-  // El navegador ya agrupa los folios repetidos; se repite aquí porque no se confía en él.
-  return { ok: true, admin, aseguradoraId: aseguradora.id, filas: agruparPorFolio(filas).filas };
+  // El navegador ya agrupa los folios repetidos (y descarta los recibos duplicados si la
+  // aseguradora lo pide); se repite aquí porque no se confía en él.
+  let limpias = agruparPorFolio(filas).filas;
+  if (aseguradora.ignoraRecibosDuplicados) limpias = descartarRecibosDuplicados(limpias).filas;
+  return { ok: true, admin, aseguradoraId: aseguradora.id, filas: limpias };
 }
 
 /** Cruza el estado de cuenta contra la base de datos sin modificar nada. */

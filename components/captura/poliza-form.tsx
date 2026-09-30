@@ -231,7 +231,8 @@ export function PolizaForm({
   onRamoChange?: (ramo: Ramo) => void;
   ref?: React.Ref<PolizaFormHandle>;
   inicial?: PolizaFormInicial;
-  aseguradoras: Opcion[];
+  /** `usaPolizaVigor: false` (p. ej. Quálitas): no se pide la póliza vigor. */
+  aseguradoras: (Opcion & { usaPolizaVigor?: boolean })[];
   /** false para ejecutivos: se oculta el % de comisión personalizado (el servidor lo ignora). */
   verComisiones: boolean;
   /** El OCR está leyendo un documento; el formulario se reemplaza por un skeleton. */
@@ -342,7 +343,11 @@ export function PolizaForm({
     limpiarAvisos();
   }
   const aseguradoraId = useWatch({ control, name: "generales.aseguradora" });
-  const nombreAseguradora = aseguradoras.find((a) => a.value === aseguradoraId)?.label;
+  const aseguradoraElegida = aseguradoras.find((a) => a.value === aseguradoraId);
+  const nombreAseguradora = aseguradoraElegida?.label;
+  // Su cobranza usa el número de póliza completo: el campo no se muestra (el servidor asigna la
+  // clave interna que encadena las renovaciones).
+  const sinPolizaVigor = aseguradoraElegida?.usaPolizaVigor === false;
 
   React.useEffect(() => {
     onRamoChange?.(ramo);
@@ -388,7 +393,9 @@ export function PolizaForm({
       camposGenerales.map((c) => (c.name === "aseguradora" ? { ...c, options: aseguradoras } : c)),
     [aseguradoras]
   );
-  const camposPoliza = CAMPOS_POLIZA.filter((n) => verComisiones || n !== "comisionPersonalizadaPct").map(
+  const camposPoliza = CAMPOS_POLIZA.filter(
+    (n) => (verComisiones || n !== "comisionPersonalizadaPct") && !(sinPolizaVigor && n === "polizaVigor")
+  ).map(
     (n) => generalesDefs.find((c) => c.name === n)!
   );
   const camposContratante = generalesDefs.filter((c) => !CAMPOS_POLIZA.includes(c.name));

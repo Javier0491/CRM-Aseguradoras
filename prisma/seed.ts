@@ -13,7 +13,8 @@ const db = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 // Colores corporativos principales de cada marca.
 const aseguradoras = [
   { nombre: "GNP", color_hex: "#F26522" },
-  { nombre: "Quálitas", color_hex: "#6D2077" },
+  // Cobra por el número de póliza completo y su estado de cuenta repite renglones.
+  { nombre: "Quálitas", color_hex: "#6D2077", usaPolizaVigor: false, ignoraRecibosDuplicados: true },
   { nombre: "MetLife", color_hex: "#0090DA" },
   { nombre: "AXA", color_hex: "#00008F" },
   { nombre: "Mapfre", color_hex: "#D81E05" },

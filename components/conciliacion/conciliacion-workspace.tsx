@@ -57,6 +57,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { analizarConciliacion, aplicarConciliacion } from "@/lib/conciliacion/actions";
+import { descartarRecibosDuplicados } from "@/lib/conciliacion/agrupar";
 import {
   adivinarMapeo,
   COLUMNAS_OPCIONALES,
@@ -126,7 +127,8 @@ export function ConciliacionWorkspace({
   aseguradoras,
   conEsquema,
 }: {
-  aseguradoras: Opcion[];
+  /** `ignoraRecibosDuplicados` (p. ej. Quálitas): del mismo recibo solo cuenta el primer renglón. */
+  aseguradoras: (Opcion & { ignoraRecibosDuplicados?: boolean })[];
   /** Aseguradoras que tienen matriz de comisiones. */
   conEsquema: string[];
 }) {
@@ -143,12 +145,18 @@ export function ConciliacionWorkspace({
 
   const hojaActual = archivo ? archivo.hojas[archivo.hoja] : null;
   const encabezados = hojaActual ? (hojaActual.filas[archivo!.encabezado] ?? []) : [];
-  const conversion = React.useMemo(
-    () => (archivo && hojaActual ? construirFilas(hojaActual.filas, archivo.encabezado, archivo.mapeo) : null),
-    [archivo, hojaActual]
-  );
+  const aseguradoraElegida = aseguradoras.find((a) => a.value === aseguradora);
+  const sinDuplicados = aseguradoraElegida?.ignoraRecibosDuplicados === true;
+  const conversion = React.useMemo(() => {
+    if (!archivo || !hojaActual) return null;
+    const c = construirFilas(hojaActual.filas, archivo.encabezado, archivo.mapeo);
+    if (!sinDuplicados) return c;
+    // Misma regla que aplica el servidor: aquí solo para mostrar qué renglones no cuentan.
+    const d = descartarRecibosDuplicados(c.filas);
+    return { ...c, filas: d.filas, agrupadas: [...c.agrupadas, ...d.agrupadas] };
+  }, [archivo, hojaActual, sinDuplicados]);
   const listoParaAnalizar = Boolean(aseguradora && conversion && conversion.filas.length > 0);
-  const nombreAseguradora = aseguradoras.find((a) => a.value === aseguradora)?.label;
+  const nombreAseguradora = aseguradoraElegida?.label;
 
   async function cargar(f: File) {
     setError(null);
@@ -382,8 +390,8 @@ export function ConciliacionWorkspace({
                   <details open>
                     <summary className="cursor-pointer text-sky-600 dark:text-sky-400 hover:text-foreground">
                       {conversion.agrupadas.length}{" "}
-                      {conversion.agrupadas.length === 1 ? "renglón repetía" : "renglones repetían"} el folio de otro y
-                      se agruparon
+                      {conversion.agrupadas.length === 1 ? "renglón repetido se agrupó" : "renglones repetidos se agruparon"}{" "}
+                      o se descartaron
                     </summary>
                     <ul className="mt-1 list-disc pl-5">
                       {conversion.agrupadas.slice(0, 20).map((o) => (

@@ -141,6 +141,14 @@ model Aseguradora {
   api_endpoint String?
   estado_api   String  @default("INACTIVA")
 
+  // Reglas de cobranza de la aseguradora (Aseguradoras → Reglas de cobranza).
+  // false (p. ej. Quálitas): su cobranza usa el número de póliza completo, no una póliza vigor.
+  // La captura no pide el campo y la conciliación cruza solo por número impreso.
+  usaPolizaVigor          Boolean @default(true) @map("usa_poliza_vigor")
+  // true (p. ej. Quálitas): el estado de cuenta repite renglones; del mismo recibo de la misma
+  // póliza (p. ej. "1/12") solo cuenta el primero.
+  ignoraRecibosDuplicados Boolean @default(false) @map("ignora_recibos_duplicados")
+
   polizas  Poliza[]
   esquemas EsquemaComision[]
   lotes    LoteConciliacion[]
@@ -159,6 +167,8 @@ model Poliza {
   // Póliza raíz: clave exacta de cobranza, derivada de numeroImpreso con
   // extraerPolizaVigor() (lib/polizas/polizaParser.ts). No es única: las
   // renovaciones (-01, -02, ...) comparten la misma póliza raíz.
+  // En aseguradoras sin póliza vigor (usaPolizaVigor = false) no se muestra ni se usa para
+  // cobrar: solo encadena las renovaciones y vale el número impreso de la primera póliza.
   polizaVigor                String?   @map("numero_poliza_vigor")
   ramo                       Ramo
   cliente_id                 String

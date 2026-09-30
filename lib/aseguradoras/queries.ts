@@ -19,7 +19,15 @@ export async function getAseguradorasCatalogo() {
     db.aseguradora.findMany({
       where: { agenciaId },
       orderBy: { nombre: "asc" },
-      select: { id: true, nombre: true, color_hex: true, url_portal_cobranza: true, estado_api: true },
+      select: {
+        id: true,
+        nombre: true,
+        color_hex: true,
+        url_portal_cobranza: true,
+        estado_api: true,
+        usaPolizaVigor: true,
+        ignoraRecibosDuplicados: true,
+      },
     }),
     db.poliza.groupBy({
       by: ["aseguradora_id"],

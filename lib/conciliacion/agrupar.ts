@@ -46,3 +46,27 @@ export function agruparPorFolio(filas: readonly FilaEstado[]): { filas: FilaEsta
   }
   return { filas: resultado, agrupadas };
 }
+
+/**
+ * Aseguradoras cuyo estado de cuenta repite renglones (p. ej. Quálitas, ver
+ * Aseguradora.ignoraRecibosDuplicados): del mismo recibo de la misma póliza ("1/12") solo cuenta
+ * el primer renglón; los demás se descartan aunque traigan otro monto. Sin número de recibo, un
+ * renglón es duplicado si repite póliza y comisión.
+ */
+export function descartarRecibosDuplicados(filas: readonly FilaEstado[]): { filas: FilaEstado[]; agrupadas: FilaAgrupada[] } {
+  const resultado: FilaEstado[] = [];
+  const agrupadas: FilaAgrupada[] = [];
+  const primeras = new Map<string, number>();
+  for (const f of filas) {
+    const clave = `${clavePoliza(f.poliza)}|${f.recibo !== undefined ? `r${f.recibo}` : `$${centavos(f.comisionPagada)}`}`;
+    const primera = primeras.get(clave);
+    if (primera !== undefined) {
+      const que = f.recibo !== undefined ? `recibo ${f.recibo} de la póliza ${f.poliza}` : `póliza ${f.poliza} con la misma comisión`;
+      agrupadas.push({ fila: f.fila, motivo: `${que} duplicado de la fila ${primera}; solo cuenta el primero` });
+      continue;
+    }
+    primeras.set(clave, f.fila);
+    resultado.push(f);
+  }
+  return { filas: resultado, agrupadas };
+}

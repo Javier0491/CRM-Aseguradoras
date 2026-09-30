@@ -51,12 +51,20 @@ export async function cruzarEstadoDeCuenta(agenciaId: string, aseguradoraId: str
   const vigores = [...new Set(filas.map((f) => extraerPolizaVigor(f.poliza)).filter(Boolean))];
   const impresos = [...new Set(filas.map((f) => f.poliza.trim().toUpperCase()).filter(Boolean))];
 
+  // Sin póliza vigor (p. ej. Quálitas) el renglón se cruza solo por el número impreso completo.
+  const { usaPolizaVigor } = await db.aseguradora.findUniqueOrThrow({
+    where: { id: aseguradoraId, agenciaId },
+    select: { usaPolizaVigor: true },
+  });
+
   const [polizas, esquemas] = await Promise.all([
     db.poliza.findMany({
       where: {
         agenciaId,
         aseguradora_id: aseguradoraId,
-        OR: [{ polizaVigor: { in: vigores } }, { numeroImpreso: { in: impresos } }],
+        OR: usaPolizaVigor
+          ? [{ polizaVigor: { in: vigores } }, { numeroImpreso: { in: impresos } }]
+          : [{ numeroImpreso: { in: impresos } }],
       },
       // De la más antigua a la más reciente: la última de una cadena es la vigente.
       orderBy: { vigencia_inicio: "asc" },
@@ -151,7 +159,7 @@ export async function cruzarEstadoDeCuenta(agenciaId: string, aseguradoraId: str
       porcentaje: null,
     };
 
-    const vigor = extraerPolizaVigor(fila.poliza);
+    const vigor = usaPolizaVigor ? extraerPolizaVigor(fila.poliza) : null;
     const impreso = soloAlfanumerico(fila.poliza);
     const coincidentes = polizas.filter(
       (p) => (vigor && p.polizaVigor === vigor) || soloAlfanumerico(p.numeroImpreso) === impreso

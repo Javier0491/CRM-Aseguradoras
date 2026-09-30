@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Building2, ExternalLink, Plug } from "lucide-react";
 
+import { ReglasCobranzaDialog } from "@/components/aseguradoras/reglas-cobranza";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAseguradorasCatalogo } from "@/lib/aseguradoras/queries";
+import { esAdmin, requireUser } from "@/lib/auth/dal";
 import { normalizarHex } from "@/lib/color";
 import { formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -26,7 +28,8 @@ function dominio(url: string) {
 const esUrlWeb = (url: string) => /^https?:\/\//i.test(url.trim());
 
 export default async function AseguradorasPage() {
-  const aseguradoras = await getAseguradorasCatalogo();
+  const [aseguradoras, user] = await Promise.all([getAseguradorasCatalogo(), requireUser()]);
+  const puedeEditar = esAdmin(user);
   const totalActivas = aseguradoras.reduce((s, a) => s + a.polizasActivas, 0);
 
   return (
@@ -96,6 +99,25 @@ export default async function AseguradorasPage() {
                     <dd className="pt-1.5 text-sm font-medium tabular-nums">{formatMoneda(a.primaActiva)}</dd>
                   </div>
                 </dl>
+                {(!a.usaPolizaVigor || a.ignoraRecibosDuplicados || puedeEditar) && (
+                  <div className="-mt-1 flex flex-wrap items-center gap-1.5">
+                    {!a.usaPolizaVigor && (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Sin póliza vigor
+                      </Badge>
+                    )}
+                    {a.ignoraRecibosDuplicados && (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        Ignora recibos duplicados
+                      </Badge>
+                    )}
+                    {puedeEditar && (
+                      <span className="ml-auto">
+                        <ReglasCobranzaDialog aseguradora={a} />
+                      </span>
+                    )}
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
                   {formatNumero(a.polizasTotales)} {a.polizasTotales === 1 ? "póliza registrada" : "pólizas registradas"}{" "}
                   en total ·{" "}
