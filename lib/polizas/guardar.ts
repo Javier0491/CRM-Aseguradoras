@@ -128,8 +128,8 @@ async function obtenerCliente(
 ) {
   const rfc = normalizarRfc(g.rfcCliente);
   const nombre = g.cliente.replace(/\s+/g, " ").trim();
-  const telefono = normalizarTelefono(g.telefono);
-  const email = g.email.trim().toLowerCase();
+  const telefono = normalizarTelefono(g.telefono ?? "");
+  const email = (g.email ?? "").trim().toLowerCase();
   const generico = RFC_GENERICOS.has(rfc);
   const claveCliente = generico ? `${rfc}|${claveNombre(nombre)}` : rfc;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cliente:${agenciaId}:${claveCliente}`}))`;

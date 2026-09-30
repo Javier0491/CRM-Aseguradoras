@@ -126,8 +126,8 @@ export const normalizarOpcion = (o: string | Opcion): Opcion =>
 export const camposGenerales: CampoDef[] = [
   { name: "cliente", label: "Cliente / Contratante", type: "text", required: true, placeholder: "Nombre o razón social", wide: true },
   { name: "rfcCliente", label: "RFC del cliente", type: "text", required: true, placeholder: "12 o 13 caracteres", hint: "Se usa para identificar al cliente si ya existe." },
-  { name: "telefono", label: "Teléfono", type: "tel", required: true, placeholder: "10 dígitos" },
-  { name: "email", label: "Correo electrónico", type: "email", required: true, placeholder: "cliente@correo.mx", wide: true },
+  { name: "telefono", label: "Teléfono", type: "tel", placeholder: "10 dígitos", hint: "Opcional: si falta, la póliza queda marcada como «Falta contacto»." },
+  { name: "email", label: "Correo electrónico", type: "email", placeholder: "cliente@correo.mx", wide: true, hint: "Opcional: si falta, la póliza queda marcada como «Falta contacto»." },
   { name: "aseguradora", label: "Aseguradora", type: "select", required: true, options: [] },
   { name: "numeroImpreso", label: "Número impreso", type: "text", required: true, placeholder: "Ej. AUT-987654-03", hint: "Tal como aparece en la carátula." },
   { name: "polizaVigor", label: "Póliza vigor", type: "text", required: true, placeholder: "Ej. 987654", hint: "Clave de cobranza; se calcula desde el número impreso.", derivado: true },

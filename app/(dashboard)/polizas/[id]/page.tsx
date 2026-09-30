@@ -55,6 +55,11 @@ export const metadata: Metadata = {
   title: "Detalle de póliza",
 };
 
+/** Dato de contacto que no se capturó: se resalta para completarlo. */
+function SinDato({ children }: { children: React.ReactNode }) {
+  return <span className="font-sans font-medium text-warning">{children}</span>;
+}
+
 export default async function PolizaDetallePage({ params }: PageProps<"/polizas/[id]">) {
   const { id } = await params;
   const poliza = await getPolizaDetalle(id);
@@ -69,8 +74,8 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   const datos: { label: string; valor: React.ReactNode; mono?: boolean }[] = [
     { label: "Cliente", valor: poliza.cliente.nombre },
     { label: "RFC", valor: poliza.cliente.rfc, mono: true },
-    { label: "Teléfono", valor: poliza.cliente.telefono, mono: true },
-    { label: "Correo", valor: poliza.cliente.email },
+    { label: "Teléfono", valor: poliza.cliente.telefono || <SinDato>Falta teléfono</SinDato>, mono: true },
+    { label: "Correo", valor: poliza.cliente.email || <SinDato>Falta correo · complétalo en Editar</SinDato> },
     { label: "Vigencia", valor: `${formatFecha(poliza.vigencia_inicio)} – ${formatFecha(poliza.vigencia_fin)}` },
     { label: "Prima total", valor: formatMoneda(Number(poliza.prima_total)) },
     {

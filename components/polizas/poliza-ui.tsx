@@ -177,3 +177,17 @@ export function AseguradosResumen({
     </span>
   );
 }
+
+/** Aviso de un cliente capturado sin teléfono o sin correo. No muestra nada si tiene ambos. */
+export function FaltaContacto({ telefono, email }: { telefono: string; email: string }) {
+  const sinTelefono = !telefono.trim();
+  const sinCorreo = !email.trim();
+  if (!sinTelefono && !sinCorreo) return null;
+  const label = sinTelefono && sinCorreo ? "Falta contacto" : sinTelefono ? "Falta teléfono" : "Falta correo";
+  return (
+    <span className="inline-flex items-center gap-1 rounded-md border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+      <span className="size-1.5 rounded-full bg-warning" aria-hidden />
+      {label}
+    </span>
+  );
+}

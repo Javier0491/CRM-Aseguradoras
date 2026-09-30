@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, FilePlus2, FileText, Paperclip, Receipt, SearchX, Wallet } from "lucide-react";
+import { CalendarClock, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
 
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
 import {
@@ -8,6 +8,7 @@ import {
   AseguradosResumen,
   EstadoVigenciaIndicador,
   estadoRecibo,
+  FaltaContacto,
   formaPagoLabel,
   ramoLabel,
   RamoBadge,
@@ -75,13 +76,24 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
   const ramo = esRamo(params.ramo) ? params.ramo : undefined;
-  const filtrando = q.trim() !== "" || ramo !== undefined;
+  const soloFaltaContacto = params.contacto === "falta";
+  const filtrando = q.trim() !== "" || ramo !== undefined || soloFaltaContacto;
 
   const [
-    { polizas, total: totalPolizas, totalGeneral, porVencer },
+    { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto },
     { recibos, total: totalRecibos, pendientes },
-  ] = await Promise.all([getPolizasListado({ q, ramo }), getRecibosListado()]);
+  ] = await Promise.all([
+    getPolizasListado({ q, ramo, faltaContacto: soloFaltaContacto }),
+    getRecibosListado(),
+  ]);
   const hoy = hoyISO();
+
+  // El aviso alterna el filtro "Falta contacto" conservando la búsqueda y el ramo.
+  const paramsContacto = new URLSearchParams();
+  if (q.trim()) paramsContacto.set("q", q.trim());
+  if (ramo) paramsContacto.set("ramo", ramo);
+  if (!soloFaltaContacto) paramsContacto.set("contacto", "falta");
+  const hrefContacto = paramsContacto.size ? `/polizas?${paramsContacto}` : "/polizas";
 
   const resumen = [
     { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, clase: "text-primary" },
@@ -137,14 +149,43 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
           </TabsList>
 
           <TabsContent value="polizas" className="space-y-4">
-            <FiltrosPolizas q={q} ramo={ramo ?? ""} ramos={opcionesRamo} />
+            {(faltaContacto > 0 || soloFaltaContacto) && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-warning/20 text-warning">
+                  <PhoneOff className="size-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-warning">
+                    {faltaContacto === 0
+                      ? "Todas las pólizas tienen contacto completo"
+                      : `Falta contacto en ${formatNumero(faltaContacto)} ${faltaContacto === 1 ? "póliza" : "pólizas"}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {soloFaltaContacto
+                      ? "Mostrando solo pólizas cuyo cliente no tiene teléfono o correo. Complétalos desde Editar."
+                      : "Se capturaron sin teléfono o correo del cliente; complétalos para poder avisarle de sus recibos."}
+                  </p>
+                </div>
+                <Button asChild size="sm" variant={soloFaltaContacto ? "outline" : "default"}>
+                  <Link href={hrefContacto} scroll={false}>
+                    {soloFaltaContacto ? "Ver todas" : "Ver pólizas"}
+                  </Link>
+                </Button>
+              </div>
+            )}
+            <FiltrosPolizas
+              q={q}
+              ramo={ramo ?? ""}
+              ramos={opcionesRamo}
+              faltaContacto={soloFaltaContacto}
+            />
             <Card className="gap-0 py-0">
               {polizas.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
                   <SearchX className="size-7 text-muted-foreground" />
                   <p className="font-medium">Ninguna póliza coincide con los filtros</p>
                   <p className="text-sm text-muted-foreground">
-                    Prueba con otro número, nombre o RFC, o cambia el ramo.
+                    Prueba con otro número, nombre o RFC, o cambia el ramo o el filtro de contacto.
                   </p>
                 </div>
               ) : (
@@ -188,6 +229,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
                           <TableCell className="max-w-[220px]">
                             <p className="truncate font-medium">{p.cliente.nombre}</p>
                             <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
+                            <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} />
                           </TableCell>
                           <TableCell>
                             <RamoBadge ramo={p.ramo} />

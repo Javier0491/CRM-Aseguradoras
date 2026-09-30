@@ -36,6 +36,13 @@ export type FiltrosPolizas = {
   /** Texto libre: número de póliza, póliza vigor, cliente, RFC o asegurado. */
   q?: string;
   ramo?: Ramo;
+  /** Solo las pólizas cuyo cliente no tiene teléfono o correo. */
+  faltaContacto?: boolean;
+};
+
+/** Cliente sin teléfono o sin correo: se capturó sin ellos y hay que completarlos. */
+const CLIENTE_SIN_CONTACTO: Prisma.PolizaWhereInput = {
+  cliente: { OR: [{ telefono: "" }, { email: "" }] },
 };
 
 export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
@@ -47,6 +54,7 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
   const where: Prisma.PolizaWhereInput = {
     agenciaId,
     ...(filtros.ramo && { ramo: filtros.ramo }),
+    ...(filtros.faltaContacto && CLIENTE_SIN_CONTACTO),
     ...(q && {
       OR: [
         { numeroImpreso: contiene(q) },
@@ -61,7 +69,7 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER * 86_400_000);
 
-  const [polizas, total, totalGeneral, porVencer] = await Promise.all([
+  const [polizas, total, totalGeneral, porVencer, faltaContacto] = await Promise.all([
     db.poliza.findMany({
       where,
       orderBy: { created_at: "desc" },
@@ -79,7 +87,7 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
         prima_total: true,
         forma_pago: true,
         created_at: true,
-        cliente: { select: { nombre: true, rfc: true } },
+        cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
         aseguradora: { select: { nombre: true, color_hex: true } },
         recibos: { select: { estado: true } },
         // Para el resumen de asegurados: el titular y cuántos son en total.
@@ -90,8 +98,9 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
     db.poliza.count({ where }),
     db.poliza.count({ where: { agenciaId } }),
     db.poliza.count({ where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } } }),
+    db.poliza.count({ where: { agenciaId, ...CLIENTE_SIN_CONTACTO } }),
   ]);
-  return { polizas, total, totalGeneral, porVencer };
+  return { polizas, total, totalGeneral, porVencer, faltaContacto };
 }
 
 export async function getRecibosListado() {

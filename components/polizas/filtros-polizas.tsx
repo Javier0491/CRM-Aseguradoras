@@ -20,17 +20,20 @@ const ESPERA_MS = 300;
 
 /**
  * Búsqueda y filtro por ramo del listado de pólizas. El estado vive en la URL
- * (?q=…&ramo=…), así el filtrado ocurre en la base de datos y el enlace se puede compartir.
+ * (?q=…&ramo=…&contacto=falta), así el filtrado ocurre en la base de datos y el enlace se puede compartir.
  */
 export function FiltrosPolizas({
   q: qInicial,
   ramo: ramoInicial,
   ramos,
+  faltaContacto,
 }: {
   q: string;
   /** Valor del enum de BD o "" para todos. */
   ramo: string;
   ramos: Opcion[];
+  /** Filtro "Falta contacto" (lo activa el aviso del listado); se conserva al buscar. */
+  faltaContacto: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -46,10 +49,11 @@ export function FiltrosPolizas({
     []
   );
 
-  function navegar(siguiente: { q: string; ramo: string }) {
+  function navegar(siguiente: { q: string; ramo: string; contacto?: boolean }) {
     const params = new URLSearchParams();
     if (siguiente.q.trim()) params.set("q", siguiente.q.trim());
     if (siguiente.ramo !== TODOS) params.set("ramo", siguiente.ramo);
+    if (siguiente.contacto ?? faltaContacto) params.set("contacto", "falta");
     const query = params.toString();
     startTransition(() => {
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
@@ -71,10 +75,10 @@ export function FiltrosPolizas({
     if (temporizador.current) window.clearTimeout(temporizador.current);
     setQ("");
     setRamo(TODOS);
-    navegar({ q: "", ramo: TODOS });
+    navegar({ q: "", ramo: TODOS, contacto: false });
   }
 
-  const activos = q.trim() !== "" || ramo !== TODOS;
+  const activos = q.trim() !== "" || ramo !== TODOS || faltaContacto;
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
