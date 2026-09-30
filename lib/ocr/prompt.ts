@@ -149,6 +149,19 @@ CAMPOS ESPECÍFICOS
   Médicos.
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
 - redMedica (GMM Individual y Colectivo): ver RED MÉDICA.
+- COBERTURAS (GMM Individual y Colectivo). Revisa la tabla o lista de coberturas, beneficios o
+  endosos de la póliza en todos los documentos:
+  · maternidad, emergenciaExtranjero y correccionVista: "Sí" si aparece como amparada o incluida
+    (con o sin suma asegurada), "No" si aparece como excluida o "No amparada", null si no se menciona.
+  · otrasCoberturas: los NOMBRES de todas las demás coberturas o beneficios amparados, tal como
+    están impresos y separados por comas (ej. "Dental, Ayuda por maternidad, Reconocimiento de
+    antigüedad, Asistencia en viajes, Eliminación de deducible por accidente"). No incluyas la
+    cobertura básica de gastos médicos, las que ya van en maternidad, emergenciaExtranjero o
+    correccionVista, ni las marcadas como excluidas o no amparadas. Sin sumas, deducibles ni primas.
+    Listar los nombres impresos es transcribir, no resumir. null si no hay coberturas adicionales.
+- coberturasAdicionales (Vida Individual y Vida Grupo): igual que otrasCoberturas, con los nombres
+  de los beneficios adicionales amparados (ej. "Invalidez total y permanente, Muerte accidental,
+  Enfermedades graves"), sin la cobertura básica por fallecimiento.
 - condicionesSubgrupo (solo GMM Colectivo): resumen breve de las reglas del plan por subgrupo (suma
   asegurada, deducible, coaseguro y coberturas principales), solo con lo impreso.
 - Campos "…Valor" y "…Unidad" (GMM Individual y GMM Colectivo: suma asegurada, deducible y tope de
