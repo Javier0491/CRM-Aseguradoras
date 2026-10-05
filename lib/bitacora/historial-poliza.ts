@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAgenciaId } from "@/lib/auth/dal";
+import { superadminsOcultos } from "@/lib/bitacora/queries";
 import { ACCIONES_BITACORA, type AccionBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import { formatFecha, formatMoneda } from "@/lib/format";
@@ -66,13 +67,14 @@ function cambiosDeEdicion(datos: unknown, verComisiones: boolean): EventoHistori
  * Línea de tiempo de una póliza, de lo más reciente a lo más antiguo: su captura o renovación, ediciones,
  * cambios de prima neta, las conciliaciones (y reversiones) que tocaron sus recibos y las aclaraciones de
  * comisión. Las conciliaciones salen de los lotes, que guardan qué le hicieron a cada recibo. Los montos de
- * comisión solo se incluyen si `verComisiones`.
+ * comisión solo se incluyen si `verComisiones`. Lo que hizo un SUPERADMIN solo lo ve otro SUPERADMIN.
  */
 export async function getHistorialPoliza(
   poliza: { id: string; numeroImpreso: string; recibos: { id: string; numero: number }[] },
   verComisiones: boolean
 ): Promise<EventoHistorial[]> {
-  const agenciaId = await getAgenciaId();
+  const [agenciaId, ocultos] = await Promise.all([getAgenciaId(), superadminsOcultos()]);
+  const deSuperadmin = (email: string | null) => Boolean(email && ocultos?.emails.includes(email.toLowerCase()));
   const reciboIds = poliza.recibos.map((r) => r.id);
   const numeroRecibo = new Map(poliza.recibos.map((r) => [r.id, r.numero]));
 
@@ -80,6 +82,10 @@ export async function getHistorialPoliza(
     db.bitacora.findMany({
       where: {
         agenciaId,
+        // Con OR para conservar los movimientos sin usuario: NOT IN descarta los NULL.
+        ...(ocultos?.ids.length && {
+          AND: [{ OR: [{ usuario_id: null }, { usuario_id: { notIn: ocultos.ids } }] }],
+        }),
         OR: [
           { entidad: "poliza", entidad_id: poliza.id },
           // La renovación se registra en la póliza nueva; también es parte de la historia de la anterior.
@@ -116,6 +122,7 @@ export async function getHistorialPoliza(
           select: {
             id: true,
             created_at: true,
+            usuario_id: true,
             usuario_email: true,
             archivo_nombre: true,
             revertido_at: true,
@@ -161,15 +168,17 @@ export async function getHistorialPoliza(
   }
   for (const { lote, recibos } of lotes.values()) {
     const origen = `«${lote.archivo_nombre}» de ${lote.aseguradora.nombre}`;
-    eventos.push({
-      id: `lote-${lote.id}`,
-      fecha: lote.created_at,
-      usuario: lote.usuario_email,
-      tipo: "conciliacion",
-      titulo: "Conciliación con estado de cuenta",
-      descripcion: `${origen}: ${recibos.join(", ")}`,
-    });
-    if (lote.revertido_at) {
+    if (!(lote.usuario_id && ocultos?.ids.includes(lote.usuario_id))) {
+      eventos.push({
+        id: `lote-${lote.id}`,
+        fecha: lote.created_at,
+        usuario: lote.usuario_email,
+        tipo: "conciliacion",
+        titulo: "Conciliación con estado de cuenta",
+        descripcion: `${origen}: ${recibos.join(", ")}`,
+      });
+    }
+    if (lote.revertido_at && !deSuperadmin(lote.revertido_por)) {
       eventos.push({
         id: `lote-${lote.id}-revertido`,
         fecha: lote.revertido_at,
