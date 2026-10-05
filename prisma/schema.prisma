@@ -59,6 +59,11 @@ model Agencia {
   // Buzón de la agencia (p. ej. servicios@…) que recibe copia de cada aviso automático y las
   // respuestas de los clientes (Configuración → Avisos automáticos).
   correoCopiaAvisos String? @map("correo_copia_avisos")
+  // Suspensión por falta de pago (la decide el SUPERADMIN): sus usuarios no pueden entrar y no
+  // salen sus avisos automáticos. No borra nada; al reactivarla todo sigue como estaba.
+  suspendida        Boolean   @default(false)
+  suspendidaAt      DateTime? @map("suspendida_at")
+  motivoSuspension  String?   @map("motivo_suspension")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

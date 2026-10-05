@@ -40,11 +40,13 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
   if (error || !data.user) return null;
   const perfil = await db.usuario.findUnique({
     where: { id: data.user.id },
-    select: { nombre: true, rol: true, activo: true, ...SELECT_AGENCIA_SESION },
+    select: { nombre: true, rol: true, activo: true, agencia: { select: { suspendida: true } }, ...SELECT_AGENCIA_SESION },
   });
   // Sin perfil no hay agencia (y por lo tanto ningún dato que pueda ver); desactivada: su token
   // puede seguir vigente un rato, pero ya no es una sesión válida.
   if (!perfil || !perfil.activo) return null;
+  // Agencia suspendida por el SUPERADMIN: nadie de ella entra (el SUPERADMIN sí, a cualquiera).
+  if (perfil.agencia.suspendida && perfil.rolSistema !== "SUPERADMIN") return null;
   // La agencia vive en `usuarios` (fuente de verdad). Se mantiene también en el claim del JWT
   // para RLS (solo escribe si no coincide); el token nuevo llega en el siguiente refresh.
   const agenciaId = agenciaEfectiva(perfil);

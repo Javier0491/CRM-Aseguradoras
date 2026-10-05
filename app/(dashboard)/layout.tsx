@@ -28,6 +28,12 @@ export default async function DashboardLayout({
       {/* min-w-0: sin él, el contenido ancho (tablas) estira toda la página en vez de hacer scroll. */}
       <SidebarInset className="min-w-0 bg-background">
         <AppHeader superadmin={user.superadmin ? { ajena: user.agenciaId !== user.agenciaPropiaId } : undefined} />
+        {/* Solo el SUPERADMIN llega a ver una agencia suspendida. */}
+        {agencia.suspendida && (
+          <p role="status" className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
+            Esta agencia está suspendida: sus usuarios no pueden entrar. Reactívala desde Mis agencias.
+          </p>
+        )}
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">{children}</div>
       </SidebarInset>
     </SidebarProvider>

@@ -25,6 +25,8 @@ export const ACCIONES_BITACORA = {
   "agencia.editar": "Editó datos de la agencia",
   "agencia.entrar_superadmin": "Superadmin entró a la agencia",
   "agencia.crear": "Creó la agencia",
+  "agencia.suspender": "Suspendió la agencia",
+  "agencia.reactivar": "Reactivó la agencia",
   "aseguradora.reglas": "Cambió reglas de cobranza",
   "avisos.configurar": "Configuró avisos automáticos",
 } as const;

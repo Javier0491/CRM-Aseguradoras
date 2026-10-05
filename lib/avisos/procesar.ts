@@ -125,6 +125,8 @@ export async function procesarAvisos(): Promise<ResumenAvisos> {
   const resumen: ResumenAvisos = { enviados: 0, fallidos: 0, sinCorreo: 0, pendientes: 0 };
   const agencias = await db.agencia.findMany({
     where: {
+      // Una agencia suspendida no envía avisos a sus clientes.
+      suspendida: false,
       // Sin correo de copia no sale ningún aviso: las respuestas del cliente llegarían al
       // remitente universal en vez de a la agencia.
       correoCopiaAvisos: { not: null },

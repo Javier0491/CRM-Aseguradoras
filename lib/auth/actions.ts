@@ -38,7 +38,17 @@ export async function iniciarSesion(_prev: LoginState, formData: FormData): Prom
 
   // La agencia del usuario va en el JWT (app_metadata.agencia_id) para filtrar por agencia y
   // aplicar RLS. Si hubo que escribirla, se refresca la sesión para que el token ya la traiga.
-  const perfil = await db.usuario.findUnique({ where: { id: data.user.id }, select: SELECT_AGENCIA_SESION });
+  const perfil = await db.usuario.findUnique({
+    where: { id: data.user.id },
+    select: { ...SELECT_AGENCIA_SESION, agencia: { select: { suspendida: true } } },
+  });
+  if (perfil?.agencia.suspendida && perfil.rolSistema !== "SUPERADMIN") {
+    await supabase.auth.signOut();
+    return {
+      error: "El acceso de tu agencia está suspendido temporalmente. Comunícate con el administrador de la plataforma.",
+      email,
+    };
+  }
   if (perfil && (await sincronizarAgenciaEnAuth(data.user, agenciaEfectiva(perfil)))) {
     await supabase.auth.refreshSession();
   }

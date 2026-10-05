@@ -111,3 +111,53 @@ export async function crearAgencia(_prev: CrearAgenciaState, formData: FormData)
   revalidatePath("/superadmin");
   return { ok: true, agencia };
 }
+
+export type SuspensionResultado = { ok: true } | { ok: false; error: string };
+
+/**
+ * SUPERADMIN: suspende una agencia (p. ej. por falta de pago) o la reactiva. Suspendida, ninguno
+ * de sus usuarios puede entrar (las sesiones abiertas se cortan en la siguiente solicitud) y no
+ * salen sus avisos automáticos; sus datos no se tocan. El superadmin puede seguir entrando a ella.
+ * Su propia agencia no se puede suspender. Queda en la bitácora de la agencia.
+ */
+export async function cambiarSuspensionAgencia(
+  agenciaId: string,
+  suspender: boolean,
+  motivo?: string
+): Promise<SuspensionResultado> {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  if (typeof agenciaId !== "string" || !UUID.test(agenciaId)) return { ok: false, error: "Agencia inválida." };
+  const perfil = await db.usuario.findUnique({ where: { id: user.id }, select: { rolSistema: true, agenciaId: true } });
+  if (perfil?.rolSistema !== "SUPERADMIN") return { ok: false, error: "Solo un superadministrador puede suspender agencias." };
+  if (suspender && agenciaId === perfil.agenciaId) return { ok: false, error: "No puedes suspender tu propia agencia." };
+
+  const agencia = await db.agencia.findUnique({ where: { id: agenciaId }, select: { nombre: true, suspendida: true } });
+  if (!agencia) return { ok: false, error: "La agencia ya no existe." };
+  const nota = suspender ? String(motivo ?? "").trim().replace(/\s+/g, " ").slice(0, 200) || null : null;
+
+  if (agencia.suspendida !== suspender) {
+    await db.$transaction(async (tx) => {
+      await tx.agencia.update({
+        where: { id: agenciaId },
+        data: { suspendida: suspender, suspendidaAt: suspender ? new Date() : null, motivoSuspension: nota },
+      });
+      await registrarBitacora(
+        { id: user.id, email: user.email, agenciaId },
+        {
+          accion: suspender ? "agencia.suspender" : "agencia.reactivar",
+          entidad: "agencia",
+          entidadId: agenciaId,
+          descripcion: suspender
+            ? `${user.email ?? "Superadmin"} suspendió la agencia ${agencia.nombre}${nota ? ` (${nota})` : ""}`
+            : `${user.email ?? "Superadmin"} reactivó la agencia ${agencia.nombre}`,
+        },
+        tx
+      );
+    });
+  }
+
+  revalidatePath("/superadmin");
+  revalidatePath("/", "layout");
+  return { ok: true };
+}

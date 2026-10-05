@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 export const getAgencia = cache(async (agenciaId: string) => {
   return db.agencia.findUniqueOrThrow({
     where: { id: agenciaId },
-    select: { id: true, nombre: true, logoUrl: true, colorHex: true, tema: true },
+    select: { id: true, nombre: true, logoUrl: true, colorHex: true, tema: true, suspendida: true },
   });
 });
 
@@ -38,6 +38,9 @@ export async function getAgenciasParaSuperadmin() {
       logoUrl: true,
       colorHex: true,
       tema: true,
+      suspendida: true,
+      suspendidaAt: true,
+      motivoSuspension: true,
       createdAt: true,
       _count: { select: { usuarios: true, clientes: true, polizas: true } },
     },
