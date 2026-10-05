@@ -67,14 +67,14 @@ function cambiosDeEdicion(datos: unknown, verComisiones: boolean): EventoHistori
  * Línea de tiempo de una póliza, de lo más reciente a lo más antiguo: su captura o renovación, ediciones,
  * cambios de prima neta, las conciliaciones (y reversiones) que tocaron sus recibos y las aclaraciones de
  * comisión. Las conciliaciones salen de los lotes, que guardan qué le hicieron a cada recibo. Los montos de
- * comisión solo se incluyen si `verComisiones`. Lo que hizo un SUPERADMIN solo lo ve otro SUPERADMIN.
+ * comisión solo se incluyen si `verComisiones`. Lo que hizo un SUPERADMIN no aparece.
  */
 export async function getHistorialPoliza(
   poliza: { id: string; numeroImpreso: string; recibos: { id: string; numero: number }[] },
   verComisiones: boolean
 ): Promise<EventoHistorial[]> {
   const [agenciaId, ocultos] = await Promise.all([getAgenciaId(), superadminsOcultos()]);
-  const deSuperadmin = (email: string | null) => Boolean(email && ocultos?.emails.includes(email.toLowerCase()));
+  const deSuperadmin = (email: string | null) => Boolean(email && ocultos.emails.includes(email.toLowerCase()));
   const reciboIds = poliza.recibos.map((r) => r.id);
   const numeroRecibo = new Map(poliza.recibos.map((r) => [r.id, r.numero]));
 
@@ -83,7 +83,7 @@ export async function getHistorialPoliza(
       where: {
         agenciaId,
         // Con OR para conservar los movimientos sin usuario: NOT IN descarta los NULL.
-        ...(ocultos?.ids.length && {
+        ...(ocultos.ids.length && {
           AND: [{ OR: [{ usuario_id: null }, { usuario_id: { notIn: ocultos.ids } }] }],
         }),
         OR: [
@@ -168,7 +168,7 @@ export async function getHistorialPoliza(
   }
   for (const { lote, recibos } of lotes.values()) {
     const origen = `«${lote.archivo_nombre}» de ${lote.aseguradora.nombre}`;
-    if (!(lote.usuario_id && ocultos?.ids.includes(lote.usuario_id))) {
+    if (!(lote.usuario_id && ocultos.ids.includes(lote.usuario_id))) {
       eventos.push({
         id: `lote-${lote.id}`,
         fecha: lote.created_at,
