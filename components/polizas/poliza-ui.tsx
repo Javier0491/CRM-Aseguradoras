@@ -115,7 +115,7 @@ export function estadoVigencia(fin: Date, hoy: string, diasAviso: number): Estad
   return dias <= diasAviso ? "por_vencer" : "vigente";
 }
 
-const vigenciaEstilo: Record<EstadoVigencia, { label: string; punto: string; texto: string }> = {
+export const vigenciaEstilo: Record<EstadoVigencia, { label: string; punto: string; texto: string }> = {
   vigente: { label: "Vigente", punto: "bg-success", texto: "text-success" },
   por_vencer: { label: "Por vencer", punto: "bg-warning", texto: "text-warning" },
   vencida: { label: "Vencida", punto: "bg-destructive", texto: "text-destructive" },

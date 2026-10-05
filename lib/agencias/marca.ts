@@ -29,6 +29,14 @@ export const LOGO_FORMATOS = {
 } as const;
 export type FormatoLogo = keyof typeof LOGO_FORMATOS;
 
+/**
+ * Logo para correos y documentos: el de documentos o, si no hay, el ícono. Solo sirven los
+ * subidos a Storage (https): una ruta de /public no carga fuera de la app.
+ */
+export function logoParaDocumentos(agencia: { logoUrl: string | null; logoDocumentosUrl: string | null }) {
+  return [agencia.logoDocumentosUrl, agencia.logoUrl].find((u) => u?.startsWith("https://")) ?? null;
+}
+
 /** Solo URLs que la propia app guarda: archivos de /public o https (Storage). */
 export const esLogoUrlValida = (url: string | null | undefined): url is string =>
   typeof url === "string" && (/^\/[\w./-]+$/.test(url) || url.startsWith("https://"));

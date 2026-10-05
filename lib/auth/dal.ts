@@ -63,6 +63,13 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
 
 export const esAdmin = (user: UsuarioSesion | null) => user?.rol === "ADMIN";
 
+/**
+ * Las comisiones (matriz, % por póliza, montos esperados y pagados) solo las ve y edita el
+ * SUPERADMIN: varias aseguradoras las pagan fraccionadas y el cálculo no es confiable para la
+ * agencia. Ni ADMIN ni EJECUTIVO las ven.
+ */
+export const veComisiones = (user: UsuarioSesion | null) => Boolean(user?.superadmin);
+
 /** Exige sesión; si no existe redirige a /login. */
 export async function requireUser(): Promise<UsuarioSesion> {
   const user = await getCurrentUser();

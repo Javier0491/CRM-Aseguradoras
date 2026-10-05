@@ -223,6 +223,7 @@ export function PolizaForm({
   aseguradoras,
   verComisiones,
   extrayendo = false,
+  leidaConIa = false,
   caratula = null,
   negociacion = null,
   onReiniciar,
@@ -241,6 +242,8 @@ export function PolizaForm({
   verComisiones: boolean;
   /** El OCR está leyendo un documento; el formulario se reemplaza por un skeleton. */
   extrayendo?: boolean;
+  /** Los datos los leyó la Captura Inteligente (OCR): se anota en la bitácora de la póliza. */
+  leidaConIa?: boolean;
   /**
    * PDF subido en el panel de Captura inteligente. No tiene campo propio: se guarda
    * como carátula de la póliza al pulsar "Guardar".
@@ -471,9 +474,11 @@ export function PolizaForm({
       return;
     }
 
-    const res = await guardarPoliza(
-      modo.tipo === "renovacion" ? { ...datos, renuevaA: modo.anterior.id } : datos
-    );
+    const res = await guardarPoliza({
+      ...datos,
+      ...(modo.tipo === "renovacion" && { renuevaA: modo.anterior.id }),
+      ...(leidaConIa && { origen: "ocr" }),
+    });
     if (res.ok) {
       // La póliza ya existe: si un archivo falla no se revierte, se puede subir desde su detalle.
       const archivos: Exito["archivos"] = {};

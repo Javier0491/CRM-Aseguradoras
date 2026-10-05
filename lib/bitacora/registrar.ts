@@ -26,6 +26,7 @@ export const ACCIONES_BITACORA = {
   "agencia.entrar_superadmin": "Superadmin entró a la agencia",
   "agencia.crear": "Creó la agencia",
   "aseguradora.reglas": "Cambió reglas de cobranza",
+  "avisos.configurar": "Configuró avisos automáticos",
 } as const;
 export type AccionBitacora = keyof typeof ACCIONES_BITACORA;
 

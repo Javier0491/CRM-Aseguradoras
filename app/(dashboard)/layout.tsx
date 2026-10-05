@@ -22,6 +22,7 @@ export default async function DashboardLayout({
         email={user.email}
         nombre={user.nombre}
         esAdmin={esAdmin(user)}
+        superadmin={user.superadmin}
         agencia={{ nombre: agencia.nombre, logoUrl: agencia.logoUrl }}
       />
       {/* min-w-0: sin él, el contenido ancho (tablas) estira toda la página en vez de hacer scroll. */}

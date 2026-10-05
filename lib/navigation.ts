@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  BellRing,
   Building2,
   FileText,
   LayoutDashboard,
@@ -21,6 +22,8 @@ export type NavItem = {
   icon: LucideIcon;
   /** Solo visible para el rol ADMIN (la página también lo exige en el servidor). */
   soloAdmin?: boolean;
+  /** Solo visible para el SUPERADMIN de la plataforma (la página también lo exige). */
+  soloSuperadmin?: boolean;
 };
 
 export const mainNav: NavItem[] = [
@@ -36,7 +39,8 @@ export const mainNav: NavItem[] = [
 
 export const systemNav: NavItem[] = [
   { title: "Mi agencia", href: "/configuracion/agencia", icon: Palette, soloAdmin: true },
-  { title: "Matriz de comisiones", href: "/configuracion/comisiones", icon: Percent, soloAdmin: true },
+  { title: "Matriz de comisiones", href: "/configuracion/comisiones", icon: Percent, soloSuperadmin: true },
+  { title: "Avisos automáticos", href: "/configuracion/avisos", icon: BellRing, soloAdmin: true },
   { title: "Integraciones", href: "/configuracion/integraciones", icon: PlugZap, soloAdmin: true },
   { title: "Usuarios", href: "/sistema/usuarios", icon: UserCog, soloAdmin: true },
   { title: "Bitácora", href: "/sistema/bitacora", icon: ScrollText, soloAdmin: true },
@@ -45,7 +49,8 @@ export const systemNav: NavItem[] = [
 export const allNav = [...mainNav, ...systemNav];
 
 /** Entradas del menú que puede ver un rol. */
-export const navPara = (items: NavItem[], esAdmin: boolean) => items.filter((i) => esAdmin || !i.soloAdmin);
+export const navPara = (items: NavItem[], esAdmin: boolean, superadmin = false) =>
+  items.filter((i) => (esAdmin || !i.soloAdmin) && (superadmin || !i.soloSuperadmin));
 
 export function isActivePath(pathname: string, href: string) {
   return href === "/" ? pathname === "/" : pathname.startsWith(href);

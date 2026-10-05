@@ -27,15 +27,28 @@ import { MAX_PASSWORD, MIN_PASSWORD, ROLES, rolDescripciones, rolLabels, type Ro
 
 const VACIO: NuevoUsuarioInput = { nombre: "", email: "", password: "", rol: "EJECUTIVO" };
 
-export function AgregarUsuario({ disponible }: { disponible: boolean }) {
+type Props = {
+  disponible: boolean;
+  /** Solo para el SUPERADMIN: agencias entre las que puede elegir dónde crear la cuenta. */
+  agencias?: { id: string; nombre: string }[];
+  /** Agencia que opera la sesión (la preseleccionada). */
+  agenciaActivaId?: string;
+};
+
+export function AgregarUsuario({ disponible, agencias, agenciaActivaId }: Props) {
+  const eligeAgencia = agencias !== undefined && agencias.length > 0;
+  const inicial = React.useMemo<NuevoUsuarioInput>(
+    () => (eligeAgencia ? { ...VACIO, agenciaId: agenciaActivaId } : VACIO),
+    [eligeAgencia, agenciaActivaId]
+  );
   const [abierto, setAbierto] = React.useState(false);
-  const [datos, setDatos] = React.useState(VACIO);
+  const [datos, setDatos] = React.useState(inicial);
   const [verPassword, setVerPassword] = React.useState(false);
   const [error, setError] = React.useState<{ mensaje: string; campo?: keyof NuevoUsuarioInput } | null>(null);
   const [pendiente, startTransition] = React.useTransition();
 
   function abrir() {
-    setDatos(VACIO);
+    setDatos(inicial);
     setError(null);
     setVerPassword(false);
     setAbierto(true);
@@ -72,6 +85,29 @@ export function AgregarUsuario({ disponible }: { disponible: boolean }) {
             </DialogHeader>
 
             <div className="grid gap-4">
+              {eligeAgencia && (
+                <div className="space-y-2">
+                  <Label htmlFor="usr-agencia">Agencia</Label>
+                  <Select value={datos.agenciaId} onValueChange={(v) => actualizar({ agenciaId: v })}>
+                    <SelectTrigger id="usr-agencia" className="w-full" aria-invalid={error?.campo === "agenciaId"}>
+                      <SelectValue placeholder="Selecciona la agencia" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {agencias.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.nombre}
+                          {a.id === agenciaActivaId && " (actual)"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {datos.agenciaId === agenciaActivaId
+                      ? "La cuenta se creará en la agencia que estás operando."
+                      : "La cuenta se creará en otra agencia: no aparecerá en esta lista hasta que entres a ella."}
+                  </p>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="usr-nombre">Nombre</Label>
                 <Input

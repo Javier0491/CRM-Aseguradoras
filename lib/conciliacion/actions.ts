@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getAdmin, getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
+import { getAdmin, getCurrentUser, veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
 import { AclaracionError, registrarSeguimiento } from "@/lib/conciliacion/aclaraciones";
 import { agruparPorFolio, descartarRecibosDuplicados } from "@/lib/conciliacion/agrupar";
 import {
@@ -16,6 +16,8 @@ import {
   TIPOS_NOTA,
   type AnalisisResultado,
   type FilaEstado,
+  type ResultadoMatch,
+  type ResumenMatch,
   type TipoNota,
 } from "@/lib/conciliacion/tipos";
 import { db } from "@/lib/db";
@@ -62,7 +64,7 @@ async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Valid
   const admin = await getAdmin();
   if (!admin) {
     return (await getCurrentUser())
-      ? { ok: false, error: "Solo un administrador puede conciliar comisiones." }
+      ? { ok: false, error: "Solo un administrador puede conciliar la cobranza." }
       : { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
   if (typeof aseguradoraId !== "string") return { ok: false, error: "Selecciona la aseguradora." };
@@ -81,11 +83,38 @@ async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Valid
   return { ok: true, admin, aseguradoraId: aseguradora.id, filas: limpias };
 }
 
+/**
+ * El mismo cruce sin nada de comisiones, para quien no las ve (ADMIN): ni montos, ni porcentaje,
+ * ni la base del cálculo, y con explicaciones que no hablan de ellas. Los estatus no cambian.
+ */
+function sinComisiones(resultados: ResultadoMatch[], resumen: ResumenMatch) {
+  const detalle = (r: ResultadoMatch) => {
+    if (r.estatus === "diferencia") return "Cobrado según el estado de cuenta.";
+    if (!r.detalle || !/comisi[oó]n/i.test(r.detalle)) return r.detalle;
+    return /prima neta/i.test(r.detalle)
+      ? "La póliza no tiene prima neta capturada: agrégala en su detalle y vuelve a analizar."
+      : "No se pudo validar este cobro: falta configuración de la plataforma para esta póliza.";
+  };
+  return {
+    resultados: resultados.map((r) => ({
+      ...r,
+      detalle: detalle(r),
+      comisionPagada: 0,
+      comisionEsperada: null,
+      diferencia: null,
+      porcentaje: null,
+      base: null,
+    })),
+    resumen: { ...resumen, esperada: 0, pagada: 0, pagadaAutoCreada: 0, pagadaSinCruce: 0 },
+  };
+}
+
 /** Cruza el estado de cuenta contra la base de datos sin modificar nada. */
 export async function analizarConciliacion(aseguradoraId: string, filas: FilaEstado[]): Promise<AnalisisResultado> {
   const v = await validar(aseguradoraId, filas);
   if (!v.ok) return { ok: false, error: v.error };
-  const { resultados, resumen } = await cruzarEstadoDeCuenta(v.admin.agenciaId, v.aseguradoraId, v.filas);
+  const cruce = await cruzarEstadoDeCuenta(v.admin.agenciaId, v.aseguradoraId, v.filas);
+  const { resultados, resumen } = veComisiones(v.admin) ? cruce : sinComisiones(cruce.resultados, cruce.resumen);
   return { ok: true, resultados, resumen };
 }
 
@@ -170,9 +199,10 @@ export type AclaracionResultado = { ok: true; conciliado: boolean } | { ok: fals
  */
 export async function registrarAclaracion(reciboId: string, raw: AclaracionInput): Promise<AclaracionResultado> {
   const admin = await getAdmin();
-  if (!admin) {
+  // Las aclaraciones son diferencias de comisión: solo el SUPERADMIN.
+  if (!admin || !veComisiones(admin)) {
     return (await getCurrentUser())
-      ? { ok: false, error: "Solo un administrador puede dar seguimiento a las aclaraciones." }
+      ? { ok: false, error: "Solo un superadministrador puede dar seguimiento a las aclaraciones." }
       : { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
   if (typeof reciboId !== "string" || !/^[a-z0-9]+$/i.test(reciboId) || typeof raw !== "object" || raw === null) {

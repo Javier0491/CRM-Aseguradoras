@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 
+import { logoParaDocumentos } from "@/lib/agencias/marca";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 
@@ -12,6 +13,15 @@ export const getAgencia = cache(async (agenciaId: string) => {
     select: { id: true, nombre: true, logoUrl: true, colorHex: true, tema: true },
   });
 });
+
+/** Marca de la agencia para sus correos: nombre, color, tema y el logo para documentos. */
+export async function getMarcaCorreo(agenciaId: string) {
+  const a = await db.agencia.findUniqueOrThrow({
+    where: { id: agenciaId },
+    select: { nombre: true, colorHex: true, tema: true, logoUrl: true, logoDocumentosUrl: true },
+  });
+  return { nombre: a.nombre, colorHex: a.colorHex, tema: a.tema, logoUrl: logoParaDocumentos(a) };
+}
 
 /**
  * Todas las agencias con su marca y su tamaño, para el panel del SUPERADMIN. Es la única consulta

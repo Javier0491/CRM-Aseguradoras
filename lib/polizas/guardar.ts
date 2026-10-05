@@ -219,7 +219,14 @@ export async function registrarPoliza(
     permitirComision,
     usuario,
     renuevaA,
-  }: { permitirComision: boolean; usuario: UsuarioSesion; renuevaA?: string }
+    leidaConIa = false,
+  }: {
+    permitirComision: boolean;
+    usuario: UsuarioSesion;
+    renuevaA?: string;
+    /** El formulario lo llenó la Captura Inteligente (OCR); se anota en la bitácora. */
+    leidaConIa?: boolean;
+  }
 ): Promise<GuardarPolizaResultado> {
   const input = sanitizarPolizaInput(raw);
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
@@ -296,14 +303,19 @@ export async function registrarPoliza(
               accion: "poliza.renovar",
               entidad: "poliza",
               entidadId: poliza.id,
-              descripcion: `Renovó la póliza ${anterior.numeroImpreso} con la ${poliza.numeroImpreso} (${cliente.nombre})`,
-              datos: { renuevaA: anterior.id },
+              descripcion:
+                `Renovó la póliza ${anterior.numeroImpreso} con la ${poliza.numeroImpreso} (${cliente.nombre})` +
+                (leidaConIa ? " · leída con Captura Inteligente" : ""),
+              datos: { renuevaA: anterior.id, ...(leidaConIa && { origen: "ocr" }) },
             }
           : {
               accion: "poliza.crear",
               entidad: "poliza",
               entidadId: poliza.id,
-              descripcion: `Capturó la póliza ${poliza.numeroImpreso} de ${cliente.nombre} con ${recibos.length} ${recibos.length === 1 ? "recibo" : "recibos"}`,
+              descripcion:
+                `Capturó la póliza ${poliza.numeroImpreso} de ${cliente.nombre} con ${recibos.length} ${recibos.length === 1 ? "recibo" : "recibos"}` +
+                (leidaConIa ? " · leída con Captura Inteligente" : ""),
+              ...(leidaConIa && { datos: { origen: "ocr" } }),
             },
         tx
       );

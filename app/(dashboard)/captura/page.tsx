@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { RefreshCcw } from "lucide-react";
 
 import { CapturaWorkspace } from "@/components/captura/captura-workspace";
-import { esAdmin, requireUser } from "@/lib/auth/dal";
+import { requireUser, veComisiones } from "@/lib/auth/dal";
 import { getPolizaParaRenovar } from "@/lib/polizas/formulario";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
 
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default async function CapturaPage({ searchParams }: PageProps<"/captura">) {
   const { renovar } = await searchParams;
   const [user, aseguradoras] = await Promise.all([requireUser(), getAseguradorasOpciones()]);
-  const verComisiones = esAdmin(user);
+  const verComisiones = veComisiones(user);
   // ?renovar=<id>: captura de la renovación de esa póliza, con sus datos precargados.
   const renovacion =
     typeof renovar === "string" ? await getPolizaParaRenovar(renovar, { incluirComision: verComisiones }) : null;

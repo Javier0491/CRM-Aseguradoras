@@ -15,6 +15,7 @@ import {
 
 import { ArchivoUploader } from "@/components/archivos/archivo-uploader";
 import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
+import { HistorialPoliza } from "@/components/polizas/historial-poliza";
 import { PrimaNeta } from "@/components/polizas/prima-neta";
 import {
   AseguradoraTag,
@@ -42,7 +43,8 @@ import {
   TIPOS_ARCHIVO,
   type TipoArchivo,
 } from "@/lib/archivos/config";
-import { esAdmin, requireUser } from "@/lib/auth/dal";
+import { requireUser, veComisiones } from "@/lib/auth/dal";
+import { getHistorialPoliza, LIMITE_HISTORIAL } from "@/lib/bitacora/historial-poliza";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
 import { CAMPOS_LISTA_COBERTURAS, listaDeCoberturas } from "@/lib/polizas/coberturas";
@@ -65,9 +67,12 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   const poliza = await getPolizaDetalle(id);
   if (!poliza) notFound();
   const hoy = hoyISO();
-  // La comisión es la ganancia del broker: solo la ve el rol ADMIN.
-  const verComisiones = esAdmin(await requireUser());
-  const renovada = await getRenovacion(poliza);
+  // La comisión solo la ve el SUPERADMIN.
+  const verComisiones = veComisiones(await requireUser());
+  const [renovada, historial] = await Promise.all([
+    getRenovacion(poliza),
+    getHistorialPoliza(poliza, verComisiones),
+  ]);
   // "Renovar" se destaca cuando la póliza está por vencer o ya venció.
   const toca = estadoVigencia(poliza.vigencia_fin, hoy, DIAS_POR_VENCER) !== "vigente";
 
@@ -260,6 +265,8 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
               </TableBody>
             </Table>
           </Card>
+
+          <HistorialPoliza eventos={historial} limite={LIMITE_HISTORIAL} />
         </div>
 
         <Card className="xl:sticky xl:top-20">

@@ -70,15 +70,17 @@ export function AppSidebar({
   email,
   nombre,
   esAdmin,
+  superadmin,
   agencia,
 }: {
   email: string | null;
   nombre: string | null;
   esAdmin: boolean;
+  superadmin: boolean;
   agencia: { nombre: string; logoUrl: string | null };
 }) {
   const pathname = usePathname();
-  const sistema = navPara(systemNav, esAdmin);
+  const sistema = navPara(systemNav, esAdmin, superadmin);
 
   return (
     <Sidebar collapsible="icon">
@@ -104,7 +106,7 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="Operación" items={navPara(mainNav, esAdmin)} pathname={pathname} />
+        <NavGroup label="Operación" items={navPara(mainNav, esAdmin, superadmin)} pathname={pathname} />
         {sistema.length > 0 && <NavGroup label="Sistema" items={sistema} pathname={pathname} />}
       </SidebarContent>
 

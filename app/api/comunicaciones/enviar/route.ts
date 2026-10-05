@@ -1,3 +1,4 @@
+import { getMarcaCorreo } from "@/lib/agencias/queries";
 import { getCurrentUser } from "@/lib/auth/dal";
 import {
   cuerpoVacio,
@@ -96,7 +97,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const resultados = await enviarCorreos({ asunto, html, destinatarios: validos });
+    const marca = await getMarcaCorreo(usuario.agenciaId);
+    const resultados = await enviarCorreos({ asunto, html, destinatarios: validos, marca });
     const enviados = resultados.filter((r) => r.ok).length;
     return Response.json({
       ok: true,

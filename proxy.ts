@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { updateSession } from "@/lib/supabase/proxy";
 
-// Rutas accesibles sin sesión.
-const RUTAS_PUBLICAS = ["/login"];
+// Rutas accesibles sin sesión. /api/cron no usa sesión: cada ruta exige CRON_SECRET.
+const RUTAS_PUBLICAS = ["/login", "/api/cron"];
 
 function esPublica(pathname: string) {
   return RUTAS_PUBLICAS.some((ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`));

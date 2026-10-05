@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { MatrizComisiones } from "@/components/comisiones/matriz-comisiones";
 import { ramoLabel } from "@/components/polizas/poliza-ui";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireSuperadmin } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export default async function MatrizComisionesPage() {
-  const { agenciaId } = await requireAdmin();
+  const { agenciaId } = await requireSuperadmin();
   const [aseguradoras, esquemas] = await Promise.all([
     getAseguradorasOpciones(),
     db.esquemaComision.findMany({

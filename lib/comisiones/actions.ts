@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getAdmin, getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
+import { getAdmin, getCurrentUser, veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import {
   claveRango,
@@ -64,12 +64,12 @@ function validar(raw: unknown): { ok: true; datos: EsquemaInput & { ramo: Ramo }
   return { ok: true, datos: { id, aseguradoraId, ramo: ramo as Ramo, anio, porcentaje, edadMinima, edadMaxima } };
 }
 
-const SIN_PERMISO = "Solo un administrador puede modificar la matriz de comisiones.";
+const SIN_PERMISO = "Solo un superadministrador puede modificar la matriz de comisiones.";
 
-/** El administrador de la sesión (sus cambios son sobre la matriz de su agencia), o el error. */
+/** El superadministrador de la sesión (sus cambios son sobre la matriz de la agencia que opera), o el error. */
 async function verificarAdmin(): Promise<{ admin: UsuarioSesion; error?: never } | { admin?: never; error: ResultadoEsquema }> {
   const admin = await getAdmin();
-  if (admin) return { admin };
+  if (admin && veComisiones(admin)) return { admin };
   return {
     error: {
       ok: false,

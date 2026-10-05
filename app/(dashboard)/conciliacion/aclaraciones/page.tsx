@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { requireAdmin } from "@/lib/auth/dal";
+import { requireSuperadmin } from "@/lib/auth/dal";
 import { getAclaraciones } from "@/lib/conciliacion/aclaraciones";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,8 @@ export const metadata: Metadata = {
 };
 
 export default async function AclaracionesPage() {
-  await requireAdmin();
+  // Diferencias de comisión: solo el SUPERADMIN.
+  await requireSuperadmin();
   const aclaraciones = await getAclaraciones();
   const porCobrar = aclaraciones.reduce((s, a) => s + (a.diferencia !== null && a.diferencia < 0 ? -a.diferencia : 0), 0);
 

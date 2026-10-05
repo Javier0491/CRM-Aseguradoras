@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getAgenciasParaSuperadmin } from "@/lib/agencias/queries";
 import { requireAdmin } from "@/lib/auth/dal";
 import { formatFecha } from "@/lib/format";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
@@ -28,6 +29,10 @@ export const metadata: Metadata = {
 export default async function UsuariosPage() {
   const yo = await requireAdmin();
   const usuarios = await getUsuarios();
+  // Solo el SUPERADMIN elige en qué agencia crea la cuenta; el resto crea en la suya.
+  const agencias = yo.superadmin
+    ? (await getAgenciasParaSuperadmin()).map((a) => ({ id: a.id, nombre: a.nombre }))
+    : undefined;
   const disponible = getSupabaseAdmin() !== null;
   const activos = usuarios.filter((u) => u.activo).length;
 
@@ -36,8 +41,7 @@ export default async function UsuariosPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Usuarios</h1>
         <p className="text-sm text-muted-foreground">
-          Cuentas del equipo y su nivel de acceso. Los ejecutivos no ven comisiones, conciliación ni
-          configuración.
+          Cuentas del equipo y su nivel de acceso. Los ejecutivos no ven conciliación ni configuración.
         </p>
       </div>
 
@@ -60,7 +64,7 @@ export default async function UsuariosPage() {
             {usuarios.length > activos && ` · ${usuarios.length - activos} desactivadas`}
           </CardDescription>
           <CardAction>
-            <AgregarUsuario disponible={disponible} />
+            <AgregarUsuario disponible={disponible} agencias={agencias} agenciaActivaId={yo.agenciaId} />
           </CardAction>
         </CardHeader>
         <Table>

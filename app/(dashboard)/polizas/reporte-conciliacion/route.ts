@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ramoLabel } from "@/components/polizas/poliza-ui";
-import { esAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { getCurrentUser, veComisiones } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
 import { etiquetaMotivo, etiquetaNoEncontrada } from "@/lib/polizas/conciliacion-motivos";
@@ -18,7 +18,7 @@ export async function GET() {
   if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }
-  const verComisiones = esAdmin(user);
+  const verComisiones = veComisiones(user);
   const { sinConciliar, noEncontradas } = await getEstadoConciliacion();
 
   const XLSX = await import("xlsx");

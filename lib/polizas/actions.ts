@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
-import { esAdmin, getCurrentUser } from "@/lib/auth/dal";
+import { getCurrentUser, veComisiones } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import {
@@ -25,8 +25,9 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
   const renuevaA =
     typeof raw === "object" && raw !== null && "renuevaA" in raw ? (raw as { renuevaA: unknown }).renuevaA : undefined;
   const resultado = await registrarPoliza(raw, {
-    permitirComision: esAdmin(user),
+    permitirComision: veComisiones(user),
     usuario: user,
+    leidaConIa: typeof raw === "object" && raw !== null && "origen" in raw && raw.origen === "ocr",
     ...(renuevaA !== undefined && { renuevaA: String(renuevaA) }),
   });
   if (resultado.ok) {
@@ -40,7 +41,7 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
 export async function editarPoliza(polizaId: string, raw: unknown): Promise<EditarPolizaResultado> {
   const user = await getCurrentUser();
   if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
-  const resultado = await actualizarPoliza(polizaId, raw, { permitirComision: esAdmin(user), usuario: user });
+  const resultado = await actualizarPoliza(polizaId, raw, { permitirComision: veComisiones(user), usuario: user });
   if (resultado.ok) {
     revalidatePath("/polizas", "layout");
     revalidatePath("/clientes", "layout");

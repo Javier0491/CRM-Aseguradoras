@@ -85,7 +85,7 @@ export async function buscarGlobal(agenciaId: string, q: string): Promise<Result
 export type Aviso = { clave: string; titulo: string; detalle: string; cantidad: number; href: string; tono: "warning" | "destructive" | "info" };
 
 /**
- * Avisos de la campana: pólizas por vencer, recibos vencidos (en gracia o en riesgo) y (solo ADMIN)
+ * Avisos de la campana: pólizas por vencer, recibos vencidos (en gracia o en riesgo) y (solo SUPERADMIN)
  * diferencias de comisión por aclarar. Solo los que tienen algo pendiente.
  */
 /**
@@ -109,14 +109,14 @@ async function contarRecibosEnRiesgo(agenciaId: string, hoy: Date) {
   });
 }
 
-export async function getAvisos(agenciaId: string, { esAdmin }: { esAdmin: boolean }): Promise<Aviso[]> {
+export async function getAvisos(agenciaId: string, { verComisiones }: { verComisiones: boolean }): Promise<Aviso[]> {
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER * 86_400_000);
   const [porVencer, vencidos, riesgo, aclarar] = await Promise.all([
     db.poliza.count({ where: { agenciaId, vigencia_fin: { gte: hoy, lte: limite } } }),
     db.recibo.count({ where: { agenciaId, estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } } }),
     contarRecibosEnRiesgo(agenciaId, hoy),
-    esAdmin ? db.recibo.count({ where: { agenciaId, estado: "PAGADO" } }) : Promise.resolve(0),
+    verComisiones ? db.recibo.count({ where: { agenciaId, estado: "PAGADO" } }) : Promise.resolve(0),
   ]);
   const avisos: Aviso[] = [
     {

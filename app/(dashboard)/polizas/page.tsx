@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
+import { CalendarClock, Download, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
 
 import { PolizasConciliadas, PolizasSinConciliar } from "@/components/polizas/conciliacion-polizas";
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { esAdmin, requireUser } from "@/lib/auth/dal";
+import { requireUser, veComisiones } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, hoyISO } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
@@ -102,6 +102,13 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
   if (!soloFaltaContacto) paramsContacto.set("contacto", "falta");
   const hrefContacto = paramsContacto.size ? `/polizas?${paramsContacto}` : "/polizas";
 
+  // El reporte exporta la cartera con los filtros activos.
+  const paramsReporte = new URLSearchParams();
+  if (q.trim()) paramsReporte.set("q", q.trim());
+  if (ramo) paramsReporte.set("ramo", ramo);
+  if (soloFaltaContacto) paramsReporte.set("contacto", "falta");
+  const hrefReporte = paramsReporte.size ? `/polizas/reporte-cartera?${paramsReporte}` : "/polizas/reporte-cartera";
+
   const resumen = [
     { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, clase: "text-primary" },
     {
@@ -123,11 +130,21 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
             Cartera registrada y calendario de cobranza.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/captura">
-            <FilePlus2 /> Nueva póliza
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {totalGeneral > 0 && (
+            <Button asChild variant="outline">
+              {/* Enlace normal: la ruta responde con el archivo. */}
+              <a href={hrefReporte} download title={filtrando ? "Exporta solo las pólizas que coinciden con los filtros" : undefined}>
+                <Download /> Exportar reporte
+              </a>
+            </Button>
+          )}
+          <Button asChild>
+            <Link href="/captura">
+              <FilePlus2 /> Nueva póliza
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -289,7 +306,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
             <PolizasSinConciliar
               polizas={conciliacion.sinConciliar}
               noEncontradas={conciliacion.noEncontradas}
-              verComisiones={esAdmin(user)}
+              verComisiones={veComisiones(user)}
               limite={LIMITE_LISTADO}
             />
           </TabsContent>

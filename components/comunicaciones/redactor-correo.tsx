@@ -39,6 +39,7 @@ import {
   type DestinatarioCorreo,
   type EnviarCorreoRespuesta,
   type EnviarCorreoSolicitud,
+  type MarcaCorreo,
 } from "@/lib/comunicaciones/correo";
 import { cn } from "@/lib/utils";
 
@@ -51,14 +52,14 @@ export function RedactorCorreo({
   clientes,
   sinCorreo,
   remitente,
-  empresa,
+  marca,
 }: {
   clientes: DestinatarioCorreo[];
   /** Clientes sin correo capturado (no aparecen en la lista). */
   sinCorreo: number;
   /** EMAIL_SENDER; null si el envío no está configurado. */
   remitente: string | null;
-  empresa: string;
+  marca: MarcaCorreo;
 }) {
   const [asunto, setAsunto] = React.useState("");
   const [html, setHtml] = React.useState(CUERPO_INICIAL);
@@ -150,7 +151,7 @@ export function RedactorCorreo({
               <VistaPrevia
                 asunto={asunto}
                 html={html}
-                empresa={empresa}
+                marca={marca}
                 remitente={remitente}
                 destinatario={primero}
               />
@@ -385,19 +386,19 @@ function SelectorDestinatarios({
 function VistaPrevia({
   asunto,
   html,
-  empresa,
+  marca,
   remitente,
   destinatario,
 }: {
   asunto: string;
   html: string;
-  empresa: string;
+  marca: MarcaCorreo;
   remitente: string | null;
   destinatario?: DestinatarioCorreo;
 }) {
   const nombre = destinatario?.nombre ?? "Cliente de ejemplo";
   const asuntoFinal = personalizar(asunto, nombre, false);
-  const documento = construirCorreoHtml({ asunto: asuntoFinal, cuerpo: personalizar(html, nombre, true), empresa });
+  const documento = construirCorreoHtml({ asunto: asuntoFinal, cuerpo: personalizar(html, nombre, true), marca });
 
   return (
     <div className="overflow-hidden rounded-lg border bg-background">

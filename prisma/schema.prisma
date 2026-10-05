@@ -49,10 +49,16 @@ enum Rol {
 model Agencia {
   id        String   @id @default(uuid()) @db.Uuid
   nombre    String
+  // Ícono o monograma cuadrado de la barra lateral.
   logoUrl   String?  @map("logo_url")
+  // Logotipo completo para documentos y correos; sin él, los correos usan el ícono.
+  logoDocumentosUrl String? @map("logo_documentos_url")
   colorHex  String?  @map("color_hex")
   // Fondo de la interfaz: "dark" o "light" (lo valida un CHECK en la base de datos).
   tema      String   @default("dark")
+  // Buzón de la agencia (p. ej. servicios@…) que recibe copia de cada aviso automático y las
+  // respuestas de los clientes (Configuración → Avisos automáticos).
+  correoCopiaAvisos String? @map("correo_copia_avisos")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -70,6 +76,7 @@ model Agencia {
   lotesCambios       LoteCambio[]
   lotesRenglones     LoteRenglon[]
   notasAclaracion    NotaAclaracion[]
+  avisosEnviados     AvisoEnviado[]
 
   @@map("agencias")
 }
@@ -152,6 +159,15 @@ model Aseguradora {
   // Días después del vencimiento de un recibo en que aún se puede pagar sin que se cancele la
   // póliza (p. ej. MetLife 30, Quálitas 0). Pasado ese plazo el recibo está en riesgo.
   diasGracia              Int     @default(0) @map("dias_gracia")
+
+  // Matriz de avisos automáticos por correo (Configuración → Avisos automáticos). null = ese
+  // aviso no se envía para esta aseguradora.
+  // Días antes del vencimiento de un recibo en que se recuerda el pago.
+  avisoDiasAntes      Int? @map("aviso_dias_antes")
+  // Días después del vencimiento en que se avisa que el recibo sigue sin pagar.
+  avisoDiasVencido    Int? @map("aviso_dias_vencido")
+  // Días antes del fin de vigencia en que se avisa de la renovación.
+  avisoDiasRenovacion Int? @map("aviso_dias_renovacion")
 
   polizas  Poliza[]
   esquemas EsquemaComision[]
@@ -399,6 +415,24 @@ model LoteCambio {
   @@index([recibo_id])
   @@index([agenciaId])
   @@map("lotes_cambios")
+}
+
+// Avisos automáticos ya enviados: evita mandar dos veces el mismo aviso del mismo recibo o póliza.
+model AvisoEnviado {
+  id            String   @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId     String   @map("agencia_id") @db.Uuid
+  agencia       Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  created_at    DateTime @default(now())
+  // "por_vencer" | "vencido" | "renovacion" (lib/avisos/reglas.ts)
+  tipo          String
+  // Id del recibo (por_vencer, vencido) o de la póliza (renovacion).
+  referencia_id String
+  destinatario  String
+
+  @@unique([tipo, referencia_id])
+  @@index([agenciaId, created_at])
+  @@map("avisos_enviados")
 }
 
 // Seguimiento de un recibo PAGADO con diferencia de comisión: reclamos, notas y cierre.

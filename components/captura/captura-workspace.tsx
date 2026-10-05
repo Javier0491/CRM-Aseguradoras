@@ -81,6 +81,8 @@ export function CapturaWorkspace({
   // PDF del formato de negociación: se guarda como tercer archivo de la póliza.
   const [negociacion, setNegociacion] = React.useState<File | null>(null);
   const formRef = React.useRef<PolizaFormHandle>(null);
+  // La IA llenó el formulario: queda registrado en el historial de la póliza.
+  const [leidaConIa, setLeidaConIa] = React.useState(false);
 
   return (
     <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
@@ -95,6 +97,7 @@ export function CapturaWorkspace({
           onLimpiar={() => setCaratula(null)}
           onAplicar={(datos, archivos) => {
             setCaratula(primerPdf(archivos));
+            setLeidaConIa(true);
             const leidos = aValoresIniciales(datos, aseguradoras);
             setPrellenado((p) => ({
               version: p.version + 1,
@@ -117,6 +120,7 @@ export function CapturaWorkspace({
               // Se integra a lo ya capturado en lugar de reemplazar el formulario.
               onAplicar={(datos, archivos) => {
                 setNegociacion(primerPdf(archivos));
+                setLeidaConIa(true);
                 formRef.current?.aplicarComplemento(aValoresIniciales(datos, aseguradoras));
               }}
             />
@@ -131,6 +135,7 @@ export function CapturaWorkspace({
         modo={renovacion ? { tipo: "renovacion", anterior: renovacion.anterior } : undefined}
         ref={formRef}
         extrayendo={extrayendo || leyendoComplemento}
+        leidaConIa={leidaConIa}
         onRamoChange={setRamo}
         caratula={caratula}
         // Solo aplica mientras el ramo sea GMM Colectivo (el panel se oculta con otro ramo).
@@ -140,6 +145,7 @@ export function CapturaWorkspace({
           setExtrayendo(false);
           setLeyendoComplemento(false);
           setNegociacion(null);
+          setLeidaConIa(false);
           setRonda((r) => r + 1);
         }}
       />

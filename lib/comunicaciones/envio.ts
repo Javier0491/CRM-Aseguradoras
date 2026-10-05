@@ -8,10 +8,11 @@ import {
   construirCorreoHtml,
   htmlATexto,
   MAX_BYTES_IMAGEN,
-  nombreRemitente,
   personalizar,
+  remitenteDeAgencia,
   TIPOS_IMAGEN,
   type DestinatarioCorreo,
+  type MarcaCorreo,
   type ResultadoEnvio,
 } from "@/lib/comunicaciones/correo";
 
@@ -42,7 +43,6 @@ export function getConfigCorreo() {
     resend: cliente,
     remitente,
     responderA: process.env.EMAIL_REPLY_TO?.trim() || undefined,
-    empresa: nombreRemitente(remitente),
   };
 }
 
@@ -92,29 +92,43 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Pausa entre correos para no rebasar el límite de Resend (2 solicitudes/s por omisión). */
 const PAUSA_MS = 550;
 
+/** Envía con un reintento si Resend responde 429 (límite de velocidad). */
+async function despachar(resend: Resend, correo: Parameters<Resend["emails"]["send"]>[0]) {
+  let { error } = await resend.emails.send(correo);
+  if (error?.statusCode === 429) {
+    await esperar(1500);
+    ({ error } = await resend.emails.send(correo));
+  }
+  return error;
+}
+
 /**
  * Envía un correo individual a cada destinatario (nadie ve las direcciones de los demás).
  * El cuerpo admite {{nombre}}, que se sustituye por el nombre de cada cliente.
+ * Sale de la dirección universal (EMAIL_SENDER) con el nombre y la marca de la agencia.
  */
 export async function enviarCorreos({
   asunto,
   html,
   destinatarios,
+  marca,
 }: {
   asunto: string;
   html: string;
   destinatarios: DestinatarioCorreo[];
+  marca: MarcaCorreo;
 }): Promise<ResultadoEnvio[]> {
-  const { resend, remitente, responderA, empresa } = getConfigCorreo();
+  const { resend, remitente, responderA } = getConfigCorreo();
+  const de = remitenteDeAgencia(remitente, marca.nombre);
   const { html: cuerpo, adjuntos } = extraerImagenesEnLinea(html);
   const resultados: ResultadoEnvio[] = [];
 
   for (const [i, d] of destinatarios.entries()) {
     if (i > 0) await esperar(PAUSA_MS);
     const asuntoFinal = personalizar(asunto, d.nombre, false);
-    const htmlFinal = construirCorreoHtml({ asunto: asuntoFinal, cuerpo: personalizar(cuerpo, d.nombre, true), empresa });
-    const correo = {
-      from: remitente,
+    const htmlFinal = construirCorreoHtml({ asunto: asuntoFinal, cuerpo: personalizar(cuerpo, d.nombre, true), marca });
+    const error = await despachar(resend, {
+      from: de,
       to: d.email,
       replyTo: responderA,
       subject: asuntoFinal,
@@ -122,14 +136,7 @@ export async function enviarCorreos({
       text: htmlATexto(htmlFinal),
       attachments: adjuntos.length > 0 ? adjuntos : undefined,
       tags: [{ name: "modulo", value: "comunicaciones" }],
-    };
-
-    let { error } = await resend.emails.send(correo);
-    if (error?.statusCode === 429) {
-      // Límite de velocidad: un reintento tras una pausa más larga.
-      await esperar(1500);
-      ({ error } = await resend.emails.send(correo));
-    }
+    });
     if (error && (error.statusCode === 401 || error.statusCode === 403) && i === 0) {
       // Llave inválida o dominio no verificado: no tiene caso intentar con el resto.
       throw new CorreoNoConfiguradoError(`una configuración válida de Resend: ${error.message}`);
@@ -137,4 +144,43 @@ export async function enviarCorreos({
     resultados.push({ email: d.email, nombre: d.nombre, ok: !error, error: error?.message });
   }
   return resultados;
+}
+
+/**
+ * Envía un aviso automático ya convertido a HTML (plantilla de React Email). Sale de la
+ * dirección universal con el nombre de la agencia; `copia` es el buzón de la agencia que recibe
+ * copia oculta (bcc) y las respuestas del cliente (reply-to).
+ */
+export async function enviarAviso({
+  agencia,
+  para,
+  asunto,
+  html,
+  texto,
+  copia,
+}: {
+  agencia: string;
+  para: string;
+  asunto: string;
+  html: string;
+  texto: string;
+  copia?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { resend, remitente, responderA } = getConfigCorreo();
+  const error = await despachar(resend, {
+    from: remitenteDeAgencia(remitente, agencia),
+    to: para,
+    // Copia oculta: las ejecutivas se enteran sin que el cliente vea el buzón entre los destinatarios.
+    bcc: copia && copia.toLowerCase() !== para.toLowerCase() ? copia : undefined,
+    replyTo: copia ?? responderA,
+    subject: asunto,
+    html,
+    text: texto,
+    tags: [{ name: "modulo", value: "avisos" }],
+  });
+  if (error && (error.statusCode === 401 || error.statusCode === 403)) {
+    // Llave inválida o dominio no verificado: no tiene caso intentar con el resto.
+    throw new CorreoNoConfiguradoError(`una configuración válida de Resend: ${error.message}`);
+  }
+  return { ok: !error, error: error?.message };
 }

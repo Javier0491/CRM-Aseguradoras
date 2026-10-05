@@ -1,6 +1,9 @@
 // Tipos, límites y plantilla HTML de los correos a clientes.
 // Se usa en el servidor (envío) y en el cliente (vista previa), así que no importa nada de servidor.
 
+import { COLOR_MARCA_PREDETERMINADO, esTema, FONDO_TEMA, TEMA_PREDETERMINADO } from "@/lib/agencias/marca";
+import { contraste, normalizarHex } from "@/lib/color";
+
 /** Máximo de destinatarios por envío: cada correo es individual y Resend limita ~2 solicitudes/s. */
 export const MAX_DESTINATARIOS = 400;
 export const MAX_ASUNTO = 200;
@@ -75,9 +78,9 @@ const ESTILOS_EN_LINEA: Record<string, string> = {
   blockquote: "margin:0 0 14px;padding-left:14px;border-left:3px solid #c5a059;color:#52525b;",
 };
 
-function aplicarEstilosEnLinea(html: string) {
+function aplicarEstilosEnLinea(html: string, estilos: Record<string, string>) {
   return html.replace(/<(p|h1|h2|h3|ul|ol|li|a|img|hr|blockquote)\b([^>]*)>/gi, (_m, etiqueta: string, attrs: string) => {
-    const base = ESTILOS_EN_LINEA[etiqueta.toLowerCase()];
+    const base = estilos[etiqueta.toLowerCase()];
     const estilo = attrs.match(/\sstyle\s*=\s*"([^"]*)"/i);
     if (estilo) {
       // El estilo propio (alineación, color) va después para que tenga prioridad.
@@ -87,25 +90,48 @@ function aplicarEstilosEnLinea(html: string) {
   });
 }
 
-/** Nombre visible de la empresa a partir de `"Nombre <correo@dominio>"`. */
-export function nombreRemitente(remitente: string | undefined) {
-  const nombre = remitente?.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim();
-  if (nombre) return nombre;
-  const dominio = remitente?.match(/@([^>\s]+)/)?.[1];
-  return dominio ?? "Magnus Seguros";
+/** Marca de la agencia que envía: su nombre, color, logo y tema visten el correo. */
+export type MarcaCorreo = { nombre: string; colorHex: string | null; logoUrl: string | null; tema: string };
+
+/**
+ * Remitente con el nombre de la agencia y la dirección universal de EMAIL_SENDER
+ * (`"Nombre" <correo@dominio>` o solo la dirección): todas las agencias envían desde el mismo
+ * correo, pero el cliente ve el nombre de la suya.
+ */
+export function remitenteDeAgencia(remitente: string, agencia: string) {
+  const direccion = remitente.match(/<([^>]+)>/)?.[1]?.trim() ?? remitente.trim();
+  const nombre = agencia.replace(/["<>\r\n\\]/g, "").trim();
+  return nombre ? `"${nombre}" <${direccion}>` : direccion;
 }
 
-/** Documento HTML completo del correo: encabezado de marca, cuerpo y pie. */
+/** Documento HTML completo del correo: encabezado con la marca de la agencia, cuerpo y pie. */
 export function construirCorreoHtml({
   asunto,
   cuerpo,
-  empresa,
+  marca,
 }: {
   asunto: string;
   cuerpo: string;
-  empresa: string;
+  marca: MarcaCorreo;
 }) {
   const anio = new Date().getFullYear();
+  const empresa = marca.nombre;
+  const color = normalizarHex(marca.colorHex) ?? COLOR_MARCA_PREDETERMINADO;
+  // El encabezado usa el fondo del tema de la agencia: su logo y su color se eligieron para él.
+  const fondo = FONDO_TEMA[esTema(marca.tema) ? marca.tema : TEMA_PREDETERMINADO];
+  // Sobre el cuerpo blanco un color de marca muy claro no se leería: los enlaces usan el del texto.
+  const acento = contraste(color, "#FFFFFF") >= 3 ? color : "#27272a";
+  const estilos = {
+    ...ESTILOS_EN_LINEA,
+    a: `color:${acento};text-decoration:underline;`,
+    blockquote: `margin:0 0 14px;padding-left:14px;border-left:3px solid ${color};color:#52525b;`,
+  };
+  // Solo logos servidos por https (Storage): una ruta relativa de /public no carga en un correo.
+  const logo = marca.logoUrl?.startsWith("https://") ? marca.logoUrl : null;
+  const titulo = `font-family:Georgia,'Times New Roman',serif;font-size:20px;letter-spacing:0.5px;color:${color};`;
+  const encabezado = logo
+    ? `<img src="${escaparHtml(logo)}" alt="${escaparHtml(empresa)}" height="44" style="height:44px;width:auto;max-width:260px;border:0;display:block;${titulo}">`
+    : `<span style="${titulo}">${escaparHtml(empresa)}</span>`;
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -118,11 +144,11 @@ export function construirCorreoHtml({
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:10px;overflow:hidden;border:1px solid #e4e4e7;">
-<tr><td style="background-color:#0a0a0a;padding:20px 32px;border-bottom:3px solid #c5a059;">
-<span style="font-family:Georgia,'Times New Roman',serif;font-size:20px;letter-spacing:0.5px;color:#c5a059;">${escaparHtml(empresa)}</span>
+<tr><td style="background-color:${fondo};padding:20px 32px;border-bottom:3px solid ${color};">
+${encabezado}
 </td></tr>
 <tr><td style="padding:32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#27272a;">
-${aplicarEstilosEnLinea(limpiarHtml(cuerpo))}
+${aplicarEstilosEnLinea(limpiarHtml(cuerpo), estilos)}
 </td></tr>
 <tr><td style="padding:18px 32px;background-color:#fafafa;border-top:1px solid #e4e4e7;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#71717a;">
 Recibes este correo porque eres cliente de ${escaparHtml(empresa)}. Si tienes dudas, responde directamente a este mensaje.<br>

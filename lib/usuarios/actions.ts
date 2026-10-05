@@ -3,14 +3,21 @@
 import { revalidatePath } from "next/cache";
 
 import { CLAIM_AGENCIA } from "@/lib/agencias/constantes";
-import { getAdmin } from "@/lib/auth/dal";
+import { getAdmin, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { MAX_PASSWORD, MIN_PASSWORD, ROLES, type RolUsuario } from "@/lib/usuarios/reglas";
 
-export type NuevoUsuarioInput = { nombre: string; email: string; password: string; rol: RolUsuario };
+export type NuevoUsuarioInput = {
+  nombre: string;
+  email: string;
+  password: string;
+  rol: RolUsuario;
+  /** Solo SUPERADMIN: agencia donde se crea la cuenta. Sin él, la agencia de la sesión. */
+  agenciaId?: string;
+};
 
 export type ResultadoUsuario =
   | { ok: true }
@@ -41,6 +48,30 @@ function validar(raw: unknown): { ok: true; datos: NuevoUsuarioInput } | Extract
   return { ok: true, datos: { nombre: nombreLimpio, email: emailLimpio, password, rol: rol as RolUsuario } };
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Agencia donde se crea la cuenta: la de la sesión, salvo que un SUPERADMIN elija otra. El rol
+ * viene de la base de datos (getCurrentUser), así que un admin de agencia no puede elegir.
+ */
+async function agenciaDestino(
+  admin: UsuarioSesion,
+  elegida: unknown
+): Promise<{ ok: true; agenciaId: string } | Extract<ResultadoUsuario, { ok: false }>> {
+  if (elegida === undefined || elegida === null || elegida === admin.agenciaId) {
+    return { ok: true, agenciaId: admin.agenciaId };
+  }
+  if (!admin.superadmin) {
+    return { ok: false, error: "Solo un superadministrador puede elegir la agencia.", campo: "agenciaId" };
+  }
+  if (typeof elegida !== "string" || !UUID.test(elegida)) {
+    return { ok: false, error: "Agencia inválida.", campo: "agenciaId" };
+  }
+  const agencia = await db.agencia.findUnique({ where: { id: elegida }, select: { id: true } });
+  if (!agencia) return { ok: false, error: "La agencia ya no existe; recarga la página.", campo: "agenciaId" };
+  return { ok: true, agenciaId: agencia.id };
+}
+
 /**
  * Crea una cuenta del equipo. La contraseña la guarda Supabase Auth con bcrypt: el CRM nunca
  * la almacena. Aquí solo se registra el perfil (nombre y rol) con el mismo id.
@@ -51,6 +82,9 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
   const v = validar(raw);
   if (!v.ok) return v;
   const { nombre, email, password, rol } = v.datos;
+  const destino = await agenciaDestino(admin, raw.agenciaId);
+  if (!destino.ok) return destino;
+  const { agenciaId } = destino;
 
   const supabase = getSupabaseAdmin();
   if (!supabase) {
@@ -74,8 +108,9 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
     // Lo da de alta un administrador: no hace falta confirmar el correo para entrar.
     email_confirm: true,
     user_metadata: { nombre },
-    // La cuenta nueva pertenece a la agencia del administrador que la crea.
-    app_metadata: { [CLAIM_AGENCIA]: admin.agenciaId },
+    // La cuenta nueva pertenece a la agencia del administrador que la crea (o a la que eligió
+    // un SUPERADMIN).
+    app_metadata: { [CLAIM_AGENCIA]: agenciaId },
   });
   if (error || !data.user) {
     if (error?.code === "email_exists" || error?.code === "user_already_exists") {
@@ -94,9 +129,10 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.usuario.create({ data: { id: data.user.id, agenciaId: admin.agenciaId, nombre, email, rol } });
+      await tx.usuario.create({ data: { id: data.user.id, agenciaId, nombre, email, rol } });
+      // Queda en la bitácora de la agencia donde se creó la cuenta.
       await registrarBitacora(
-        admin,
+        { id: admin.id, email: admin.email, agenciaId },
         { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rol}` },
         tx
       );

@@ -28,7 +28,13 @@ const SUGERIDOS = ["#C5A059", "#3B82F6", "#10B981", "#EF4444", "#A855F7", "#F973
 /** Debajo de 3:1 el color de marca, usado como texto e íconos, cuesta leerlo sobre el fondo. */
 const CONTRASTE_MINIMO = 3;
 
-type Agencia = { nombre: string; logoUrl: string | null; colorHex: string | null; tema: string };
+type Agencia = {
+  nombre: string;
+  logoUrl: string | null;
+  logoDocumentosUrl: string | null;
+  colorHex: string | null;
+  tema: string;
+};
 
 const ICONO_TEMA = { dark: Moon, light: Sun } satisfies Record<Tema, unknown>;
 
@@ -42,6 +48,12 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
   const [quitarLogo, setQuitarLogo] = React.useState(false);
   const [errorArchivo, setErrorArchivo] = React.useState<string | null>(null);
   const inputArchivo = React.useRef<HTMLInputElement>(null);
+  // Logo de documentos y correos: mismo manejo que el ícono, en su propio estado.
+  const [archivoDoc, setArchivoDoc] = React.useState<{ file: File; url: string } | null>(null);
+  const [quitarLogoDoc, setQuitarLogoDoc] = React.useState(false);
+  const [errorArchivoDoc, setErrorArchivoDoc] = React.useState<string | null>(null);
+  const inputArchivoDoc = React.useRef<HTMLInputElement>(null);
+  const archivoDocRef = React.useRef<File | null>(null);
   // El archivo se adjunta desde el estado, no desde el <input>: React limpia los campos no
   // controlados al terminar cada envío, también cuando el servidor responde con un error.
   const archivoRef = React.useRef<File | null>(null);
@@ -49,12 +61,16 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
   const [state, action, pendiente] = React.useActionState(
     async (prev: AgenciaFormState, formData: FormData) => {
       if (archivoRef.current) formData.set("logo", archivoRef.current);
+      if (archivoDocRef.current) formData.set("logoDocumentos", archivoDocRef.current);
       const r = await actualizarAgencia(prev, formData);
       if (r.ok) {
         // El logo guardado ya llega en las props (el layout se revalida).
         archivoRef.current = null;
         setArchivo(null);
         setQuitarLogo(false);
+        archivoDocRef.current = null;
+        setArchivoDoc(null);
+        setQuitarLogoDoc(false);
       }
       return r;
     },
@@ -64,6 +80,9 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
   React.useEffect(() => () => {
     if (archivo) URL.revokeObjectURL(archivo.url);
   }, [archivo]);
+  React.useEffect(() => () => {
+    if (archivoDoc) URL.revokeObjectURL(archivoDoc.url);
+  }, [archivoDoc]);
 
   function elegirColor(valor: string) {
     const hex = normalizarHex(valor);
@@ -96,7 +115,32 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
     if (inputArchivo.current) inputArchivo.current.value = "";
   }
 
+  function elegirArchivoDoc(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setErrorArchivoDoc(null);
+    if (!file) return;
+    if (!(file.type in LOGO_FORMATOS)) {
+      setErrorArchivoDoc("Usa una imagen PNG, JPG o WEBP.");
+    } else if (file.size > LOGO_MAX_BYTES) {
+      setErrorArchivoDoc(`El logo debe pesar como máximo ${LOGO_MAX_BYTES / 1024} KB.`);
+    } else {
+      archivoDocRef.current = file;
+      setArchivoDoc({ file, url: URL.createObjectURL(file) });
+      setQuitarLogoDoc(false);
+      return;
+    }
+    e.target.value = "";
+  }
+
+  function quitarDoc() {
+    archivoDocRef.current = null;
+    setArchivoDoc(null);
+    setQuitarLogoDoc(true);
+    if (inputArchivoDoc.current) inputArchivoDoc.current.value = "";
+  }
+
   const logoVista = archivo?.url ?? (quitarLogo ? null : agencia.logoUrl);
+  const logoDocVista = archivoDoc?.url ?? (quitarLogoDoc ? null : agencia.logoDocumentosUrl);
   const nombreVista = nombre.trim() || agencia.nombre;
   const poco = contraste(color, FONDO_TEMA[tema]) < CONTRASTE_MINIMO;
   // Vista previa: el color elegido solo dentro de este recuadro, sin tocar el resto de la página.
@@ -128,14 +172,14 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="logo">Logo</Label>
+            <Label htmlFor="logo">Ícono</Label>
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex size-16 items-center justify-center rounded-lg border bg-sidebar p-2">
                 <LogoAgencia nombre={nombreVista} logoUrl={logoVista} className="size-12" />
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => inputArchivo.current?.click()}>
-                  <ImageUp /> {logoVista ? "Cambiar logo" : "Subir logo"}
+                  <ImageUp /> {logoVista ? "Cambiar ícono" : "Subir ícono"}
                 </Button>
                 {logoVista && (
                   <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={quitar}>
@@ -154,11 +198,53 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
             />
             <input type="hidden" name="quitarLogo" value={quitarLogo ? "1" : ""} />
             <p className="text-xs text-muted-foreground">
-              PNG, JPG o WEBP de hasta {LOGO_MAX_BYTES / 1024} KB. Se muestra a 32 px: funciona mejor un ícono o
-              monograma cuadrado con fondo transparente. Sin logo se usan las iniciales del nombre.
+              Es el de la barra lateral. PNG, JPG o WEBP de hasta {LOGO_MAX_BYTES / 1024} KB. Se muestra a 32 px:
+              funciona mejor un monograma cuadrado con fondo transparente. Sin ícono se usan las iniciales del nombre.
             </p>
             {(errorArchivo ?? state.errores?.logo) && (
               <p className="text-xs text-destructive">{errorArchivo ?? state.errores?.logo}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="logoDocumentos">Logo para documentos y correos</Label>
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Fondo gris claro, como el encabezado de los correos. */}
+              <div className="flex h-16 w-44 items-center justify-center rounded-lg border bg-[#F4F4F5] p-2">
+                {logoDocVista ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- vista previa local (blob:) o de Storage
+                  <img src={logoDocVista} alt="" className="max-h-full max-w-full object-contain" />
+                ) : (
+                  <span className="text-xs text-zinc-500">Sin logo</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => inputArchivoDoc.current?.click()}>
+                  <ImageUp /> {logoDocVista ? "Cambiar logo" : "Subir logo"}
+                </Button>
+                {logoDocVista && (
+                  <Button type="button" variant="ghost" size="sm" className="text-muted-foreground" onClick={quitarDoc}>
+                    <Trash2 /> Quitar
+                  </Button>
+                )}
+              </div>
+            </div>
+            <input
+              ref={inputArchivoDoc}
+              id="logoDocumentos"
+              type="file"
+              accept={Object.keys(LOGO_FORMATOS).join(",")}
+              className="sr-only"
+              onChange={elegirArchivoDoc}
+            />
+            <input type="hidden" name="quitarLogoDocumentos" value={quitarLogoDoc ? "1" : ""} />
+            <p className="text-xs text-muted-foreground">
+              Logotipo completo que encabeza los correos a clientes. PNG o JPG de hasta {LOGO_MAX_BYTES / 1024} KB
+              (WEBP no se ve en Outlook); debe leerse sobre fondo claro. Sin él, los correos usan el ícono o el
+              nombre de la agencia.
+            </p>
+            {(errorArchivoDoc ?? state.errores?.logoDocumentos) && (
+              <p className="text-xs text-destructive">{errorArchivoDoc ?? state.errores?.logoDocumentos}</p>
             )}
           </div>
 
@@ -295,7 +381,7 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
             </span>
           )}
           {state.error && <span className="text-xs text-destructive">{state.error}</span>}
-          <Button type="submit" disabled={pendiente || Boolean(errorArchivo)}>
+          <Button type="submit" disabled={pendiente || Boolean(errorArchivo) || Boolean(errorArchivoDoc)}>
             {pendiente && <Loader2 className="animate-spin" />} Guardar cambios
           </Button>
         </div>

@@ -41,7 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { esAdmin, requireUser } from "@/lib/auth/dal";
+import { esAdmin, requireUser, veComisiones } from "@/lib/auth/dal";
 import { esPeriodo, PERIODO_PREDETERMINADO } from "@/lib/dashboard/periodos";
 import { DIAS_PROXIMOS_VENCIMIENTOS, getDashboard } from "@/lib/dashboard/queries";
 import { diasDesdeHoy, formatFecha, formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
@@ -213,8 +213,10 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // "…que inician vigencia este mes / en el último trimestre / en el año actual"
   const enPeriodo = { mes: "este mes", trimestre: "en el último trimestre", anio: "en el año actual" }[periodo];
 
-  // Las comisiones son información confidencial: solo las ve el rol ADMIN.
-  const verComisiones = esAdmin(await requireUser());
+  const user = await requireUser();
+  // Las comisiones solo las ve el SUPERADMIN; la conciliación de cobranza, el rol ADMIN.
+  const verComisiones = veComisiones(user);
+  const verConciliacion = esAdmin(user);
   const { rango, hoy, totalPolizas, metricas, produccion, recibos, vencimientos } = await getDashboard(periodo, {
     incluirComisiones: verComisiones,
   });
@@ -269,7 +271,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
 
   const acciones: AccionRapida[] = [
     { href: "/captura", label: "Capturar póliza", descripcion: "Sube la carátula y la IA la llena", icono: FilePlus2, destacada: true },
-    ...(verComisiones
+    ...(verConciliacion
       ? [{ href: "/conciliacion", label: "Conciliar cobranza", descripcion: "Cruza el estado de cuenta", icono: Scale }]
       : []),
     { href: "/comunicaciones", label: "Enviar comunicado", descripcion: "Correo a uno o a todos tus clientes", icono: Send },
@@ -325,7 +327,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Últimos Recibos Conciliados</CardTitle>
               <CardDescription>Recibos conciliados en el periodo contra estados de cuenta.</CardDescription>
-              {verComisiones && (
+              {verConciliacion && (
                 <CardAction>
                   <Button variant="outline" size="sm" asChild>
                     <Link href="/conciliacion">Ver conciliación</Link>
@@ -339,7 +341,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
                 titulo="No hay recibos conciliados recientemente"
                 detalle="Cuando se concilien pagos contra los estados de cuenta de las aseguradoras aparecerán aquí."
                 accion={
-                  verComisiones ? { href: "/conciliacion", label: "Ir a módulo de cobranza", icono: Scale } : undefined
+                  verConciliacion ? { href: "/conciliacion", label: "Ir a módulo de cobranza", icono: Scale } : undefined
                 }
               />
             ) : (

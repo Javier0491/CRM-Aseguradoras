@@ -45,13 +45,11 @@ const CLIENTE_SIN_CONTACTO: Prisma.PolizaWhereInput = {
   cliente: { OR: [{ telefono: "" }, { email: "" }] },
 };
 
-export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
-  await connection();
-  const agenciaId = await getAgenciaId();
+/** Filtro del listado de pólizas, siempre acotado a la agencia. Lo comparten el listado y su exportación. */
+function wherePolizas(agenciaId: string, filtros: FiltrosPolizas): Prisma.PolizaWhereInput {
   const q = filtros.q?.trim().slice(0, 100);
   const contiene = (valor: string) => ({ contains: valor, mode: "insensitive" as const });
-
-  const where: Prisma.PolizaWhereInput = {
+  return {
     agenciaId,
     ...(filtros.ramo && { ramo: filtros.ramo }),
     ...(filtros.faltaContacto && CLIENTE_SIN_CONTACTO),
@@ -65,6 +63,12 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
       ],
     }),
   };
+}
+
+export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
+  await connection();
+  const agenciaId = await getAgenciaId();
+  const where = wherePolizas(agenciaId, filtros);
 
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
   const limite = new Date(hoy.getTime() + DIAS_POR_VENCER * 86_400_000);
@@ -101,6 +105,28 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
     db.poliza.count({ where: { agenciaId, ...CLIENTE_SIN_CONTACTO } }),
   ]);
   return { polizas, total, totalGeneral, porVencer, faltaContacto };
+}
+
+/** Cartera completa (sin el límite del listado) con los mismos filtros, para el reporte descargable. */
+export async function getPolizasExportacion(filtros: FiltrosPolizas = {}) {
+  await connection();
+  const agenciaId = await getAgenciaId();
+  return db.poliza.findMany({
+    where: wherePolizas(agenciaId, filtros),
+    orderBy: { created_at: "desc" },
+    select: {
+      numeroImpreso: true,
+      polizaVigor: true,
+      ramo: true,
+      vigencia_inicio: true,
+      vigencia_fin: true,
+      prima_total: true,
+      forma_pago: true,
+      cliente: { select: { nombre: true, rfc: true } },
+      aseguradora: { select: { nombre: true } },
+      asegurados: { where: { parentesco: "Titular" }, select: { nombre: true }, take: 1 },
+    },
+  });
 }
 
 export async function getRecibosListado() {

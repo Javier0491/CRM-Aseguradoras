@@ -126,11 +126,14 @@ const texto = (c: Celda | undefined) =>
 export function ConciliacionWorkspace({
   aseguradoras,
   conEsquema,
+  verComisiones,
 }: {
   /** `ignoraRecibosDuplicados` (p. ej. Quálitas): del mismo recibo solo cuenta el primer renglón. */
   aseguradoras: (Opcion & { ignoraRecibosDuplicados?: boolean })[];
   /** Aseguradoras que tienen matriz de comisiones. */
   conEsquema: string[];
+  /** Solo SUPERADMIN: sin él no se muestran montos ni diferencias (el servidor tampoco los manda). */
+  verComisiones: boolean;
 }) {
   const [aseguradora, setAseguradora] = React.useState("");
   const [archivo, setArchivo] = React.useState<Archivo | null>(null);
@@ -224,6 +227,9 @@ export function ConciliacionWorkspace({
     });
   }
 
+  // Sin comisiones a la vista, una "diferencia" es simplemente un recibo cobrado.
+  const etiqueta = (e: EstatusMatch) => (!verComisiones && e === "diferencia" ? "Pagado" : estatusConfig[e].label);
+
   // Todo recibo que el estado de cuenta reporta cobrado avanza en su póliza al aplicar.
   const porAplicar = analisis
     ? analisis.resumen.conciliado + analisis.resumen.diferencia + analisis.resumen.auto_creado
@@ -238,7 +244,9 @@ export function ConciliacionWorkspace({
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">1. Estado de cuenta de comisiones</CardTitle>
+          <CardTitle className="text-base">
+            1. Estado de cuenta {verComisiones ? "de comisiones" : "de la aseguradora"}
+          </CardTitle>
           <CardDescription>
             Elige la aseguradora y sube su estado de cuenta en CSV o Excel. El archivo se lee en tu
             navegador; solo se envían los renglones de póliza y comisión.
@@ -283,7 +291,7 @@ export function ConciliacionWorkspace({
                   ))}
                 </SelectContent>
               </Select>
-              {aseguradora && !conEsquema.includes(aseguradora) && (
+              {verComisiones && aseguradora && !conEsquema.includes(aseguradora) && (
                 <p className="text-xs text-warning">
                   {nombreAseguradora} no tiene matriz de comisiones: sus renglones saldrán como &quot;Revisar&quot;
                   salvo las pólizas con % personalizado.
@@ -421,9 +429,15 @@ export function ConciliacionWorkspace({
           <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
             <CardTitle className="text-base">3. Resultado del cruce · {nombreAseguradora}</CardTitle>
             <CardDescription>
-              Comisión esperada = (prima neta anual ÷ número de recibos) × % de la póliza o de la matriz
-              de comisiones (aseguradora, ramo y año de la póliza). Nunca sobre la prima total. Se
-              considera que coincide con una diferencia de hasta {formatMoneda(TOLERANCIA_MXN)}.
+              {verComisiones ? (
+                <>
+                  Comisión esperada = (prima neta anual ÷ número de recibos) × % de la póliza o de la matriz
+                  de comisiones (aseguradora, ramo y año de la póliza). Nunca sobre la prima total. Se
+                  considera que coincide con una diferencia de hasta {formatMoneda(TOLERANCIA_MXN)}.
+                </>
+              ) : (
+                "Recibos que el estado de cuenta reporta cobrados y cómo se cruzaron con los del CRM."
+              )}
             </CardDescription>
           </CardHeader>
 
@@ -445,12 +459,13 @@ export function ConciliacionWorkspace({
                   <c.icono className={cn("size-5 shrink-0", c.clase.split(" ").find((k) => k.startsWith("text-")))} />
                   <span className="min-w-0">
                     <span className="block text-xl font-semibold tabular-nums">{analisis.resumen[e]}</span>
-                    <span className="block text-xs leading-tight text-muted-foreground">{c.label}</span>
+                    <span className="block text-xs leading-tight text-muted-foreground">{etiqueta(e)}</span>
                   </span>
                 </button>
               );
             })}
           </div>
+          {verComisiones && (
           <div className="grid gap-x-8 gap-y-1 border-b px-5 py-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex justify-between gap-2">
               <span className="text-muted-foreground">Esperada · pagada</span>
@@ -471,6 +486,7 @@ export function ConciliacionWorkspace({
               <span className="tabular-nums">{formatMoneda(analisis.resumen.pagadaSinCruce)}</span>
             </div>
           </div>
+          )}
 
           <Table>
             <TableHeader className="bg-muted/50">
@@ -479,9 +495,13 @@ export function ConciliacionWorkspace({
                 <TableHead>Póliza</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Recibo</TableHead>
-                <TableHead className="text-right">Comisión esperada</TableHead>
-                <TableHead className="text-right">Comisión pagada</TableHead>
-                <TableHead className="text-right">Diferencia</TableHead>
+                {verComisiones && (
+                  <>
+                    <TableHead className="text-right">Comisión esperada</TableHead>
+                    <TableHead className="text-right">Comisión pagada</TableHead>
+                    <TableHead className="text-right">Diferencia</TableHead>
+                  </>
+                )}
                 <TableHead className="pr-5">Estatus de match</TableHead>
               </TableRow>
             </TableHeader>
@@ -516,6 +536,8 @@ export function ConciliacionWorkspace({
                       )}
                       {r.folio && <p className="font-mono text-[11px]">folio {r.folio}</p>}
                     </TableCell>
+                    {verComisiones && (
+                    <>
                     <TableCell className="text-right tabular-nums">
                       {r.comisionEsperada !== null ? formatMoneda(r.comisionEsperada) : "—"}
                       {r.porcentaje && r.base && (
@@ -544,9 +566,11 @@ export function ConciliacionWorkspace({
                     >
                       {r.diferencia === null ? "—" : `${r.diferencia > 0 ? "+" : ""}${formatMoneda(r.diferencia)}`}
                     </TableCell>
+                    </>
+                    )}
                     <TableCell className="pr-5">
                       <Badge variant="outline" className={cn("gap-1", c.clase)}>
-                        <c.icono className="size-3" /> {c.label}
+                        <c.icono className="size-3" /> {etiqueta(r.estatus)}
                       </Badge>
                       {r.detalle && <p className="mt-1 max-w-[220px] text-[11px] text-muted-foreground">{r.detalle}</p>}
                     </TableCell>
@@ -555,7 +579,7 @@ export function ConciliacionWorkspace({
               })}
               {visibles.length === 0 && (
                 <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={verComisiones ? 8 : 5} className="py-8 text-center text-sm text-muted-foreground">
                     No hay renglones con este estatus.
                   </TableCell>
                 </TableRow>
@@ -570,16 +594,17 @@ export function ConciliacionWorkspace({
                   <CheckCircle2 className="size-4" /> {aplicados.conciliados}{" "}
                   {aplicados.conciliados === 1 ? "recibo conciliado" : "recibos conciliados"}
                   {aplicados.pagados > 0 &&
-                    `, ${aplicados.pagados} ${aplicados.pagados === 1 ? "pagado" : "pagados"} con diferencia`}
+                    `, ${aplicados.pagados} ${aplicados.pagados === 1 ? "pagado" : "pagados"}${verComisiones ? " con diferencia" : ""}`}
                   {aplicados.creados > 0 &&
                     ` y ${aplicados.creados} ${aplicados.creados === 1 ? "auto-creado" : "auto-creados"}`}
                   .
                 </span>
               ) : (
                 <span className="text-muted-foreground">
-                  Se aplican los conciliados, los auto-creados y las diferencias (quedan como Pagado para
-                  aclarar la comisión); los no encontrados y por revisar se guardan para el reporte de Pólizas →
-                  Sin conciliar.
+                  {verComisiones
+                    ? "Se aplican los conciliados, los auto-creados y las diferencias (quedan como Pagado para aclarar la comisión)"
+                    : "Se aplican los conciliados, los auto-creados y los pagados"}
+                  ; los no encontrados y por revisar se guardan para el reporte de Pólizas → Sin conciliar.
                 </span>
               )}
             </div>
@@ -610,11 +635,11 @@ export function ConciliacionWorkspace({
               .
               {(analisis?.resumen.diferencia ?? 0) > 0 && (
                 <>
-                  {" "}Los {analisis?.resumen.diferencia} recibos con diferencia se marcarán como <strong>PAGADOS</strong>:
-                  cobrados, con la comisión por aclarar.
+                  {" "}Otros {analisis?.resumen.diferencia} recibos se marcarán como <strong>PAGADOS</strong>
+                  {verComisiones && ": cobrados, con la comisión por aclarar"}.
                 </>
               )}{" "}
-              Se guardará la comisión pagada y el folio de cada uno. Los no encontrados y los renglones por
+              Se guardará {verComisiones && "la comisión pagada y "}el folio de cada uno. Los no encontrados y los renglones por
               revisar no modifican ningún recibo: se guardan para explicarlos en Pólizas → Sin conciliar.
             </DialogDescription>
           </DialogHeader>
