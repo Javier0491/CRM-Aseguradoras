@@ -3,7 +3,7 @@
 // Las claves deben coincidir con el nombre de la aseguradora registrada (prisma/seed.ts).
 
 export const REDES_MEDICAS: Readonly<Record<string, readonly string[]>> = {
-  MetLife: ["Ejecutivo", "Más", "Básico", "Amplio", "Red Alta", "Red Media", "Red Básica"],
+  MetLife: ["Ejecutivo", "Más", "Básico", "Amplio", "Práctico", "Red Alta", "Red Media", "Red Básica"],
   GNP: ["Premier", "Platino", "Flexible", "Índigo", "Ámbar", "Versátil"],
   AXA: ["Diamante", "Esmeralda", "Zafiro"],
   Mapfre: ["Completo", "Amplio", "Óptimo", "Esencial"],

@@ -176,6 +176,8 @@ ${catalogoRedesTexto()}
 - Si el documento menciona una de estas redes (p. ej. "Red Médica: Ejecutivo", "Nivel hospitalario:
   Platino", "Plan: Serie 400"), asígnala a redMedica escrita EXACTAMENTE como en el catálogo, sin la
   etiqueta ("Red Médica:", "Nivel:"): "Red Médica: Ejecutivo" → "Ejecutivo"; "Red Alta" → "Red Alta".
+- MetLife (Medicalife) imprime el nivel en la línea del plan, después del número y del nombre del
+  producto: "PLAN : 11 MEDICALIFE PRACTICO" → "Práctico" (con acento, como en el catálogo).
 - Prefiere las redes de la aseguradora de la póliza. Si el documento usa un nombre que no está en el
   catálogo, transcríbelo tal cual y anótalo en "advertencias". Si no aparece, devuelve null.
 
