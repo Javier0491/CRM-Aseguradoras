@@ -29,6 +29,8 @@ export default function GlobalError({ error, retry }: { error: Error & { digest?
       >
         <title>Algo salió mal</title>
         <main style={{ maxWidth: 480, textAlign: "center" }}>
+          {/* eslint-disable-next-line @next/next/no-img-element -- documento propio, sin los componentes de la app */}
+          <img src="/marca/plataforma.png" alt="" width={56} height={56} style={{ borderRadius: 12, marginBottom: 16 }} />
           <h1 style={{ fontSize: 20, margin: "0 0 8px" }}>Algo salió mal</h1>
           <p style={{ color: "#a1a1aa", fontSize: 14, margin: 0 }}>
             No se pudo cargar el CRM. Intenta de nuevo en un momento; si sigue igual, avisa al administrador de la

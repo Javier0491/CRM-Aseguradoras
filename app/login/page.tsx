@@ -7,7 +7,7 @@ import { LogoAgencia } from "@/components/layout/logo-agencia";
 import { TemaAgencia } from "@/components/layout/tema-agencia";
 import { getMarcaLogin } from "@/lib/agencias/marca-login";
 import { getCurrentUser } from "@/lib/auth/dal";
-import { nombrePlataforma } from "@/lib/plataforma/marca";
+import { LOGO_PLATAFORMA, nombrePlataforma } from "@/lib/plataforma/marca";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 
@@ -49,9 +49,14 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               className="mb-4 size-14 rounded-xl text-lg shadow-[0_0_40px_-8px_var(--primary)]"
             />
           ) : (
-            <div className="mb-4 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_0_40px_-8px_var(--primary)]">
-              <ShieldCheck className="size-7" />
-            </div>
+            // eslint-disable-next-line @next/next/no-img-element -- ficha fija de 64 px servida desde /public
+            <img
+              src={LOGO_PLATAFORMA}
+              alt=""
+              width={64}
+              height={64}
+              className="mb-4 size-16 rounded-xl shadow-[0_0_40px_-8px_var(--primary)]"
+            />
           )}
           <h1 className="text-xl font-semibold tracking-[0.2em] uppercase">{nombre}</h1>
           <p className="mt-1 text-xs tracking-wide text-muted-foreground uppercase">

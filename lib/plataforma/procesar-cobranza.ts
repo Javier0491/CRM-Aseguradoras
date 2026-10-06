@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
 import { accionCobroDiaria, estadoCobro } from "@/lib/plataforma/cobranza";
-import { nombrePlataforma } from "@/lib/plataforma/marca";
+import { logoPlataformaUrl, nombrePlataforma } from "@/lib/plataforma/marca";
 
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
@@ -123,6 +123,7 @@ export async function procesarCobranzaPlataforma(): Promise<ResumenCobranza> {
       const { html, texto } = await renderNotificacionCrm({
         nombreCrm: plataforma,
         colorTema: COLOR_MARCA_PREDETERMINADO,
+        logoUrl: logoPlataformaUrl(),
         nombreUsuario: a.nombre,
         tituloNotificacion: titulo,
         mensajePrincipal: mensaje,

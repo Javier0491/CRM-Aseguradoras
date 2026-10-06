@@ -5,7 +5,7 @@ import { emailValido, enviarCorreoPlataforma } from "@/lib/comunicaciones/envio"
 import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { Prisma } from "@/lib/generated/prisma/client";
-import { nombrePlataforma } from "@/lib/plataforma/marca";
+import { logoPlataformaUrl, nombrePlataforma } from "@/lib/plataforma/marca";
 
 /** La tarea diaria se da por detenida si su última ejecución tiene más de estas horas. */
 export const HORAS_SIN_CORRER = 30;
@@ -55,6 +55,7 @@ async function avisarFalla(tarea: string, error: string) {
     const { html, texto } = await renderNotificacionCrm({
       nombreCrm: nombrePlataforma(),
       colorTema: COLOR_MARCA_PREDETERMINADO,
+      logoUrl: logoPlataformaUrl(),
       nombreUsuario: "superadministrador",
       tituloNotificacion: `Falló la tarea programada «${tarea}»`,
       mensajePrincipal: [

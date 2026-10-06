@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { ArrowLeft, LayoutGrid, LogOut, ShieldCheck, Stethoscope } from "lucide-react";
+import { ArrowLeft, LayoutGrid, LogOut, Stethoscope } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { getAgencia } from "@/lib/agencias/queries";
 import { cerrarSesion } from "@/lib/auth/actions";
 import { requireSuperadmin } from "@/lib/auth/dal";
+import { LOGO_PLATAFORMA, nombrePlataforma } from "@/lib/plataforma/marca";
 
 /**
  * Plataforma (por encima de las agencias): sin el sidebar ni la marca de ninguna agencia, como un
@@ -18,7 +19,10 @@ export default async function PlataformaLayout({ children }: LayoutProps<"/">) {
     <div className="flex min-h-svh flex-col">
       <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur md:px-6">
         <Link href="/superadmin" className="flex items-center gap-2 text-sm font-semibold tracking-wide">
-          <ShieldCheck className="size-4 text-primary" /> Plataforma
+          {/* eslint-disable-next-line @next/next/no-img-element -- ícono fijo de /public */}
+          <img src={LOGO_PLATAFORMA} alt="" width={24} height={24} className="size-6 rounded-md" />
+          <span>{nombrePlataforma()}</span>
+          <span className="hidden font-normal text-muted-foreground sm:inline">· Plataforma</span>
         </Link>
         <span className="hidden text-xs text-muted-foreground lg:inline">· {user.email}</span>
         <nav aria-label="Plataforma" className="ml-2 flex items-center gap-1">

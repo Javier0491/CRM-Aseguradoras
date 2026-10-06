@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
 import { MAX_DIAS_TOLERANCIA, MAX_MESES_PAGO, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
-import { nombrePlataforma } from "@/lib/plataforma/marca";
+import { logoPlataformaUrl, nombrePlataforma } from "@/lib/plataforma/marca";
 import { parseNumero } from "@/lib/polizas/validacion";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -179,6 +179,7 @@ export async function enviarCorreoPrueba(): Promise<PlataformaResultado> {
     const { html, texto } = await renderNotificacionCrm({
       nombreCrm: nombrePlataforma(),
       colorTema: COLOR_MARCA_PREDETERMINADO,
+      logoUrl: logoPlataformaUrl(),
       nombreUsuario: "superadministrador",
       tituloNotificacion: "Correo de prueba",
       mensajePrincipal: "Si lees esto, el envío de correos de la plataforma funciona.",
