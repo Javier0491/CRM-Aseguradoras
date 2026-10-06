@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
+import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
 import { getCurrentUser, veComisiones } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
@@ -73,8 +74,8 @@ export async function eliminarPoliza(polizaId: string, confirmacion: string): Pr
   if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { ok: false, error: "Datos inválidos." };
 
-  const poliza = await db.poliza.findUnique({
-    where: { id: polizaId, agenciaId: user.agenciaId },
+  const poliza = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
     select: { numeroImpreso: true, cliente: { select: { nombre: true } }, _count: { select: { recibos: true } } },
   });
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
@@ -133,8 +134,8 @@ export async function actualizarPrimaNeta(polizaId: string, valor: string): Prom
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || typeof valor !== "string") {
     return { ok: false, error: "Datos inválidos." };
   }
-  const poliza = await db.poliza.findUnique({
-    where: { id: polizaId, agenciaId: user.agenciaId },
+  const poliza = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
     select: { prima_total: true, prima_neta: true, numeroImpreso: true },
   });
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };

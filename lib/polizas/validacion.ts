@@ -21,6 +21,8 @@ const POLIZA_VIGOR = /^[A-Z0-9]+$/;
 const MAX_ANIOS_VIGENCIA = 30;
 
 export const normalizarRfc = (v: string) => v.replace(/[\s-]/g, "").toUpperCase();
+/** RFC de persona física (13) o moral (12) con formato válido. */
+export const rfcValido = (v: string) => RFC.test(normalizarRfc(v));
 /** Solo dígitos; quita la lada internacional de México (+52 y el antiguo +521 de celulares). */
 export function normalizarTelefono(v: string) {
   const d = v.replace(/\D/g, "");

@@ -2,7 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { getAgenciaId } from "@/lib/auth/dal";
+import { getAlcance, polizasDe } from "@/lib/auth/alcance";
 import { db } from "@/lib/db";
 import { formatFecha } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
@@ -67,11 +67,12 @@ const fecha = (d: Date) => formatFecha(d);
  */
 export async function getEstadoConciliacion() {
   await connection();
-  const agenciaId = await getAgenciaId();
+  const alcance = await getAlcance();
+  const { agenciaId } = alcance;
 
   const [polizas, lotes, renglones] = await Promise.all([
     db.poliza.findMany({
-      where: { agenciaId },
+      where: polizasDe(alcance),
       orderBy: { created_at: "desc" },
       select: {
         id: true,
@@ -81,6 +82,7 @@ export async function getEstadoConciliacion() {
         vigencia_inicio: true,
         vigencia_fin: true,
         aseguradora_id: true,
+        canceladaAt: true,
         cliente: { select: { nombre: true, rfc: true } },
         aseguradora: { select: { nombre: true, color_hex: true, usaPolizaVigor: true } },
         recibos: { select: { estado: true, fecha_vencimiento: true, conciliado_at: true } },
@@ -161,6 +163,8 @@ export async function getEstadoConciliacion() {
       });
       continue;
     }
+    // Una póliza cancelada sin cobros no está pendiente de conciliar.
+    if (p.canceladaAt) continue;
 
     const numero = normalizarNumero(p.numeroImpreso);
     let numeroEnArchivo: string | null = null;

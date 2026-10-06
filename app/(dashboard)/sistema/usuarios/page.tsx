@@ -73,6 +73,7 @@ export default async function UsuariosPage() {
               <TableHead className="pl-5">Nombre</TableHead>
               <TableHead>Correo</TableHead>
               <TableHead>Rol</TableHead>
+              <TableHead>Cartera</TableHead>
               <TableHead>Alta</TableHead>
               <TableHead>Último acceso</TableHead>
               <TableHead className="w-14 pr-5">
@@ -107,6 +108,10 @@ export default async function UsuariosPage() {
                     {rolLabels[u.rol]}
                   </Badge>
                 </TableCell>
+                <TableCell className="text-xs text-muted-foreground tabular-nums">
+                  {u._count.polizasAsignadas} pól. · {u._count.clientesAsignados} cli.
+                  {u._count.tareasAsignadas > 0 && ` · ${u._count.tareasAsignadas} tareas`}
+                </TableCell>
                 <TableCell className="tabular-nums">{formatFecha(u.created_at)}</TableCell>
                 <TableCell className="tabular-nums text-muted-foreground">
                   {u.ultimoAcceso ? formatFecha(u.ultimoAcceso) : "Nunca"}
@@ -115,6 +120,12 @@ export default async function UsuariosPage() {
                   <AccionesUsuario
                     usuario={{ id: u.id, nombre: u.nombre, email: u.email, rol: u.rol, activo: u.activo }}
                     esYo={u.id === yo.id}
+                    cartera={{
+                      polizas: u._count.polizasAsignadas,
+                      clientes: u._count.clientesAsignados,
+                      tareas: u._count.tareasAsignadas,
+                    }}
+                    otros={usuarios.filter((o) => o.activo && o.id !== u.id).map((o) => ({ id: o.id, nombre: o.nombre }))}
                   />
                 </TableCell>
               </TableRow>

@@ -1,16 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
   BarChart3,
+  Cake,
   CalendarCheck,
+  CalendarClock,
+  CheckCircle2,
   Eye,
   FilePlus2,
   FileText,
   HandCoins,
   Landmark,
+  ListTodo,
   Mail,
   MessageCircle,
   ReceiptText,
@@ -18,12 +23,16 @@ import {
   Scale,
   Send,
   UploadCloud,
+  Users,
   type LucideIcon,
 } from "lucide-react";
 
 import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
 import { ProduccionChart } from "@/components/dashboard/produccion-chart";
+import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
 import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
+import { ListaTareas } from "@/components/tareas/lista-tareas";
+import { NuevaTarea } from "@/components/tareas/nueva-tarea";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -41,10 +50,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { getAgencia } from "@/lib/agencias/queries";
 import { esAdmin, requireUser, veComisiones } from "@/lib/auth/dal";
 import { esPeriodo, PERIODO_PREDETERMINADO } from "@/lib/dashboard/periodos";
-import { DIAS_PROXIMOS_VENCIMIENTOS, getDashboard } from "@/lib/dashboard/queries";
+import { DIAS_CUMPLEANOS, DIAS_PROXIMOS_VENCIMIENTOS, getDashboard, getParaHoy } from "@/lib/dashboard/queries";
 import { diasDesdeHoy, formatFecha, formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
+import { edadAl } from "@/lib/polizas/asegurados";
+import { getEjecutivos } from "@/lib/usuarios/queries";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -200,11 +212,67 @@ function AccionesRapidas({ acciones }: { acciones: AccionRapida[] }) {
   );
 }
 
-/** Solo dígitos a 10 posiciones (México); null si no es un celular/teléfono utilizable. */
-function telefonoWhatsApp(telefono: string) {
-  const d = telefono.replace(/\D/g, "");
-  const local = d.length === 12 && d.startsWith("52") ? d.slice(2) : d;
-  return local.length === 10 ? `52${local}` : null;
+type Pendiente = {
+  titulo: string;
+  icono: LucideIcon;
+  cantidad: number;
+  detalle: string;
+  href: string;
+  /** Urgente (rojo) si hay algo; si no, aviso (ámbar). */
+  urgente?: boolean;
+};
+
+/** Tarjetas "Para hoy": lo que requiere acción, con un clic a su pantalla. En cero se ven apagadas. */
+function ParaHoy({ pendientes }: { pendientes: Pendiente[] }) {
+  return (
+    <section aria-label="Para hoy" className="space-y-2">
+      <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Para hoy</h2>
+      <div className={cn("grid gap-3 sm:grid-cols-2", pendientes.length >= 5 ? "xl:grid-cols-5" : "xl:grid-cols-4")}>
+        {pendientes.map((p) => {
+          const activo = p.cantidad > 0;
+          return (
+            <Link
+              key={p.titulo}
+              href={p.href}
+              className={cn(
+                "group flex items-start gap-3 rounded-xl border bg-card px-4 py-3 transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                activo
+                  ? p.urgente
+                    ? "border-destructive/40 hover:bg-destructive/5"
+                    : "border-warning/40 hover:bg-warning/5"
+                  : "hover:border-primary/40"
+              )}
+            >
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-lg border",
+                  activo ? (p.urgente ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning") : "bg-background text-success"
+                )}
+              >
+                {activo ? <p.icono className="size-4" /> : <CheckCircle2 className="size-4" />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-medium">{p.titulo}</span>
+                  <span
+                    className={cn(
+                      "text-lg font-semibold tabular-nums",
+                      activo ? (p.urgente ? "text-destructive" : "text-warning") : "text-muted-foreground"
+                    )}
+                  >
+                    {formatNumero(p.cantidad)}
+                  </span>
+                </span>
+                <span className="line-clamp-2 block text-xs text-muted-foreground">
+                  {activo ? p.detalle : "Todo al día"}
+                </span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 export default async function DashboardPage({ searchParams }: PageProps<"/">) {
@@ -217,9 +285,13 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
   // Las comisiones solo las ve el SUPERADMIN; la conciliación de cobranza, el rol ADMIN.
   const verComisiones = veComisiones(user);
   const verConciliacion = esAdmin(user);
-  const { rango, hoy, totalPolizas, metricas, produccion, recibos, vencimientos } = await getDashboard(periodo, {
-    incluirComisiones: verComisiones,
-  });
+  const [{ rango, hoy, totalPolizas, metricas, produccion, porEjecutivo, recibos, vencimientos }, paraHoy, agencia, ejecutivos] =
+    await Promise.all([
+      getDashboard(periodo, { incluirComisiones: verComisiones }),
+      getParaHoy(user),
+      getAgencia(user.agenciaId),
+      user.soloSuCartera ? Promise.resolve(undefined) : getEjecutivos(user.agenciaId),
+    ]);
   const contraAnterior = "vs. periodo anterior";
   const { renovacion } = metricas;
 
@@ -264,8 +336,7 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
         renovacion.tasa === null
           ? "Sin vencimientos en el periodo"
           : `${renovacion.renovadas} de ${renovacion.vencidas} ${renovacion.vencidas === 1 ? "vencida" : "vencidas"}`,
-      // Reportes incluye las pólizas por vencer, que son las que hay que renovar.
-      href: "/reportes",
+      href: "/renovaciones",
     },
   ];
 
@@ -277,17 +348,71 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
     { href: "/comunicaciones", label: "Enviar comunicado", descripcion: "Correo a uno o a todos tus clientes", icono: Send },
   ];
 
+  const { recibos: rec } = paraHoy;
+  const pendientes: Pendiente[] = [
+    {
+      titulo: "Mis tareas",
+      icono: ListTodo,
+      cantidad: paraHoy.tareas.total,
+      detalle: "Vencidas o para hoy",
+      href: "/tareas",
+      urgente: paraHoy.tareas.tareas.some((t) => t.vence.toISOString().slice(0, 10) < hoy),
+    },
+    {
+      titulo: "Renovaciones",
+      icono: RefreshCcw,
+      cantidad: paraHoy.renovaciones.total,
+      detalle:
+        paraHoy.renovaciones.sinGestionar > 0
+          ? `Vencen en 30 días · ${formatNumero(paraHoy.renovaciones.sinGestionar)} sin gestionar`
+          : "Vencen en 30 días, en seguimiento",
+      href: "/renovaciones",
+    },
+    {
+      titulo: "Recibos vencidos",
+      icono: AlertTriangle,
+      cantidad: rec.vencidos,
+      detalle:
+        rec.riesgo > 0
+          ? `${formatNumero(rec.riesgo)} en riesgo de cancelación`
+          : "Todos dentro de sus días de gracia",
+      href: "/polizas?tab=recibos&recibos=vencidos",
+      urgente: rec.riesgo > 0,
+    },
+    {
+      titulo: "Vencen esta semana",
+      icono: CalendarClock,
+      cantidad: rec.semana.cantidad,
+      detalle: `Recibos por ${formatMoneda(rec.semana.monto)}`,
+      href: "/polizas?tab=recibos&recibos=semana",
+    },
+    ...(paraHoy.aclaraciones !== null
+      ? [
+          {
+            titulo: "Aclaraciones",
+            icono: Scale,
+            cantidad: paraHoy.aclaraciones,
+            detalle: "Comisiones cobradas con diferencia",
+            href: "/conciliacion/aclaraciones",
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Resumen Directivo</h1>
           <p className="text-sm text-muted-foreground">
-            {formatFecha(rango.desde)} – {formatFecha(rango.hasta)} · cartera, producción y cobranza.
+            {formatFecha(rango.desde)} – {formatFecha(rango.hasta)} · cartera, producción y cobranza
+            {user.soloSuCartera && " de tu cartera"}.
           </p>
         </div>
         <PeriodoSelector periodo={periodo} />
       </div>
+
+      <ParaHoy pendientes={pendientes} />
 
       <AccionesRapidas acciones={acciones} />
 
@@ -322,6 +447,22 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
               )}
             </CardContent>
           </Card>
+
+          {porEjecutivo && porEjecutivo.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Users className="size-4 text-primary" /> Producción por Ejecutivo
+                </CardTitle>
+                <CardDescription>Prima emitida {enPeriodo} según el ejecutivo responsable de cada póliza.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProduccionChart
+                  datos={porEjecutivo.map((e) => ({ aseguradora: e.ejecutivo, prima: e.prima, polizas: e.polizas }))}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
@@ -395,99 +536,169 @@ export default async function DashboardPage({ searchParams }: PageProps<"/">) {
           </Card>
         </div>
 
-        <Card className="gap-0 py-0 xl:sticky xl:top-20">
-          <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CalendarCheck className="size-4 text-warning" />
-              Próximos Vencimientos
-            </CardTitle>
-            <CardDescription>Pólizas que vencen en los próximos {DIAS_PROXIMOS_VENCIMIENTOS} días.</CardDescription>
-          </CardHeader>
-          {vencimientos.length === 0 ? (
-            <Vacio
-              icono={CalendarCheck}
-              titulo="Sin vencimientos próximos"
-              detalle={`Ninguna póliza vence en los próximos ${DIAS_PROXIMOS_VENCIMIENTOS} días.`}
-              accion={{ href: "/polizas", label: "Ver cartera de pólizas", icono: FileText }}
-            />
-          ) : (
-            <ul className="divide-y">
-              {vencimientos.map((p) => {
-                const dias = diasDesdeHoy(p.vigencia_fin, hoy);
-                const vence = formatFecha(p.vigencia_fin);
-                const mensaje =
-                  `Hola ${p.cliente.nombre}, le escribimos de PJ Magnus: su póliza ${p.numeroImpreso} de ` +
-                  `${p.aseguradora.nombre} vence el ${vence}. ¿Le ayudamos con la renovación?`;
-                const whatsapp = telefonoWhatsApp(p.cliente.telefono);
-                const correo = p.cliente.email.trim();
-                return (
-                  <li key={p.id} className="group relative flex items-start gap-3 px-5 py-3 transition-colors hover:bg-accent/40">
-                    <div className="min-w-0 flex-1 space-y-1">
-                      {/* El enlace cubre toda la fila; los botones de acción quedan por encima. */}
-                      <Link
-                        href={`/polizas/${p.id}`}
-                        className="block truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:underline"
-                      >
-                        {p.cliente.nombre}
-                      </Link>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                        <RamoBadge ramo={p.ramo} />
-                        <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+        <div className="min-w-0 space-y-6 xl:sticky xl:top-20">
+          <Card className="gap-0 py-0">
+            <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ListTodo className="size-4 text-primary" /> Mis pendientes
+              </CardTitle>
+              <CardDescription>Tareas vencidas o para hoy.</CardDescription>
+              <CardAction>
+                <NuevaTarea hoy={hoy} ejecutivos={ejecutivos} usuarioId={user.id} etiqueta="Nueva" variante="ghost" className="h-7" />
+              </CardAction>
+            </CardHeader>
+            <ListaTareas tareas={paraHoy.tareas.tareas} hoy={hoy} mostrarResponsable={false} vacio="Nada pendiente para hoy." />
+            {paraHoy.tareas.total > paraHoy.tareas.tareas.length && (
+              <Link href="/tareas" className="block border-t px-5 py-2.5 text-xs text-primary hover:underline">
+                Ver las {formatNumero(paraHoy.tareas.total)} tareas pendientes
+              </Link>
+            )}
+          </Card>
+
+          {paraHoy.cumpleanos.length > 0 && (
+            <Card className="gap-0 py-0">
+              <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Cake className="size-4 text-primary" /> Cumpleaños
+                </CardTitle>
+                <CardDescription>Clientes que cumplen años en los próximos {DIAS_CUMPLEANOS} días.</CardDescription>
+              </CardHeader>
+              <ul className="divide-y">
+                {paraHoy.cumpleanos.map((c) => {
+                  const wa = c.telefono ? numeroWhatsApp(c.telefono) : null;
+                  const edad = (edadAl(c.nacimiento, hoy) ?? 0) + (c.dias === 0 ? 0 : 1);
+                  const felicitacion = `¡Feliz cumpleaños, ${c.nombre}! Le desea todo el equipo de ${agencia.nombre}.`;
+                  return (
+                    <li key={c.id} className="flex items-center gap-3 px-5 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/clientes/${c.id}`} className="block truncate text-sm font-medium hover:text-primary hover:underline">
+                          {c.nombre}
+                        </Link>
+                        <p className="text-xs text-muted-foreground">
+                          {c.dias === 0 ? "Hoy" : c.dias === 1 ? "Mañana" : `En ${c.dias} días`} · cumple {edad}
+                        </p>
                       </div>
-                    </div>
-                    <div className="shrink-0 text-right">
-                      <p className="text-xs tabular-nums">{vence}</p>
-                      <p className={cn("text-[11px] font-medium", dias <= 7 ? "text-destructive" : "text-warning")}>
-                        {dias === 0 ? "Vence hoy" : `En ${dias} d`}
-                      </p>
-                    </div>
-                    {/* En pantallas táctiles siempre visibles; con mouse aparecen al pasar el cursor. */}
-                    <div className="relative z-10 flex shrink-0 items-center gap-0.5 self-center transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-                      <Button variant="ghost" size="icon" className="size-7" asChild>
-                        <Link href={`/polizas/${p.id}`} aria-label={`Ver póliza de ${p.cliente.nombre}`} title="Ver póliza">
-                          <Eye className="size-3.5" />
-                        </Link>
-                      </Button>
-                      <Button variant="ghost" size="icon" className="size-7 hover:text-primary" asChild>
-                        <Link
-                          href={`/captura?renovar=${p.id}`}
-                          aria-label={`Renovar póliza de ${p.cliente.nombre}`}
-                          title="Capturar la renovación"
-                        >
-                          <RefreshCcw className="size-3.5" />
-                        </Link>
-                      </Button>
-                      {whatsapp && (
-                        <Button variant="ghost" size="icon" className="size-7 hover:text-success" asChild>
+                      {wa && (
+                        <Button asChild variant="ghost" size="icon" className="size-7 hover:text-success">
                           <a
-                            href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(mensaje)}`}
+                            href={`https://wa.me/${wa}?text=${encodeURIComponent(felicitacion)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            aria-label={`WhatsApp a ${p.cliente.nombre}`}
-                            title="Contactar por WhatsApp"
+                            aria-label={`Felicitar a ${c.nombre} por WhatsApp`}
+                            title="Felicitar por WhatsApp"
                           >
                             <MessageCircle className="size-3.5" />
                           </a>
                         </Button>
                       )}
-                      {correo && (
-                        <Button variant="ghost" size="icon" className="size-7 hover:text-primary" asChild>
-                          <a
-                            href={`mailto:${correo}?subject=${encodeURIComponent(`Renovación de su póliza ${p.numeroImpreso}`)}&body=${encodeURIComponent(mensaje)}`}
-                            aria-label={`Correo a ${p.cliente.nombre}`}
-                            title="Contactar por correo"
-                          >
-                            <Mail className="size-3.5" />
-                          </a>
-                        </Button>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
           )}
-        </Card>
+
+          <Card className="gap-0 py-0">
+            <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <CalendarCheck className="size-4 text-warning" />
+                Próximos Vencimientos
+              </CardTitle>
+              <CardDescription>
+                Pólizas que vencen en los próximos {DIAS_PROXIMOS_VENCIMIENTOS} días sin renovación capturada.
+              </CardDescription>
+              <CardAction>
+                <Button variant="ghost" size="sm" className="h-7" asChild>
+                  <Link href="/renovaciones">Embudo</Link>
+                </Button>
+              </CardAction>
+            </CardHeader>
+            {vencimientos.length === 0 ? (
+              <Vacio
+                icono={CalendarCheck}
+                titulo="Sin vencimientos próximos"
+                detalle={`Ninguna póliza pendiente de renovar vence en los próximos ${DIAS_PROXIMOS_VENCIMIENTOS} días.`}
+                accion={{ href: "/polizas", label: "Ver cartera de pólizas", icono: FileText }}
+              />
+            ) : (
+              <ul className="divide-y">
+                {vencimientos.map((p) => {
+                  const dias = diasDesdeHoy(p.vigencia_fin, hoy);
+                  const vence = formatFecha(p.vigencia_fin);
+                  const mensaje =
+                    `Hola ${p.cliente.nombre}, le escribimos de ${agencia.nombre}: su póliza ${p.numeroImpreso} de ` +
+                    `${p.aseguradora.nombre} vence el ${vence}. ¿Le ayudamos con la renovación?`;
+                  const whatsapp = numeroWhatsApp(p.cliente.telefono);
+                  const correo = p.cliente.email.trim();
+                  return (
+                    <li key={p.id} className="group relative flex items-start gap-3 px-5 py-3 transition-colors hover:bg-accent/40">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        {/* El enlace cubre toda la fila; los botones de acción quedan por encima. */}
+                        <Link
+                          href={`/polizas/${p.id}`}
+                          className="block truncate text-sm font-medium outline-none after:absolute after:inset-0 focus-visible:underline"
+                        >
+                          {p.cliente.nombre}
+                        </Link>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                          <RamoBadge ramo={p.ramo} />
+                          <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className="text-xs tabular-nums">{vence}</p>
+                        <p className={cn("text-[11px] font-medium", dias <= 7 ? "text-destructive" : "text-warning")}>
+                          {dias === 0 ? "Vence hoy" : `En ${dias} d`}
+                        </p>
+                      </div>
+                      {/* En pantallas táctiles siempre visibles; con mouse aparecen al pasar el cursor. */}
+                      <div className="relative z-10 flex shrink-0 items-center gap-0.5 self-center transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
+                        <Button variant="ghost" size="icon" className="size-7" asChild>
+                          <Link href={`/polizas/${p.id}`} aria-label={`Ver póliza de ${p.cliente.nombre}`} title="Ver póliza">
+                            <Eye className="size-3.5" />
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="size-7 hover:text-primary" asChild>
+                          <Link
+                            href={`/captura?renovar=${p.id}`}
+                            aria-label={`Renovar póliza de ${p.cliente.nombre}`}
+                            title="Capturar la renovación"
+                          >
+                            <RefreshCcw className="size-3.5" />
+                          </Link>
+                        </Button>
+                        {whatsapp && (
+                          <Button variant="ghost" size="icon" className="size-7 hover:text-success" asChild>
+                            <a
+                              href={`https://wa.me/${whatsapp}?text=${encodeURIComponent(mensaje)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`WhatsApp a ${p.cliente.nombre}`}
+                              title="Contactar por WhatsApp"
+                            >
+                              <MessageCircle className="size-3.5" />
+                            </a>
+                          </Button>
+                        )}
+                        {correo && (
+                          <Button variant="ghost" size="icon" className="size-7 hover:text-primary" asChild>
+                            <a
+                              href={`mailto:${correo}?subject=${encodeURIComponent(`Renovación de su póliza ${p.numeroImpreso}`)}&body=${encodeURIComponent(mensaje)}`}
+                              aria-label={`Correo a ${p.cliente.nombre}`}
+                              title="Contactar por correo"
+                            >
+                              <Mail className="size-3.5" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </div>
       </div>
     </>
   );

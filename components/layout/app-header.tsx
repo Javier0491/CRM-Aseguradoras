@@ -15,9 +15,10 @@ import { cn } from "@/lib/utils";
 
 /**
  * `superadmin` solo llega para un SUPERADMIN: botón al panel de agencias. `ajena` = está operando
- * una agencia que no es la suya (el botón se resalta para que no pase desapercibido).
+ * una agencia que no es la suya (el botón se resalta para que no pase desapercibido); `alertas`,
+ * problemas graves de la plataforma (migraciones, tarea diaria) que se marcan con un punto.
  */
-export function AppHeader({ superadmin }: { superadmin?: { ajena: boolean } }) {
+export function AppHeader({ superadmin }: { superadmin?: { ajena: boolean; alertas?: number } }) {
   const pathname = usePathname();
   const current =
     allNav.find((item) => isActivePath(pathname, item.href)) ?? allNav[0];
@@ -37,12 +38,19 @@ export function AppHeader({ superadmin }: { superadmin?: { ajena: boolean } }) {
             asChild
             variant="outline"
             size="sm"
-            title="Panel de agencias (superadministrador)"
-            className={cn("h-8", superadmin.ajena && "border-primary/50 bg-primary/10 text-primary")}
+            title={
+              superadmin.alertas
+                ? `Panel de agencias: ${superadmin.alertas} ${superadmin.alertas === 1 ? "alerta" : "alertas"} de la plataforma`
+                : "Panel de agencias (superadministrador)"
+            }
+            className={cn("relative h-8", superadmin.ajena && "border-primary/50 bg-primary/10 text-primary")}
           >
             <Link href="/superadmin">
               <LayoutGrid />
               <span className="hidden md:inline">Mis agencias</span>
+              {Boolean(superadmin.alertas) && (
+                <span aria-hidden className="absolute -top-1 -right-1 size-2.5 rounded-full bg-destructive ring-2 ring-background" />
+              )}
             </Link>
           </Button>
         )}

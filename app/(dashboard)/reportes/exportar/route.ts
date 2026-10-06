@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { formaPagoLabel, ramoLabel } from "@/components/polizas/poliza-ui";
+import { alcanceDe } from "@/lib/auth/alcance";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import { esPeriodoReporte, PERIODO_REPORTE_PREDETERMINADO } from "@/lib/reportes/periodos";
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const param = req.nextUrl.searchParams.get("periodo");
   const periodo = esPeriodoReporte(param) ? param : PERIODO_REPORTE_PREDETERMINADO;
-  const polizas = await getPolizasReporte(user.agenciaId, periodo);
+  const polizas = await getPolizasReporte(alcanceDe(user), periodo);
 
   const filas = [
     [
@@ -37,6 +38,8 @@ export async function GET(req: NextRequest) {
       "Fin de vigencia",
       "Prima neta",
       "Prima total",
+      "Ejecutivo",
+      "Cancelada el",
     ],
     ...polizas.map((p) => [
       p.numeroImpreso,
@@ -49,6 +52,8 @@ export async function GET(req: NextRequest) {
       fechaIso(p.vigencia_fin),
       importe(p.prima_neta),
       importe(p.prima_total),
+      p.ejecutivo?.nombre ?? "",
+      p.canceladaAt ? fechaIso(p.canceladaAt) : "",
     ]),
   ];
   // BOM para que Excel abra los acentos en UTF-8.

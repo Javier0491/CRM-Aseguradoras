@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { COLOR_MARCA_PREDETERMINADO, TEMA_PREDETERMINADO } from "@/lib/agencias/marca";
 import { escribirAgenciaEnAuth } from "@/lib/agencias/sesion";
+import { slugDesdeNombre } from "@/lib/agencias/slug";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
@@ -90,9 +91,17 @@ export async function crearAgencia(_prev: CrearAgenciaState, formData: FormData)
   });
   if (repetida) return { error: `Ya existe una agencia llamada ${nombre}.` };
 
+  // Liga de acceso con su marca: el slug del nombre, con "-2", "-3"… si ya existe.
+  const base = slugDesdeNombre(nombre);
+  const usados = new Set(
+    (await db.agencia.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } })).map((a) => a.slug)
+  );
+  let slug = base;
+  for (let n = 2; usados.has(slug); n++) slug = `${base}-${n}`;
+
   const agencia = await db.$transaction(async (tx) => {
     const creada = await tx.agencia.create({
-      data: { nombre, colorHex: COLOR_MARCA_PREDETERMINADO, tema: TEMA_PREDETERMINADO },
+      data: { nombre, slug, colorHex: COLOR_MARCA_PREDETERMINADO, tema: TEMA_PREDETERMINADO },
       select: { id: true, nombre: true },
     });
     await registrarBitacora(

@@ -147,6 +147,44 @@ export async function enviarCorreos({
 }
 
 /**
+ * Correo de la plataforma a una agencia (cobro del servicio, suspensión, prueba de diagnóstico).
+ * Sale de EMAIL_SENDER tal cual, con el nombre de la plataforma, a cada destinatario por separado.
+ */
+export async function enviarCorreoPlataforma({
+  para,
+  asunto,
+  html,
+  texto,
+}: {
+  para: string[];
+  asunto: string;
+  html: string;
+  texto: string;
+}): Promise<{ enviados: number; errores: string[] }> {
+  const { resend, remitente, responderA } = getConfigCorreo();
+  let enviados = 0;
+  const errores: string[] = [];
+  for (const [i, destinatario] of para.entries()) {
+    if (i > 0) await esperar(PAUSA_MS);
+    const error = await despachar(resend, {
+      from: remitente,
+      to: destinatario,
+      replyTo: responderA,
+      subject: asunto,
+      html,
+      text: texto,
+      tags: [{ name: "modulo", value: "plataforma" }],
+    });
+    if (error && (error.statusCode === 401 || error.statusCode === 403)) {
+      throw new CorreoNoConfiguradoError(`una configuración válida de Resend: ${error.message}`);
+    }
+    if (error) errores.push(`${destinatario}: ${error.message}`);
+    else enviados++;
+  }
+  return { enviados, errores };
+}
+
+/**
  * Envía un aviso automático ya convertido a HTML (plantilla de React Email). Sale de la
  * dirección universal con el nombre de la agencia; `copia` es el buzón de la agencia que recibe
  * copia oculta (bcc) y las respuestas del cliente (reply-to).

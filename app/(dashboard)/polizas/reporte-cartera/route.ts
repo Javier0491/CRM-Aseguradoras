@@ -10,8 +10,8 @@ const fechaIso = (d: Date) => d.toISOString().slice(0, 10);
 const esRamo = (v: unknown): v is Ramo => typeof v === "string" && v in ramoLabel;
 
 /**
- * GET /polizas/reporte-cartera — Excel con la cartera de pólizas de la agencia. Respeta los mismos filtros
- * del listado (?q=…&ramo=…&contacto=falta), pero sin su límite de renglones.
+ * GET /polizas/reporte-cartera — Excel con la cartera de pólizas que ve la sesión. Respeta los mismos
+ * filtros del listado (?q=…&ramo=…&ejecutivo=…&estatus=…&contacto=falta), pero sin su límite de renglones.
  */
 export async function GET(request: NextRequest) {
   const user = await getCurrentUser();
@@ -20,10 +20,13 @@ export async function GET(request: NextRequest) {
   }
   const params = request.nextUrl.searchParams;
   const ramo = params.get("ramo");
+  const estatus = params.get("estatus");
   const polizas = await getPolizasExportacion({
     q: params.get("q") ?? "",
     ramo: esRamo(ramo) ? ramo : undefined,
     faltaContacto: params.get("contacto") === "falta",
+    ejecutivo: params.get("ejecutivo") || undefined,
+    canceladas: estatus === "canceladas" ? true : estatus === "vigor" ? false : undefined,
   });
   const hoy = hoyISO();
 
@@ -41,12 +44,14 @@ export async function GET(request: NextRequest) {
       Ramo: ramoLabel[p.ramo],
       "Prima total": Number(p.prima_total),
       "Forma de pago": formaPagoLabel[p.forma_pago],
-      Estatus: vigenciaEstilo[estadoVigencia(p.vigencia_fin, hoy, DIAS_POR_VENCER)].label,
+      Estatus: vigenciaEstilo[estadoVigencia(p.vigencia_fin, hoy, DIAS_POR_VENCER, p.canceladaAt)].label,
       "Inicio de vigencia": fechaIso(p.vigencia_inicio),
       "Fecha de vencimiento": fechaIso(p.vigencia_fin),
+      Ejecutivo: p.ejecutivo?.nombre ?? "",
+      "Cancelada el": p.canceladaAt ? fechaIso(p.canceladaAt) : "",
     }))
   );
-  hoja["!cols"] = [18, 14, 32, 32, 16, 16, 16, 14, 14, 12, 12, 14].map((wch) => ({ wch }));
+  hoja["!cols"] = [18, 14, 32, 32, 16, 16, 16, 14, 14, 12, 12, 14, 24, 12].map((wch) => ({ wch }));
   // Prima total como moneda (columna H).
   for (let fila = 2; fila <= polizas.length + 1; fila++) {
     const celda = hoja[`H${fila}`];

@@ -30,7 +30,7 @@ de Gastos Médicos Mayores Colectivo, que complementa a la carátula porque trae
 - asegurados_lista debe ir vacío: los asegurados se manejan con un censo aparte.`;
 
 export function construirSystemPrompt(aseguradoras: readonly string[], contexto?: ContextoOcr) {
-  return `Eres un motor de extracción de datos para PJ MAGNUS, una promotoría de seguros en México.
+  return `Eres un motor de extracción de datos para una promotoría de seguros en México.
 Recibirás la carátula de una póliza de seguro (PDF o imagen), sola o acompañada de otros documentos
 de la misma póliza. Tu única tarea es transcribir sus datos a UN SOLO JSON con el esquema indicado.
 No conversas, no resumes y no explicas.

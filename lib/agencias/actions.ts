@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { eliminarLogo, LogoError, subirLogo } from "@/lib/agencias/logos";
 import { esTema, TEMAS } from "@/lib/agencias/marca";
+import { normalizarSlug, slugValido } from "@/lib/agencias/slug";
 import { getAdmin, getCurrentUser } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { normalizarHex } from "@/lib/color";
@@ -108,6 +109,59 @@ export async function actualizarAgencia(_prev: AgenciaFormState, formData: FormD
   }
 
   // El logo y el color se ven en todo el dashboard.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export type AjustesAgenciaState = { ok?: boolean; error?: string; errores?: Partial<Record<"slug", string>> };
+
+/**
+ * Ajustes de operación de la agencia del administrador: la liga de acceso con su marca
+ * (/login?agencia=<slug>) y si cada ejecutivo ve solo su cartera.
+ * Campos: slug y carteraPorEjecutivo ("1" activa).
+ */
+export async function actualizarAjustesAgencia(_prev: AjustesAgenciaState, formData: FormData): Promise<AjustesAgenciaState> {
+  const admin = await getAdmin();
+  if (!admin) {
+    return {
+      error: (await getCurrentUser())
+        ? "Solo un administrador puede cambiar los ajustes de la agencia."
+        : "Tu sesión expiró. Vuelve a iniciar sesión.",
+    };
+  }
+  const { agenciaId } = admin;
+  const slug = normalizarSlug(String(formData.get("slug") ?? ""));
+  const carteraPorEjecutivo = formData.get("carteraPorEjecutivo") === "1";
+  if (!slugValido(slug)) return { errores: { slug: "Usa de 2 a 60 letras, números o guiones." } };
+
+  const actual = await db.agencia.findUniqueOrThrow({
+    where: { id: agenciaId },
+    select: { slug: true, carteraPorEjecutivo: true },
+  });
+  if (slug !== actual.slug) {
+    const ocupado = await db.agencia.findUnique({ where: { slug }, select: { id: true } });
+    if (ocupado) return { errores: { slug: "Esa liga ya la usa otra agencia; elige otra." } };
+  }
+  const cambios = [
+    slug !== actual.slug && `liga de acceso «${actual.slug}» → «${slug}»`,
+    carteraPorEjecutivo !== actual.carteraPorEjecutivo &&
+      (carteraPorEjecutivo ? "cada ejecutivo ve solo su cartera" : "los ejecutivos ven toda la cartera"),
+  ].filter((c): c is string => Boolean(c));
+  if (cambios.length === 0) return { ok: true };
+
+  try {
+    await db.$transaction(async (tx) => {
+      await tx.agencia.update({ where: { id: agenciaId }, data: { slug, carteraPorEjecutivo } });
+      await registrarBitacora(
+        admin,
+        { accion: "agencia.editar", entidad: "agencia", entidadId: agenciaId, descripcion: cambios.join(", ") },
+        tx
+      );
+    });
+  } catch (e) {
+    console.error("[actualizarAjustesAgencia]", e);
+    return { error: "No se pudieron guardar los ajustes. Intenta de nuevo." };
+  }
   revalidatePath("/", "layout");
   return { ok: true };
 }

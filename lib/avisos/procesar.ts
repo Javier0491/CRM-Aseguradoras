@@ -53,6 +53,9 @@ async function avisosDeAgencia(agenciaId: string, hoy: string): Promise<Pendient
         agenciaId,
         vigencia_fin: { gte: fechaUtc(hoy), lte: fechaUtc(sumarDias(hoy, MAX_DIAS_AVISO)) },
         aseguradora: { avisoDiasRenovacion: { not: null } },
+        // Ni las canceladas ni las que el embudo ya da por perdidas reciben aviso de renovación.
+        canceladaAt: null,
+        OR: [{ renovacionEtapa: null }, { renovacionEtapa: { not: "PERDIDA" } }],
       },
       orderBy: { vigencia_fin: "asc" },
       select: { id: true, polizaVigor: true, aseguradora_id: true, vigencia_fin: true, ...selectPoliza },

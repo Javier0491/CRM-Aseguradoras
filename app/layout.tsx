@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getTemaSesion } from "@/lib/agencias/tema";
+import { nombrePlataforma } from "@/lib/plataforma/marca";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,14 +15,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: "PJ MAGNUS · CRM",
-    template: "%s · PJ MAGNUS",
-  },
-  description:
-    "CRM financiero y operativo para la gestión de pólizas y conciliación de cobranza.",
-};
+/** Título neutro de la plataforma; dentro del CRM, el layout del dashboard usa el de la agencia. */
+export function generateMetadata(): Metadata {
+  const nombre = nombrePlataforma();
+  return {
+    title: { default: nombre, template: `%s · ${nombre}` },
+    description: "CRM financiero y operativo para la gestión de pólizas y conciliación de cobranza.",
+  };
+}
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Tema (oscuro o claro) de la agencia de la sesión; el login usa el oscuro.

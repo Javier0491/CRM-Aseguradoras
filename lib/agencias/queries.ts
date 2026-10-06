@@ -38,6 +38,7 @@ export async function getAgenciasParaSuperadmin() {
       logoUrl: true,
       colorHex: true,
       tema: true,
+      slug: true,
       suspendida: true,
       suspendidaAt: true,
       motivoSuspension: true,

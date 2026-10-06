@@ -27,7 +27,11 @@ export const estadoRecibo: Record<EstadoRecibo, { label: string; className: stri
   PENDIENTE: { label: "Pendiente", className: "border-warning/30 bg-warning/10 text-warning" },
   PAGADO: { label: "Pagado", className: "border-success/30 bg-success/10 text-success" },
   CONCILIADO: { label: "Conciliado", className: "border-primary/30 bg-primary/10 text-primary" },
+  CANCELADO: { label: "Cancelado", className: "border-border bg-muted text-muted-foreground" },
 };
+
+/** Recibo cobrado: pagado (con diferencia de comisión por aclarar) o conciliado. */
+export const esCobrado = (estado: EstadoRecibo) => estado === "PAGADO" || estado === "CONCILIADO";
 
 export function AseguradoraTag({ nombre, color }: { nombre: string; color: string }) {
   const hex = normalizarHex(color);
@@ -106,10 +110,14 @@ export function RamoBadge({ ramo }: { ramo: Ramo }) {
   );
 }
 
-export type EstadoVigencia = "vigente" | "por_vencer" | "vencida";
+export type EstadoVigencia = "vigente" | "por_vencer" | "vencida" | "cancelada";
 
-/** Estado según el fin de vigencia: vencida, por vencer (dentro de `diasAviso`) o vigente. */
-export function estadoVigencia(fin: Date, hoy: string, diasAviso: number): EstadoVigencia {
+/**
+ * Estado según el fin de vigencia: vencida, por vencer (dentro de `diasAviso`) o vigente. Una
+ * póliza cancelada es "cancelada" sin importar sus fechas.
+ */
+export function estadoVigencia(fin: Date, hoy: string, diasAviso: number, cancelada?: Date | null): EstadoVigencia {
+  if (cancelada) return "cancelada";
   const dias = diasDesdeHoy(fin, hoy);
   if (dias < 0) return "vencida";
   return dias <= diasAviso ? "por_vencer" : "vigente";
@@ -119,13 +127,29 @@ export const vigenciaEstilo: Record<EstadoVigencia, { label: string; punto: stri
   vigente: { label: "Vigente", punto: "bg-success", texto: "text-success" },
   por_vencer: { label: "Por vencer", punto: "bg-warning", texto: "text-warning" },
   vencida: { label: "Vencida", punto: "bg-destructive", texto: "text-destructive" },
+  cancelada: { label: "Cancelada", punto: "bg-muted-foreground", texto: "text-muted-foreground" },
 };
 
-/** Estatus de vigencia como píldora (Vigente, Por vencer, Vencida). */
-export function EstadoVigenciaBadge({ fin, hoy, diasAviso }: { fin: Date; hoy: string; diasAviso: number }) {
-  const estado = estadoVigencia(fin, hoy, diasAviso);
+/** Estatus de vigencia como píldora (Vigente, Por vencer, Vencida o Cancelada). */
+export function EstadoVigenciaBadge({
+  fin,
+  hoy,
+  diasAviso,
+  cancelada,
+}: {
+  fin: Date;
+  hoy: string;
+  diasAviso: number;
+  cancelada?: Date | null;
+}) {
+  const estado = estadoVigencia(fin, hoy, diasAviso, cancelada);
   const e = vigenciaEstilo[estado];
-  const fondo = { vigente: "border-success/30 bg-success/10", por_vencer: "border-warning/30 bg-warning/10", vencida: "border-destructive/30 bg-destructive/10" }[estado];
+  const fondo = {
+    vigente: "border-success/30 bg-success/10",
+    por_vencer: "border-warning/30 bg-warning/10",
+    vencida: "border-destructive/30 bg-destructive/10",
+    cancelada: "border-border bg-muted",
+  }[estado];
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${fondo} ${e.texto}`}>
       <span aria-hidden className={`size-1.5 rounded-full ${e.punto}`} />
@@ -138,16 +162,20 @@ export function EstadoVigenciaIndicador({
   fin,
   hoy,
   diasAviso,
+  cancelada,
 }: {
   fin: Date;
   hoy: string;
   diasAviso: number;
+  cancelada?: Date | null;
 }) {
-  const estado = estadoVigencia(fin, hoy, diasAviso);
+  const estado = estadoVigencia(fin, hoy, diasAviso, cancelada);
   const dias = diasDesdeHoy(fin, hoy);
   const e = vigenciaEstilo[estado];
   const detalle =
-    estado === "vencida"
+    estado === "cancelada" && cancelada
+      ? `desde el ${formatFecha(cancelada)}`
+      : estado === "vencida"
       ? `hace ${-dias} d`
       : estado === "por_vencer"
         ? dias === 0

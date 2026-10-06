@@ -1,7 +1,9 @@
 import "server-only";
 
+import { polizasDe, alcanceDe } from "@/lib/auth/alcance";
 import type { UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
+import { claveNombre, RFC_GENERICOS, tipoPersonaDeRfc } from "@/lib/clientes/reglas";
 import { db } from "@/lib/db";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { validarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
@@ -18,6 +20,7 @@ import {
   type PolizaInput,
   type Valores,
 } from "@/lib/polizas/validacion";
+import { leerEjecutivoSolicitado, resolverEjecutivo } from "@/lib/usuarios/asignacion";
 
 export type GuardarPolizaResultado =
   | {
@@ -32,9 +35,6 @@ export type EditarPolizaResultado =
   | { ok: true; poliza: { id: string; numero: string }; recibosRegenerados: boolean }
   | { ok: false; error?: string; errores?: Errores };
 
-/** RFC genéricos del SAT: compartidos por muchas personas, no identifican al cliente. */
-const RFC_GENERICOS = new Set(["XAXX010101000", "XEXX010101000"]);
-
 /**
  * Campos que definen el calendario de recibos. Si la póliza ya tiene recibos cobrados no se
  * pueden cambiar (habría que regenerar recibos que ya están conciliados o pagados).
@@ -43,16 +43,6 @@ export const CAMPOS_CALENDARIO = ["vigenciaInicio", "vigenciaFin", "formaPago", 
 
 const fecha = (iso: string) => new Date(`${iso}T00:00:00Z`);
 const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-/** Nombre comparable: sin acentos, mayúsculas, signos ni espacios dobles. */
-const claveNombre = (nombre: string) =>
-  nombre
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9 ]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 
 /** Campos específicos del ramo con los numéricos convertidos a number. */
 function datosRamo(ramo: Ramo, especificos: Valores): Prisma.InputJsonObject {
@@ -118,13 +108,17 @@ function columnasPoliza(input: PolizaInput, g: Valores) {
  * Cliente de la póliza: por RFC, o por RFC + nombre si el RFC es genérico. Un bloqueo por
  * cliente (se libera al terminar la transacción) evita que dos capturas simultáneas del mismo
  * RFC lo creen dos veces. Si ya existe, `actualizarContacto` decide si sus datos se reemplazan
- * (edición explícita) o solo se completan los que faltan (captura).
+ * (edición explícita) o solo se completan los que faltan (captura). Un cliente nuevo, o uno sin
+ * ejecutivo, queda con el ejecutivo de la póliza.
  */
 async function obtenerCliente(
   tx: Prisma.TransactionClient,
   agenciaId: string,
   g: Valores,
-  { actualizarContacto }: { actualizarContacto: "completar" | "reemplazar" }
+  {
+    actualizarContacto,
+    ejecutivoId,
+  }: { actualizarContacto: "completar" | "reemplazar"; ejecutivoId: string | null }
 ) {
   const rfc = normalizarRfc(g.rfcCliente);
   const nombre = g.cliente.replace(/\s+/g, " ").trim();
@@ -134,7 +128,7 @@ async function obtenerCliente(
   const claveCliente = generico ? `${rfc}|${claveNombre(nombre)}` : rfc;
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`cliente:${agenciaId}:${claveCliente}`}))`;
 
-  const seleccion = { id: true, nombre: true, telefono: true, email: true } as const;
+  const seleccion = { id: true, nombre: true, telefono: true, email: true, ejecutivoId: true } as const;
   const existente = generico
     ? // El nombre se compara sin acentos, mayúsculas ni signos: "HÉCTOR  MORALES" = "Hector Morales".
       (await tx.cliente.findMany({ where: { agenciaId, rfc }, select: seleccion })).find(
@@ -144,7 +138,7 @@ async function obtenerCliente(
 
   if (!existente) {
     const creado = await tx.cliente.create({
-      data: { agenciaId, nombre, rfc, telefono, email },
+      data: { agenciaId, nombre, rfc, telefono, email, tipoPersona: tipoPersonaDeRfc(rfc), ejecutivoId },
       select: { id: true, nombre: true },
     });
     return { ...creado, nuevo: true };
@@ -156,11 +150,13 @@ async function obtenerCliente(
           ...(existente.nombre !== nombre && { nombre }),
           ...(existente.telefono !== telefono && { telefono }),
           ...(existente.email !== email && { email }),
+          ...(!existente.ejecutivoId && ejecutivoId && { ejecutivoId }),
         }
       : // Expediente maestro: se completan los datos que faltaban, sin sobrescribir.
         {
           ...(!existente.telefono && telefono && { telefono }),
           ...(!existente.email && email && { email }),
+          ...(!existente.ejecutivoId && ejecutivoId && { ejecutivoId }),
         };
   if (Object.keys(cambios).length > 0) {
     await tx.cliente.update({ where: { id: existente.id, agenciaId }, data: cambios });
@@ -232,13 +228,15 @@ export async function registrarPoliza(
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
   let g = permitirComision ? input.generales : { ...input.generales, comisionPersonalizadaPct: "" };
   const { agenciaId } = usuario;
+  const asignado = await resolverEjecutivo(usuario, leerEjecutivoSolicitado(raw));
+  if (!asignado.ok) return { ok: false, error: asignado.error };
 
   // Renovación: misma aseguradora, misma póliza vigor e inicio posterior a la vigencia anterior.
   let anterior: { id: string; numeroImpreso: string } | null = null;
   if (renuevaA !== undefined) {
     if (typeof renuevaA !== "string" || !/^[a-z0-9]+$/i.test(renuevaA)) return { ok: false, error: "Datos inválidos." };
-    const original = await db.poliza.findUnique({
-      where: { id: renuevaA, agenciaId },
+    const original = await db.poliza.findFirst({
+      where: { id: renuevaA, ...polizasDe(alcanceDe(usuario)) },
       select: {
         id: true,
         numeroImpreso: true,
@@ -246,10 +244,14 @@ export async function registrarPoliza(
         aseguradora_id: true,
         vigencia_inicio: true,
         vigencia_fin: true,
+        canceladaAt: true,
         aseguradora: { select: { nombre: true } },
       },
     });
     if (!original) return { ok: false, error: "La póliza que se renueva ya no existe." };
+    if (original.canceladaAt) {
+      return { ok: false, error: `La póliza ${original.numeroImpreso} está cancelada: reactívala antes de renovarla.` };
+    }
     const yaRenovada = original.polizaVigor
       ? await db.poliza.findFirst({
           where: {
@@ -285,11 +287,15 @@ export async function registrarPoliza(
 
   try {
     const resultado = await db.$transaction(async (tx) => {
-      const cliente = await obtenerCliente(tx, agenciaId, g, { actualizarContacto: "completar" });
+      const cliente = await obtenerCliente(tx, agenciaId, g, {
+        actualizarContacto: "completar",
+        ejecutivoId: asignado.ejecutivoId,
+      });
       const poliza = await tx.poliza.create({
         data: {
           ...datos,
           agenciaId,
+          ejecutivoId: asignado.ejecutivoId,
           cliente_id: cliente.id,
           asegurados: { create: aseguradosData(input.asegurados).map((a) => ({ ...a, agenciaId })) },
           recibos: { create: recibos.map((r) => ({ ...r, agenciaId })) },
@@ -347,6 +353,7 @@ const ETIQUETAS_CAMBIO: Record<string, string> = {
   comision_personalizada_pct: "comisión personalizada",
   datos_ramo: "datos del ramo",
   cliente_id: "cliente",
+  ejecutivoId: "ejecutivo",
 };
 
 /** Valor normalizado para detectar cambios: fechas ISO, números sin ceros de más y JSON con claves ordenadas. */
@@ -376,8 +383,8 @@ export async function actualizarPoliza(
   if (!input) return { ok: false, error: "Datos del formulario inválidos." };
   const { agenciaId } = usuario;
 
-  const actual = await db.poliza.findUnique({
-    where: { id: polizaId, agenciaId },
+  const actual = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(usuario)) },
     select: {
       numeroImpreso: true,
       polizaVigor: true,
@@ -392,10 +399,13 @@ export async function actualizarPoliza(
       comision_personalizada_pct: true,
       datos_ramo: true,
       cliente_id: true,
+      ejecutivoId: true,
       recibos: { select: { estado: true, auto_creado: true } },
     },
   });
   if (!actual) return { ok: false, error: "La póliza ya no existe." };
+  const asignado = await resolverEjecutivo(usuario, leerEjecutivoSolicitado(raw), actual.ejecutivoId);
+  if (!asignado.ok) return { ok: false, error: asignado.error };
 
   // Un ejecutivo no ve ni cambia el % personalizado: se conserva el que tenía.
   const conComision: Valores = permitirComision
@@ -418,10 +428,15 @@ export async function actualizarPoliza(
     Number(actual.prima_total) !== parseNumero(g.primaTotal);
   const conCobros = actual.recibos.some((r) => r.estado !== "PENDIENTE" || r.auto_creado);
   if (cambiaCalendario && conCobros) {
-    const mensaje = "La póliza ya tiene recibos cobrados: revierte primero su conciliación para cambiarlo.";
+    const cancelada = actual.recibos.some((r) => r.estado === "CANCELADO");
+    const mensaje = cancelada
+      ? "La póliza está cancelada: reactívala primero para cambiarlo."
+      : "La póliza ya tiene recibos cobrados: revierte primero su conciliación para cambiarlo.";
     return {
       ok: false,
-      error: "No se puede cambiar la vigencia, la forma de pago ni la prima total de una póliza con recibos cobrados.",
+      error: cancelada
+        ? "No se puede cambiar la vigencia, la forma de pago ni la prima total de una póliza cancelada."
+        : "No se puede cambiar la vigencia, la forma de pago ni la prima total de una póliza con recibos cobrados.",
       errores: Object.fromEntries(
         CAMPOS_CALENDARIO.filter((c) => {
           if (c === "vigenciaInicio") return iso(actual.vigencia_inicio) !== g.vigenciaInicio;
@@ -435,8 +450,11 @@ export async function actualizarPoliza(
 
   try {
     await db.$transaction(async (tx) => {
-      const cliente = await obtenerCliente(tx, agenciaId, g, { actualizarContacto: "reemplazar" });
-      const nuevo = { ...datos, cliente_id: cliente.id };
+      const cliente = await obtenerCliente(tx, agenciaId, g, {
+        actualizarContacto: "reemplazar",
+        ejecutivoId: asignado.ejecutivoId,
+      });
+      const nuevo = { ...datos, cliente_id: cliente.id, ejecutivoId: asignado.ejecutivoId };
       await tx.poliza.update({ where: { id: polizaId, agenciaId }, data: nuevo });
       await tx.asegurado.deleteMany({ where: { agenciaId, poliza_id: polizaId } });
       if (input.asegurados.length > 0) {

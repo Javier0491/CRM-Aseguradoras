@@ -28,7 +28,14 @@ export async function subirArchivo(
     }
   } catch (e) {
     console.error("[subirArchivo]", e);
-    return { ok: false, error: "No se pudo contactar al almacenamiento de archivos." };
+    // El navegador no deja ver la causa, pero si hay conexión casi siempre es que el bucket no
+    // acepta subidas desde este dominio (su política CORS).
+    return {
+      ok: false,
+      error: navigator.onLine
+        ? `El almacenamiento rechazó la subida desde ${window.location.host}. Pide al administrador de la plataforma que agregue este dominio a la política CORS del bucket (Plataforma → Diagnóstico lo verifica).`
+        : "Sin conexión a internet: no se pudo subir el archivo.",
+    };
   }
 
   return vincularArchivo(polizaId, tipo, preparada.clave, archivo.name);

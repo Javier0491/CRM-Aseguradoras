@@ -3,6 +3,7 @@ import "server-only";
 import { connection } from "next/server";
 
 import type { PolizaFormInicial } from "@/components/captura/poliza-form";
+import { getAlcance, polizasDe } from "@/lib/auth/alcance";
 import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { ramoDesdeDb, seccionesPorRamo } from "@/lib/polizas/ramos";
@@ -13,10 +14,12 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 
 async function cargar(id: string) {
   if (!/^[a-z0-9]+$/i.test(id)) return null;
-  const agenciaId = await getAgenciaId();
-  return db.poliza.findUnique({
-    where: { id, agenciaId },
+  const alcance = await getAlcance();
+  return db.poliza.findFirst({
+    where: { id, ...polizasDe(alcance) },
     select: {
+      ejecutivoId: true,
+      canceladaAt: true,
       id: true,
       numeroImpreso: true,
       polizaVigor: true,
@@ -81,6 +84,7 @@ function aFormulario(p: PolizaFormulario, { incluirComision }: { incluirComision
       antiguedad: a.antiguedad ?? "",
     })),
     sumaAseguradaIlimitada: p.sumaAseguradaIlimitada,
+    ejecutivoId: p.ejecutivoId ?? "",
   };
 }
 
@@ -96,6 +100,7 @@ export async function getPolizaParaEditar(id: string, { incluirComision }: { inc
     id: p.id,
     numero: p.numeroImpreso,
     conCobros: p.recibos.some((r) => r.estado !== "PENDIENTE" || r.auto_creado),
+    cancelada: p.canceladaAt !== null,
     inicial: aFormulario(p, { incluirComision }),
   };
 }
@@ -122,6 +127,7 @@ export async function getPolizaParaRenovar(id: string, { incluirComision }: { in
     id: p.id,
     numero: p.numeroImpreso,
     polizaVigor: p.polizaVigor,
+    cancelada: p.canceladaAt !== null,
     inicial: {
       ...base,
       generales: {
@@ -150,6 +156,28 @@ export async function getRenovacion(poliza: { polizaVigor: string | null; asegur
       vigencia_inicio: { gte: poliza.vigencia_fin },
     },
     orderBy: { vigencia_inicio: "asc" },
+    select: { id: true, numeroImpreso: true },
+  });
+}
+
+/** Póliza que esta renueva: la vigencia anterior de su cadena (termina cuando esta empieza o antes). */
+export async function getPolizaAnterior(poliza: {
+  id: string;
+  polizaVigor: string | null;
+  aseguradora_id: string;
+  vigencia_inicio: Date;
+}) {
+  if (!poliza.polizaVigor) return null;
+  const agenciaId = await getAgenciaId();
+  return db.poliza.findFirst({
+    where: {
+      agenciaId,
+      id: { not: poliza.id },
+      polizaVigor: poliza.polizaVigor,
+      aseguradora_id: poliza.aseguradora_id,
+      vigencia_fin: { lte: poliza.vigencia_inicio },
+    },
+    orderBy: { vigencia_fin: "desc" },
     select: { id: true, numeroImpreso: true },
   });
 }

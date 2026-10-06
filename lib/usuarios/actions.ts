@@ -286,3 +286,54 @@ export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise
   revalidatePath("/sistema/usuarios");
   return { ok: true };
 }
+
+export type ResultadoReasignacion = { ok: true; polizas: number; clientes: number; tareas: number } | { ok: false; error: string };
+
+/**
+ * ADMIN: pasa la cartera de una cuenta a otra (o la deja sin asignar con `aId` vacío): sus
+ * pólizas, sus clientes y sus tareas pendientes. Útil cuando un ejecutivo deja la agencia.
+ */
+export async function reasignarCartera(deId: string, aId: string): Promise<ResultadoReasignacion> {
+  const admin = await getAdmin();
+  if (!admin) return { ok: false, error: "Solo un administrador puede reasignar cartera." };
+  if (typeof deId !== "string" || !deId || typeof aId !== "string" || deId === aId) {
+    return { ok: false, error: "Datos inválidos." };
+  }
+  const [de, a] = await Promise.all([
+    db.usuario.findFirst({ where: { id: deId, agenciaId: admin.agenciaId }, select: { id: true, nombre: true } }),
+    aId
+      ? db.usuario.findFirst({
+          where: { id: aId, agenciaId: admin.agenciaId, activo: true, rolSistema: "USER" },
+          select: { id: true, nombre: true },
+        })
+      : Promise.resolve(null),
+  ]);
+  if (!de) return { ok: false, error: "La cuenta ya no existe; recarga la página." };
+  if (aId && !a) return { ok: false, error: "La cuenta que recibe la cartera ya no está activa." };
+  const destino = a?.id ?? null;
+
+  const resultado = await db.$transaction(async (tx) => {
+    const polizas = await tx.poliza.updateMany({ where: { agenciaId: admin.agenciaId, ejecutivoId: de.id }, data: { ejecutivoId: destino } });
+    const clientes = await tx.cliente.updateMany({ where: { agenciaId: admin.agenciaId, ejecutivoId: de.id }, data: { ejecutivoId: destino } });
+    const tareas = await tx.tarea.updateMany({
+      where: { agenciaId: admin.agenciaId, responsableId: de.id, completadaAt: null },
+      data: { responsableId: destino },
+    });
+    await registrarBitacora(
+      admin,
+      {
+        accion: "cartera.reasignar",
+        entidad: "usuario",
+        entidadId: de.id,
+        descripcion:
+          `Reasignó la cartera de ${de.nombre} a ${a?.nombre ?? "nadie (sin asignar)"}: ` +
+          `${polizas.count} pólizas, ${clientes.count} clientes y ${tareas.count} tareas pendientes`,
+      },
+      tx
+    );
+    return { polizas: polizas.count, clientes: clientes.count, tareas: tareas.count };
+  });
+  revalidatePath("/sistema/usuarios");
+  revalidatePath("/", "layout");
+  return { ok: true, ...resultado };
+}

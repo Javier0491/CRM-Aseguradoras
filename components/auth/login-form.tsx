@@ -24,7 +24,7 @@ export function LoginForm({ next, configurado }: { next?: string; configurado: b
           name="email"
           type="email"
           autoComplete="email"
-          placeholder="nombre@pjmagnus.mx"
+          placeholder="nombre@tuagencia.mx"
           defaultValue={state.email}
           required
           autoFocus

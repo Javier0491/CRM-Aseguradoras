@@ -8,6 +8,7 @@ import {
   CircleCheck,
   EllipsisVertical,
   FileText,
+  Link2,
   Loader2,
   Moon,
   Plus,
@@ -52,14 +53,19 @@ import { cn } from "@/lib/utils";
  * crear una nueva. Cada tarjeta usa el color de marca de su agencia como acento; su menú suspende
  * o reactiva la agencia.
  */
+export type CobroTarjeta = { estado: string; etiqueta: string; detalle: string };
+
 export function LobbyAgencias({
   agencias,
   activaId,
   propiaId,
+  cobros = {},
 }: {
   agencias: AgenciaLobby[];
   activaId: string;
   propiaId: string;
+  /** Estado de pago de las agencias que requieren atención (por vencer o vencidas). */
+  cobros?: Record<string, CobroTarjeta>;
 }) {
   const [entrando, setEntrando] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -107,6 +113,7 @@ export function LobbyAgencias({
             onEntrar={() => entrar(a.id)}
             onSuspender={() => setASuspender(a)}
             onReactivar={() => reactivar(a.id)}
+            cobro={cobros[a.id]}
           />
         ))}
         <NuevaAgencia onCreada={setNueva} />
@@ -126,7 +133,9 @@ function TarjetaAgencia({
   onEntrar,
   onSuspender,
   onReactivar,
+  cobro,
 }: {
+  cobro?: CobroTarjeta;
   agencia: AgenciaLobby;
   activa: boolean;
   propia: boolean;
@@ -188,6 +197,11 @@ function TarjetaAgencia({
             <FileText className="size-3.5" /> {formatNumero(a._count.polizas)} pólizas
           </span>
         </p>
+        {cobro && !a.suspendida && (
+          <p className={cn("mt-2 text-xs", cobro.estado === "por_vencer" ? "text-warning" : "text-destructive")}>
+            {cobro.etiqueta} · {cobro.detalle}
+          </p>
+        )}
         {a.suspendida && (
           <p className="mt-2 line-clamp-2 text-xs text-destructive">
             Suspendida{a.suspendidaAt ? ` el ${formatFecha(a.suspendidaAt)}` : ""}
@@ -227,6 +241,14 @@ function TarjetaAgencia({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onSelect={() => {
+              // Liga de inicio de sesión con la marca de la agencia, para compartirla con su equipo.
+              void navigator.clipboard?.writeText(`${window.location.origin}/login?agencia=${a.slug}`).catch(() => {});
+            }}
+          >
+            <Link2 /> Copiar liga de acceso
+          </DropdownMenuItem>
           {a.suspendida ? (
             <DropdownMenuItem onSelect={() => startCambio(onReactivar)}>
               <CircleCheck /> Reactivar agencia

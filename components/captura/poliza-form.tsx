@@ -102,7 +102,12 @@ export type PolizaFormInicial = {
   asegurados?: AseguradoValores[];
   /** La IA detectó la suma asegurada como "Sin límite". */
   sumaAseguradaIlimitada?: boolean;
+  /** Ejecutivo responsable ("" = sin asignar). */
+  ejecutivoId?: string;
 };
+
+/** Valor del selector para "Sin asignar" (Radix Select no admite un valor vacío). */
+const SIN_EJECUTIVO = "__sin_asignar__";
 
 /**
  * Para qué se usa el formulario:
@@ -114,7 +119,7 @@ export type PolizaFormInicial = {
 export type ModoPoliza =
   | { tipo: "captura" }
   | { tipo: "renovacion"; anterior: { id: string; numero: string } }
-  | { tipo: "edicion"; polizaId: string; numero: string; bloqueados: readonly string[] };
+  | { tipo: "edicion"; polizaId: string; numero: string; bloqueados: readonly string[]; cancelada?: boolean };
 
 /** Acciones del formulario disponibles para el contenedor (vía `ref`). */
 export type PolizaFormHandle = {
@@ -153,6 +158,8 @@ type FormValues = {
   sumaIlimitada: boolean;
   /** Expediente de respaldo; se sube a Storage después de guardar la póliza. */
   expediente: File | null;
+  /** Ejecutivo responsable ("" = sin asignar). */
+  ejecutivoId: string;
 };
 
 /** La bandera solo cuenta en ramos que tienen suma asegurada. */
@@ -189,7 +196,7 @@ const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
 // undefined (conserva el anterior), así que "Limpiar" necesita cada clave presente.
 const vacios = (campos: CampoDef[]): Valores => Object.fromEntries(campos.map((c) => [c.name, ""]));
 
-function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
+function valoresIniciales(inicial?: PolizaFormInicial, ejecutivoPredeterminado = ""): FormValues {
   const especificos = Object.fromEntries(
     RAMOS.map((r) => [r, vacios(seccionesPorRamo[r].flatMap((s) => s.campos))])
   ) as Record<Ramo, Valores>;
@@ -206,6 +213,7 @@ function valoresIniciales(inicial?: PolizaFormInicial): FormValues {
     asegurados: (inicial?.asegurados ?? []).map((a) => ({ ...aseguradoVacio(), ...a })),
     sumaIlimitada: inicial?.sumaAseguradaIlimitada ?? false,
     expediente: null,
+    ejecutivoId: inicial?.ejecutivoId ?? ejecutivoPredeterminado,
   };
 }
 
@@ -222,6 +230,8 @@ export function PolizaForm({
   inicial,
   aseguradoras,
   verComisiones,
+  ejecutivos,
+  ejecutivoPredeterminado = "",
   extrayendo = false,
   leidaConIa = false,
   caratula = null,
@@ -231,6 +241,13 @@ export function PolizaForm({
   modo = { tipo: "captura" },
   ref,
 }: {
+  /**
+   * Cuentas a las que se puede asignar la póliza. Sin ella no se muestra el selector (el ejecutivo
+   * que solo ve su cartera siempre queda como responsable).
+   */
+  ejecutivos?: { id: string; nombre: string }[];
+  /** Responsable de una póliza nueva: quien la captura, si es del equipo. */
+  ejecutivoPredeterminado?: string;
   modo?: ModoPoliza;
   /** Avisa al contenedor el ramo seleccionado (p. ej. para mostrar el segundo documento). */
   onRamoChange?: (ramo: Ramo) => void;
@@ -329,7 +346,7 @@ export function PolizaForm({
     getValues,
     clearErrors,
     formState: { errors, isSubmitting, submitCount },
-  } = useForm<FormValues>({ defaultValues: valoresIniciales(inicial), resolver });
+  } = useForm<FormValues>({ defaultValues: valoresIniciales(inicial, ejecutivoPredeterminado), resolver });
 
   const ramo = useWatch({ control, name: "ramo" });
   const secciones = seccionesPorRamo[ramo];
@@ -420,7 +437,7 @@ export function PolizaForm({
 
   function reiniciar() {
     // En una renovación se vuelve a los datos de la vigencia anterior, no a un formulario vacío.
-    reset(valoresIniciales(modo.tipo === "renovacion" ? inicial : undefined));
+    reset(valoresIniciales(modo.tipo === "renovacion" ? inicial : undefined, ejecutivoPredeterminado));
     setVigorManual(false);
     limpiarAvisos();
     onReiniciar?.();
@@ -458,6 +475,8 @@ export function PolizaForm({
       // En los ramos con censo los asegurados no se capturan uno por uno.
       asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
       sumaAseguradaIlimitada: esSumaIlimitada(values),
+      // Sin selector (ejecutivo que solo ve su cartera) el servidor decide.
+      ...(ejecutivos && { ejecutivoId: values.ejecutivoId }),
     };
 
     if (modo.tipo === "edicion") {
@@ -522,7 +541,9 @@ export function PolizaForm({
       ? undefined
       : modo.tipo === "renovacion"
         ? "Se conserva la de la póliza anterior para mantener la cadena de renovaciones."
-        : "Tiene recibos cobrados: para cambiarlo, revierte primero su conciliación.";
+        : modo.tipo === "edicion" && modo.cancelada
+          ? "La póliza está cancelada: reactívala para cambiarlo."
+          : "Tiene recibos cobrados: para cambiarlo, revierte primero su conciliación.";
 
     return (
       <Controller
@@ -578,7 +599,9 @@ export function PolizaForm({
           </CardTitle>
           <CardDescription>
             {modo.tipo === "edicion"
-              ? modo.bloqueados.length > 0
+              ? modo.cancelada
+                ? "La póliza está cancelada: la vigencia, la forma de pago y la prima total quedan fijas."
+                : modo.bloqueados.length > 0
                 ? "La póliza ya tiene recibos cobrados: la vigencia, la forma de pago y la prima total quedan fijas."
                 : "Si cambias la vigencia, la forma de pago o la prima total, sus recibos se vuelven a generar."
               : modo.tipo === "renovacion"
@@ -636,7 +659,47 @@ export function PolizaForm({
                 </div>
               </div>
 
-              <FormSection titulo="Póliza">{camposPoliza.map(renderGeneral)}</FormSection>
+              <FormSection titulo="Póliza">
+                {camposPoliza.map(renderGeneral)}
+                {ejecutivos && (
+                  <Controller
+                    name="ejecutivoId"
+                    control={control}
+                    render={({ field }) => (
+                      <div className="space-y-2">
+                        <Label htmlFor="campo-ejecutivo" className="text-xs">
+                          Ejecutivo responsable
+                        </Label>
+                        <Select
+                          value={field.value || SIN_EJECUTIVO}
+                          onValueChange={(v) => {
+                            field.onChange(v === SIN_EJECUTIVO ? "" : v);
+                            limpiarAvisos();
+                          }}
+                          disabled={bloqueado}
+                        >
+                          <SelectTrigger id="campo-ejecutivo" ref={field.ref} className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={SIN_EJECUTIVO}>Sin asignar</SelectItem>
+                            {/* El responsable actual se conserva aunque su cuenta ya no esté activa. */}
+                            {field.value && !ejecutivos.some((e) => e.id === field.value) && (
+                              <SelectItem value={field.value}>Cuenta desactivada</SelectItem>
+                            )}
+                            {ejecutivos.map((e) => (
+                              <SelectItem key={e.id} value={e.id}>
+                                {e.nombre}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">Cartera a la que pertenece la póliza.</p>
+                      </div>
+                    )}
+                  />
+                )}
+              </FormSection>
 
               <FormSection titulo="Contratante">{camposContratante.map(renderGeneral)}</FormSection>
 

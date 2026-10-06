@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CalendarClock, Download, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
+import { Ban, CalendarClock, Download, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
 
 import { PolizasConciliadas, PolizasSinConciliar } from "@/components/polizas/conciliacion-polizas";
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
@@ -8,6 +8,7 @@ import {
   AseguradoraTag,
   AseguradosResumen,
   EstadoVigenciaIndicador,
+  esCobrado,
   estadoRecibo,
   FaltaContacto,
   formaPagoLabel,
@@ -33,10 +34,13 @@ import type { Ramo } from "@/lib/generated/prisma/client";
 import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
 import {
   DIAS_POR_VENCER,
+  esFiltroRecibos,
+  FILTROS_RECIBOS,
   getPolizasListado,
   getRecibosListado,
   LIMITE_LISTADO,
 } from "@/lib/polizas/queries";
+import { getEjecutivos } from "@/lib/usuarios/queries";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -74,39 +78,58 @@ function NotaLimite({ mostrados, total }: { mostrados: number; total: number }) 
 
 const esRamo = (v: unknown): v is Ramo => typeof v === "string" && v in ramoLabel;
 const opcionesRamo = (Object.keys(ramoLabel) as Ramo[]).map((r) => ({ value: r, label: ramoLabel[r] }));
+const PESTANAS = ["polizas", "recibos", "conciliadas", "sin-conciliar"] as const;
+const esPestana = (v: unknown): v is (typeof PESTANAS)[number] =>
+  typeof v === "string" && (PESTANAS as readonly string[]).includes(v);
 
 export default async function PolizasPage({ searchParams }: PageProps<"/polizas">) {
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
   const ramo = esRamo(params.ramo) ? params.ramo : undefined;
   const soloFaltaContacto = params.contacto === "falta";
-  const filtrando = q.trim() !== "" || ramo !== undefined || soloFaltaContacto;
+  const ejecutivo = typeof params.ejecutivo === "string" ? params.ejecutivo.slice(0, 64) : "";
+  const estatus = params.estatus === "vigor" || params.estatus === "canceladas" ? params.estatus : "";
+  const filtroRecibos = esFiltroRecibos(params.recibos) ? params.recibos : "todos";
+  const pestana = esPestana(params.tab) ? params.tab : "polizas";
+  const filtrando = q.trim() !== "" || ramo !== undefined || soloFaltaContacto || ejecutivo !== "" || estatus !== "";
 
+  const user = await requireUser();
   const [
-    { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto },
+    { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto, canceladas },
     { recibos, total: totalRecibos, pendientes },
     conciliacion,
-    user,
+    ejecutivos,
   ] = await Promise.all([
-    getPolizasListado({ q, ramo, faltaContacto: soloFaltaContacto }),
-    getRecibosListado(),
+    getPolizasListado({
+      q,
+      ramo,
+      faltaContacto: soloFaltaContacto,
+      ejecutivo: ejecutivo || undefined,
+      canceladas: estatus === "" ? undefined : estatus === "canceladas",
+    }),
+    getRecibosListado(filtroRecibos),
     getEstadoConciliacion(),
-    requireUser(),
+    // Un ejecutivo que solo ve su cartera no filtra por ejecutivo.
+    user.soloSuCartera ? Promise.resolve(undefined) : getEjecutivos(user.agenciaId),
   ]);
   const hoy = hoyISO();
+  const verEjecutivo = !user.soloSuCartera;
 
-  // El aviso alterna el filtro "Falta contacto" conservando la búsqueda y el ramo.
-  const paramsContacto = new URLSearchParams();
-  if (q.trim()) paramsContacto.set("q", q.trim());
-  if (ramo) paramsContacto.set("ramo", ramo);
-  if (!soloFaltaContacto) paramsContacto.set("contacto", "falta");
+  // Filtros actuales del listado, para el aviso de contacto y el reporte.
+  const filtrosUrl = (extra: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    if (q.trim()) p.set("q", q.trim());
+    if (ramo) p.set("ramo", ramo);
+    if (ejecutivo) p.set("ejecutivo", ejecutivo);
+    if (estatus) p.set("estatus", estatus);
+    for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v);
+    return p;
+  };
+  // El aviso alterna el filtro "Falta contacto" conservando los demás.
+  const paramsContacto = filtrosUrl({ contacto: soloFaltaContacto ? undefined : "falta" });
   const hrefContacto = paramsContacto.size ? `/polizas?${paramsContacto}` : "/polizas";
-
   // El reporte exporta la cartera con los filtros activos.
-  const paramsReporte = new URLSearchParams();
-  if (q.trim()) paramsReporte.set("q", q.trim());
-  if (ramo) paramsReporte.set("ramo", ramo);
-  if (soloFaltaContacto) paramsReporte.set("contacto", "falta");
+  const paramsReporte = filtrosUrl({ contacto: soloFaltaContacto ? "falta" : undefined });
   const hrefReporte = paramsReporte.size ? `/polizas/reporte-cartera?${paramsReporte}` : "/polizas/reporte-cartera";
 
   const resumen = [
@@ -116,8 +139,15 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
       valor: formatNumero(porVencer),
       icon: CalendarClock,
       clase: porVencer > 0 ? "text-warning" : "text-primary",
+      href: "/renovaciones",
     },
-    { label: "Recibos pendientes", valor: formatNumero(pendientes.cantidad), icon: Receipt, clase: "text-primary" },
+    {
+      label: "Recibos pendientes",
+      valor: formatNumero(pendientes.cantidad),
+      icon: Receipt,
+      clase: "text-primary",
+      href: "/polizas?tab=recibos&recibos=pendientes",
+    },
     { label: "Monto por cobrar", valor: formatMoneda(pendientes.monto), icon: Wallet, clase: "text-primary" },
   ];
 
@@ -127,7 +157,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Pólizas y Recibos</h1>
           <p className="text-sm text-muted-foreground">
-            Cartera registrada y calendario de cobranza.
+            {user.soloSuCartera ? "Tu cartera de pólizas y su calendario de cobranza." : "Cartera registrada y calendario de cobranza."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -148,24 +178,38 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
       </div>
 
       <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {resumen.map((r) => (
-          <Card key={r.label} className="flex-row items-center gap-4 px-5 py-4">
-            <div className={cn("flex size-9 items-center justify-center rounded-md border bg-background", r.clase)}>
-              <r.icon className="size-4" />
-            </div>
-            <div>
-              <p className="text-2xl font-semibold tabular-nums">{r.valor}</p>
-              <p className="text-xs text-muted-foreground">{r.label}</p>
-            </div>
-          </Card>
-        ))}
+        {resumen.map((r) => {
+          const contenido = (
+            <Card
+              className={cn(
+                "h-full flex-row items-center gap-4 px-5 py-4",
+                r.href && "transition-colors hover:border-primary/50 hover:bg-primary/[0.03]"
+              )}
+            >
+              <div className={cn("flex size-9 items-center justify-center rounded-md border bg-background", r.clase)}>
+                <r.icon className="size-4" />
+              </div>
+              <div>
+                <p className="text-2xl font-semibold tabular-nums">{r.valor}</p>
+                <p className="text-xs text-muted-foreground">{r.label}</p>
+              </div>
+            </Card>
+          );
+          return r.href ? (
+            <Link key={r.label} href={r.href} className="rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+              {contenido}
+            </Link>
+          ) : (
+            <div key={r.label}>{contenido}</div>
+          );
+        })}
       </section>
 
       {totalGeneral === 0 ? (
         <SinDatos />
       ) : (
-        <Tabs defaultValue="polizas" className="gap-4">
-          <TabsList>
+        <Tabs defaultValue={pestana} className="gap-4">
+          <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="polizas">
               Pólizas · {formatNumero(filtrando ? totalPolizas : totalGeneral)}
             </TabsTrigger>
@@ -208,14 +252,25 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
               ramo={ramo ?? ""}
               ramos={opcionesRamo}
               faltaContacto={soloFaltaContacto}
+              ejecutivo={ejecutivo}
+              ejecutivos={ejecutivos}
+              usuarioId={user.id}
+              estatus={estatus}
             />
+            {canceladas > 0 && estatus === "" && (
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Ban className="size-3.5" /> {formatNumero(canceladas)}{" "}
+                {canceladas === 1 ? "póliza cancelada aparece" : "pólizas canceladas aparecen"} en el listado; filtra por
+                estatus para ocultarlas.
+              </p>
+            )}
             <Card className="gap-0 py-0">
               {polizas.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
                   <SearchX className="size-7 text-muted-foreground" />
                   <p className="font-medium">Ninguna póliza coincide con los filtros</p>
                   <p className="text-sm text-muted-foreground">
-                    Prueba con otro número, nombre o RFC, o cambia el ramo o el filtro de contacto.
+                    Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo o el estatus.
                   </p>
                 </div>
               ) : (
@@ -227,6 +282,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
                       <TableHead>Ramo</TableHead>
                       <TableHead>Asegurados</TableHead>
                       <TableHead>Aseguradora</TableHead>
+                      {verEjecutivo && <TableHead>Ejecutivo</TableHead>}
                       <TableHead>Estado</TableHead>
                       <TableHead className="text-right">Prima total</TableHead>
                       <TableHead className="pr-5 text-right">Recibos pagados</TableHead>
@@ -234,9 +290,10 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
                   </TableHeader>
                   <TableBody>
                     {polizas.map((p) => {
-                      const cobrados = p.recibos.filter((r) => r.estado !== "PENDIENTE").length;
+                      const cobrados = p.recibos.filter((r) => esCobrado(r.estado)).length;
+                      const cobrables = p.recibos.filter((r) => r.estado !== "CANCELADO").length;
                       return (
-                        <TableRow key={p.id}>
+                        <TableRow key={p.id} className={cn(p.canceladaAt && "text-muted-foreground")}>
                           <TableCell className="pl-5">
                             <Link
                               href={`/polizas/${p.id}`}
@@ -275,8 +332,18 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
                           <TableCell>
                             <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
                           </TableCell>
+                          {verEjecutivo && (
+                            <TableCell className="max-w-[160px] truncate text-sm">
+                              {p.ejecutivo?.nombre ?? <span className="text-xs text-muted-foreground">Sin asignar</span>}
+                            </TableCell>
+                          )}
                           <TableCell>
-                            <EstadoVigenciaIndicador fin={p.vigencia_fin} hoy={hoy} diasAviso={DIAS_POR_VENCER} />
+                            <EstadoVigenciaIndicador
+                              fin={p.vigencia_fin}
+                              hoy={hoy}
+                              diasAviso={DIAS_POR_VENCER}
+                              cancelada={p.canceladaAt}
+                            />
                             <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
                               {formatFecha(p.vigencia_inicio)} – {formatFecha(p.vigencia_fin)}
                             </p>
@@ -286,7 +353,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
                             <p className="text-[11px] text-muted-foreground">{formaPagoLabel[p.forma_pago]}</p>
                           </TableCell>
                           <TableCell className="pr-5 text-right tabular-nums">
-                            {cobrados}/{p.recibos.length}
+                            {cobrados}/{cobrables}
                           </TableCell>
                         </TableRow>
                       );
@@ -311,63 +378,88 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
             />
           </TabsContent>
 
-          <TabsContent value="recibos">
+          <TabsContent value="recibos" className="space-y-4">
+            <nav aria-label="Filtrar recibos" className="flex flex-wrap gap-2">
+              {FILTROS_RECIBOS.map((f) => (
+                <Button
+                  key={f.value}
+                  asChild
+                  size="sm"
+                  variant={filtroRecibos === f.value ? "default" : "outline"}
+                  className="h-8"
+                >
+                  <Link
+                    href={f.value === "todos" ? "/polizas?tab=recibos" : `/polizas?tab=recibos&recibos=${f.value}`}
+                    scroll={false}
+                    aria-current={filtroRecibos === f.value ? "page" : undefined}
+                  >
+                    {f.label}
+                  </Link>
+                </Button>
+              ))}
+            </nav>
             <Card className="gap-0 py-0">
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="pl-5">Póliza</TableHead>
-                    <TableHead>Recibo</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Aseguradora</TableHead>
-                    <TableHead>Vencimiento</TableHead>
-                    <TableHead className="text-right">Monto</TableHead>
-                    <TableHead className="pr-5">Estado</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recibos.map((r) => {
-                    const estado = estadoRecibo[r.estado];
-                    return (
-                      <TableRow key={r.id}>
-                        <TableCell className="pl-5 font-mono text-xs">
-                          <Link href={`/polizas/${r.poliza.id}`} className="hover:text-primary hover:underline">
-                            {r.poliza.numeroImpreso}
-                          </Link>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground tabular-nums">
-                          {r.numero}/{r.poliza._count.recibos}
-                        </TableCell>
-                        <TableCell className="max-w-[240px] truncate font-medium">
-                          {r.poliza.cliente.nombre}
-                        </TableCell>
-                        <TableCell>
-                          <AseguradoraTag
-                            nombre={r.poliza.aseguradora.nombre}
-                            color={r.poliza.aseguradora.color_hex}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Vencimiento
-                            fecha={r.fecha_vencimiento}
-                            estado={r.estado}
-                            hoy={hoy}
-                            diasGracia={r.poliza.aseguradora.diasGracia}
-                          />
-                        </TableCell>
-                        <TableCell className="text-right font-medium tabular-nums">
-                          {formatMoneda(Number(r.monto))}
-                        </TableCell>
-                        <TableCell className="pr-5">
-                          <Badge variant="outline" className={cn(estado.className)}>
-                            {estado.label}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              {recibos.length === 0 ? (
+                <p className="px-5 py-12 text-center text-sm text-muted-foreground">
+                  {filtroRecibos === "todos" ? "No hay recibos registrados." : "Ningún recibo coincide con el filtro."}
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="pl-5">Póliza</TableHead>
+                      <TableHead>Recibo</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Aseguradora</TableHead>
+                      <TableHead>Vencimiento</TableHead>
+                      <TableHead className="text-right">Monto</TableHead>
+                      <TableHead className="pr-5">Estado</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recibos.map((r) => {
+                      const estado = estadoRecibo[r.estado];
+                      return (
+                        <TableRow key={r.id}>
+                          <TableCell className="pl-5 font-mono text-xs">
+                            <Link href={`/polizas/${r.poliza.id}`} className="hover:text-primary hover:underline">
+                              {r.poliza.numeroImpreso}
+                            </Link>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground tabular-nums">
+                            {r.numero}/{r.poliza._count.recibos}
+                          </TableCell>
+                          <TableCell className="max-w-[240px] truncate font-medium">
+                            {r.poliza.cliente.nombre}
+                          </TableCell>
+                          <TableCell>
+                            <AseguradoraTag
+                              nombre={r.poliza.aseguradora.nombre}
+                              color={r.poliza.aseguradora.color_hex}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Vencimiento
+                              fecha={r.fecha_vencimiento}
+                              estado={r.estado}
+                              hoy={hoy}
+                              diasGracia={r.poliza.aseguradora.diasGracia}
+                            />
+                          </TableCell>
+                          <TableCell className="text-right font-medium tabular-nums">
+                            {formatMoneda(Number(r.monto))}
+                          </TableCell>
+                          <TableCell className="pr-5">
+                            <Badge variant="outline" className={cn(estado.className)}>
+                              {estado.label}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
               <NotaLimite mostrados={recibos.length} total={totalRecibos} />
             </Card>
           </TabsContent>

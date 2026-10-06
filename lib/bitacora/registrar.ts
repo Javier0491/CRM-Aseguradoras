@@ -17,6 +17,16 @@ export const ACCIONES_BITACORA = {
   "poliza.editar": "Editó póliza",
   "poliza.eliminar": "Eliminó póliza",
   "poliza.prima_neta": "Cambió prima neta",
+  "poliza.cancelar": "Canceló póliza",
+  "poliza.reactivar": "Reactivó póliza",
+  "endoso.crear": "Registró endoso",
+  "endoso.eliminar": "Eliminó endoso",
+  "renovacion.etapa": "Movió renovación",
+  "cliente.editar": "Editó cliente",
+  "cliente.fusionar": "Fusionó clientes",
+  "cartera.reasignar": "Reasignó cartera",
+  "plataforma.cobranza": "Configuró cobranza de la plataforma",
+  "plataforma.pago": "Registró pago de la plataforma",
   "comision.regla_guardar": "Guardó regla de comisión",
   "comision.regla_eliminar": "Eliminó regla de comisión",
   "usuario.crear": "Creó usuario",
@@ -34,7 +44,7 @@ export type AccionBitacora = keyof typeof ACCIONES_BITACORA;
 
 export type EntradaBitacora = {
   accion: AccionBitacora;
-  entidad: "poliza" | "recibo" | "lote" | "regla_comision" | "usuario" | "agencia" | "aseguradora";
+  entidad: "poliza" | "recibo" | "lote" | "regla_comision" | "usuario" | "agencia" | "aseguradora" | "cliente";
   entidadId?: string | null;
   descripcion: string;
   datos?: Prisma.InputJsonValue;
@@ -45,7 +55,8 @@ export type EntradaBitacora = {
  * acción es parte de una: así el registro y el cambio se guardan o se descartan juntos.
  */
 export async function registrarBitacora(
-  usuario: Pick<UsuarioSesion, "id" | "email" | "agenciaId">,
+  /** id y email null: lo hizo el sistema (p. ej. la tarea diaria). */
+  usuario: { id: string | null; email: string | null; agenciaId: UsuarioSesion["agenciaId"] },
   entrada: EntradaBitacora,
   tx: Prisma.TransactionClient = db
 ) {

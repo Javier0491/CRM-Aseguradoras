@@ -1,4 +1,5 @@
 import { getMarcaCorreo } from "@/lib/agencias/queries";
+import { alcanceDe } from "@/lib/auth/alcance";
 import { getCurrentUser } from "@/lib/auth/dal";
 import {
   cuerpoVacio,
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     if (!usuario.email) return error("Tu usuario no tiene un correo para recibir la prueba.", 400);
     destinatarios = [{ id: "prueba", nombre: "Cliente de prueba", email: usuario.email }];
   } else if (solicitud.destinatarios === "todos") {
-    destinatarios = await getDestinatarios(usuario.agenciaId);
+    destinatarios = await getDestinatarios(alcanceDe(usuario));
   } else if (
     Array.isArray(solicitud.destinatarios) &&
     solicitud.destinatarios.every((id) => typeof id === "string")
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     if (solicitud.destinatarios.length > MAX_DESTINATARIOS) {
       return error(`Se pueden enviar como máximo ${MAX_DESTINATARIOS} correos a la vez.`, 400);
     }
-    destinatarios = await getDestinatarios(usuario.agenciaId, [...new Set(solicitud.destinatarios)]);
+    destinatarios = await getDestinatarios(alcanceDe(usuario), [...new Set(solicitud.destinatarios)]);
   } else {
     return error("Destinatarios no válidos.", 400);
   }

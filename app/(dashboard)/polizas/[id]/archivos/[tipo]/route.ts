@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
 import { ARCHIVOS, COLUMNAS_ARCHIVO, esTipoArchivo } from "@/lib/archivos/config";
+import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 
@@ -21,8 +22,11 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/polizas/[id]/arc
     return NextResponse.json({ ok: false, error: "Tipo de archivo inválido." }, { status: 404 });
   }
 
-  const poliza = await db.poliza.findUnique({
-    where: { id, agenciaId: user.agenciaId },
+  if (!/^[a-z0-9]+$/i.test(id)) {
+    return NextResponse.json({ ok: false, error: "La póliza no existe." }, { status: 404 });
+  }
+  const poliza = await db.poliza.findFirst({
+    where: { id, ...polizasDe(alcanceDe(user)) },
     select: {
       caratula_path: true,
       caratula_nombre: true,

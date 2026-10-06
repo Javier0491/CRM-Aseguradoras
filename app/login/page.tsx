@@ -3,20 +3,33 @@ import { redirect } from "next/navigation";
 import { ShieldCheck } from "lucide-react";
 
 import { LoginForm } from "@/components/auth/login-form";
+import { LogoAgencia } from "@/components/layout/logo-agencia";
+import { TemaAgencia } from "@/components/layout/tema-agencia";
+import { getMarcaLogin } from "@/lib/agencias/marca-login";
 import { getCurrentUser } from "@/lib/auth/dal";
+import { nombrePlataforma } from "@/lib/plataforma/marca";
 import { getSupabaseConfig } from "@/lib/supabase/config";
+import { cn } from "@/lib/utils";
 
-export const metadata: Metadata = {
-  title: "Iniciar sesión",
-};
+export async function generateMetadata({ searchParams }: PageProps<"/login">): Promise<Metadata> {
+  const { agencia } = await searchParams;
+  const marca = await getMarcaLogin(typeof agencia === "string" ? agencia : undefined);
+  return { title: { absolute: `Iniciar sesión · ${marca?.nombre ?? nombrePlataforma()}` } };
+}
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   // Misma verificación que el layout del CRM (getUser), para no redirigir en ciclo.
   if (await getCurrentUser()) redirect("/");
-  const { next } = await searchParams;
+  const { next, agencia } = await searchParams;
+  // Con la liga de la agencia (?agencia=…) o la última que entró en este navegador, su marca; si
+  // no, la neutra de la plataforma.
+  const marca = await getMarcaLogin(typeof agencia === "string" ? agencia : undefined);
+  const nombre = marca?.nombre ?? nombrePlataforma();
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
+    // La clase del tema también se aplica aquí: con ?agencia=… el <html> aún trae el anterior.
+    <main className={cn(marca?.tema, "relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12 text-foreground")}>
+      {marca && <TemaAgencia colorHex={marca.colorHex} />}
       {/* Retícula técnica de fondo */}
       <div
         aria-hidden
@@ -29,12 +42,20 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
 
       <div className="relative w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-4 flex size-14 items-center justify-center rounded-xl bg-primary font-mono text-lg font-bold text-primary-foreground shadow-[0_0_40px_-8px_var(--primary)]">
-            PJ
-          </div>
-          <h1 className="text-xl font-semibold tracking-[0.3em]">PJ MAGNUS</h1>
+          {marca ? (
+            <LogoAgencia
+              nombre={marca.nombre}
+              logoUrl={marca.logoUrl}
+              className="mb-4 size-14 rounded-xl text-lg shadow-[0_0_40px_-8px_var(--primary)]"
+            />
+          ) : (
+            <div className="mb-4 flex size-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_0_40px_-8px_var(--primary)]">
+              <ShieldCheck className="size-7" />
+            </div>
+          )}
+          <h1 className="text-xl font-semibold tracking-[0.2em] uppercase">{nombre}</h1>
           <p className="mt-1 text-xs tracking-wide text-muted-foreground uppercase">
-            Promotoría de Seguros · CRM
+            {marca ? "Broker de Seguros · CRM" : "CRM para promotorías de seguros"}
           </p>
         </div>
 
@@ -42,7 +63,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           <div className="mb-6 space-y-1">
             <h2 className="text-base font-semibold">Iniciar sesión</h2>
             <p className="text-sm text-muted-foreground">
-              Ingresa con las credenciales asignadas por la dirección.
+              Ingresa con las credenciales que te asignó {marca ? "tu agencia" : "el administrador de tu agencia"}.
             </p>
           </div>
           <LoginForm

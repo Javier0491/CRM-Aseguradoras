@@ -31,10 +31,26 @@ enum FormaPago {
   MENSUAL
 }
 
+// CANCELADO: recibo pendiente de una póliza cancelada; ya no se cobra (al reactivar la póliza
+// vuelve a PENDIENTE).
 enum EstadoRecibo {
   PENDIENTE
   PAGADO
   CONCILIADO
+  CANCELADO
+}
+
+enum TipoPersona {
+  FISICA
+  MORAL
+}
+
+// Seguimiento de la renovación de una póliza (Renovaciones). Sin etapa = por renovar; la
+// renovada no se guarda: es la que ya tiene capturada su renovación.
+enum EtapaRenovacion {
+  COTIZANDO
+  ENVIADA
+  PERDIDA
 }
 
 // ADMIN: acceso total. EJECUTIVO: operación diaria, sin comisiones, conciliación ni configuración.
@@ -64,6 +80,22 @@ model Agencia {
   suspendida        Boolean   @default(false)
   suspendidaAt      DateTime? @map("suspendida_at")
   motivoSuspension  String?   @map("motivo_suspension")
+  // Liga de acceso con la marca de la agencia: /login?agencia=<slug>.
+  slug              String    @unique
+  // true: cada EJECUTIVO solo ve los clientes y pólizas que tiene asignados.
+  carteraPorEjecutivo Boolean @default(false) @map("cartera_por_ejecutivo")
+  // Cobranza de la plataforma (la configura el SUPERADMIN). Cuota mensual y fecha hasta la que
+  // está pagado el servicio; sin ambas no se cobra ni se suspende nada.
+  cuotaMensual          Decimal?  @db.Decimal(12, 2) @map("cuota_mensual")
+  pagadoHasta           DateTime? @db.Date @map("pagado_hasta")
+  // Días después de pagadoHasta en que aún se puede pagar sin suspensión.
+  diasToleranciaPago    Int       @default(5) @map("dias_tolerancia_pago")
+  // Pasada la tolerancia, la tarea diaria suspende la agencia.
+  suspensionAutomatica  Boolean   @default(false) @map("suspension_automatica")
+  // pagadoHasta del último aviso de cobro enviado: evita repetirlo en el mismo periodo.
+  avisoCobroEnviadoPara DateTime? @db.Date @map("aviso_cobro_enviado_para")
+  // A quién se mandan los avisos de cobro; sin él, a los administradores de la agencia.
+  correoFacturacion     String?   @map("correo_facturacion")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -82,6 +114,10 @@ model Agencia {
   lotesRenglones     LoteRenglon[]
   notasAclaracion    NotaAclaracion[]
   avisosEnviados     AvisoEnviado[]
+  endosos            Endoso[]
+  notasCliente       NotaCliente[]
+  tareas             Tarea[]
+  pagosPlataforma    PagoPlataforma[]
 
   @@map("agencias")
 }
@@ -115,6 +151,10 @@ model Usuario {
   desactivado_at  DateTime?
   created_at      DateTime   @default(now())
 
+  clientesAsignados Cliente[] @relation("EjecutivoCliente")
+  polizasAsignadas  Poliza[]  @relation("EjecutivoPoliza")
+  tareasAsignadas   Tarea[]   @relation("ResponsableTarea")
+
   @@index([agenciaId])
   @@map("usuarios")
 }
@@ -128,11 +168,27 @@ model Cliente {
   rfc       String
   telefono  String
   email     String
+  // Física (RFC de 13) o moral (RFC de 12); se deduce del RFC al crearlo y se puede corregir.
+  tipoPersona     TipoPersona @default(FISICA) @map("tipo_persona")
+  // Solo persona física; si falta se usa la del RFC.
+  fechaNacimiento DateTime?   @db.Date @map("fecha_nacimiento")
+  // Calle, número y colonia.
+  direccion       String?
+  municipio       String?
+  // Entidad federativa.
+  estado          String?
+  codigoPostal    String?     @map("codigo_postal")
+  // Ejecutivo responsable del cliente (cartera).
+  ejecutivoId     String?     @map("ejecutivo_id")
+  ejecutivo       Usuario?    @relation("EjecutivoCliente", fields: [ejecutivoId], references: [id], onDelete: SetNull)
 
   polizas Poliza[]
+  notas   NotaCliente[]
+  tareas  Tarea[]
 
   @@index([rfc])
   @@index([agenciaId])
+  @@index([ejecutivoId])
   @@map("clientes")
 }
 
@@ -216,6 +272,18 @@ model Poliza {
   comision_personalizada_pct Decimal?  @db.Decimal(5, 2)
   created_at                 DateTime  @default(now())
 
+  // Ejecutivo responsable de la póliza (cartera y producción por ejecutivo).
+  ejecutivoId       String?          @map("ejecutivo_id")
+  ejecutivo         Usuario?         @relation("EjecutivoPoliza", fields: [ejecutivoId], references: [id], onDelete: SetNull)
+  // Cancelación: la póliza se conserva con su historia y sus recibos pendientes pasan a
+  // CANCELADO. canceladaAt es la fecha efectiva de la cancelación.
+  canceladaAt       DateTime?        @db.Date @map("cancelada_at")
+  motivoCancelacion String?          @map("motivo_cancelacion")
+  // Seguimiento de la renovación (Renovaciones): etapa, motivo de pérdida o nota, y cuándo cambió.
+  renovacionEtapa   EtapaRenovacion? @map("renovacion_etapa")
+  renovacionNota    String?          @map("renovacion_nota")
+  renovacionEtapaAt DateTime?        @map("renovacion_etapa_at")
+
   // Archivos de la póliza en Supabase Storage, bucket "expedientes".
   // Solo se guarda la referencia (ruta dentro del bucket); el archivo vive en Storage.
   // Carátula en PDF: para consultarla rápido sin descargar el expediente.
@@ -241,6 +309,9 @@ model Poliza {
   asegurados  Asegurado[]
   // Renglones de estados de cuenta que la conciliación asoció a esta póliza sin poder conciliarlos.
   renglonesConciliacion LoteRenglon[]
+  endosos     Endoso[]
+  notas       NotaCliente[]
+  tareas      Tarea[]
 
   @@unique([agenciaId, numeroImpreso])
   @@index([polizaVigor])
@@ -248,7 +319,115 @@ model Poliza {
   @@index([aseguradora_id])
   @@index([vigencia_fin])
   @@index([created_at])
+  @@index([ejecutivoId])
   @@map("polizas")
+}
+
+// Endoso de una póliza: cambio durante la vigencia (suma asegurada, altas o bajas de asegurados,
+// datos) con su movimiento de prima: positiva = cobro adicional, negativa = devolución.
+model Endoso {
+  id           String   @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId    String   @map("agencia_id") @db.Uuid
+  agencia      Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  polizaId     String   @map("poliza_id")
+  poliza       Poliza   @relation(fields: [polizaId], references: [id], onDelete: Cascade)
+  // Número de endoso de la aseguradora, si lo tiene.
+  numero       String?
+  // Clave de lib/polizas/endosos.ts (aumento_suma, alta_asegurado, …).
+  tipo         String
+  // Fecha en que surte efecto.
+  fecha        DateTime @db.Date
+  descripcion  String
+  prima        Decimal? @db.Decimal(14, 2)
+  usuarioEmail String?  @map("usuario_email")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([polizaId, fecha])
+  @@index([agenciaId])
+  @@map("endosos")
+}
+
+// Seguimiento de un cliente: notas, llamadas, mensajes y reuniones, opcionalmente sobre una póliza.
+model NotaCliente {
+  id           String   @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId    String   @map("agencia_id") @db.Uuid
+  agencia      Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  clienteId    String   @map("cliente_id")
+  cliente      Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  polizaId     String?  @map("poliza_id")
+  poliza       Poliza?  @relation(fields: [polizaId], references: [id], onDelete: SetNull)
+  // Clave de lib/clientes/seguimiento.ts (nota, llamada, whatsapp, correo, reunion).
+  tipo         String
+  texto        String
+  usuarioId    String?  @map("usuario_id")
+  usuarioEmail String?  @map("usuario_email")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([clienteId, createdAt])
+  @@index([agenciaId])
+  @@map("notas_cliente")
+}
+
+// Pendiente con fecha y responsable, opcionalmente de un cliente o una póliza.
+model Tarea {
+  id                 String    @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId          String    @map("agencia_id") @db.Uuid
+  agencia            Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  titulo             String
+  descripcion        String?
+  vence              DateTime  @db.Date
+  responsableId      String?   @map("responsable_id")
+  responsable        Usuario?  @relation("ResponsableTarea", fields: [responsableId], references: [id], onDelete: SetNull)
+  clienteId          String?   @map("cliente_id")
+  cliente            Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  polizaId           String?   @map("poliza_id")
+  poliza             Poliza?   @relation(fields: [polizaId], references: [id], onDelete: SetNull)
+  creadaPorEmail     String?   @map("creada_por_email")
+  completadaAt       DateTime? @map("completada_at")
+  completadaPorEmail String?   @map("completada_por_email")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([agenciaId, completadaAt, vence])
+  @@index([responsableId, completadaAt])
+  @@index([clienteId])
+  @@index([polizaId])
+  @@map("tareas")
+}
+
+// Pagos de una agencia por el uso de la plataforma (los registra el SUPERADMIN).
+model PagoPlataforma {
+  id            String   @id @default(cuid())
+  agenciaId     String   @map("agencia_id") @db.Uuid
+  agencia       Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  fecha         DateTime @db.Date
+  monto         Decimal  @db.Decimal(12, 2)
+  // pagadoHasta de la agencia después de este pago.
+  cubreHasta    DateTime @db.Date @map("cubre_hasta")
+  nota          String?
+  registradoPor String?  @map("registrado_por")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([agenciaId, fecha])
+  @@map("pagos_plataforma")
+}
+
+// Ejecuciones de las tareas programadas (GET /api/cron/...): el panel del SUPERADMIN avisa si
+// la última falló o si dejó de correr.
+model EjecucionCron {
+  id      String    @id @default(cuid())
+  // "diaria"
+  tarea   String
+  inicio  DateTime  @default(now())
+  fin     DateTime?
+  ok      Boolean?
+  resumen Json?
+  error   String?
+
+  @@index([tarea, inicio])
+  @@map("ejecuciones_cron")
 }
 
 model Recibo {

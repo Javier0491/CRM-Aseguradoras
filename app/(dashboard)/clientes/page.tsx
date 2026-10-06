@@ -3,6 +3,7 @@ import Link from "next/link";
 import { FilePlus2, Mail, Phone, SearchX, Users } from "lucide-react";
 
 import { BusquedaUrl } from "@/components/layout/busqueda-url";
+import { FiltroEjecutivo } from "@/components/layout/filtro-ejecutivo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,8 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { requireUser } from "@/lib/auth/dal";
 import { getClientesListado, LIMITE_CLIENTES } from "@/lib/clientes/queries";
 import { formatNumero } from "@/lib/format";
+import { getEjecutivos } from "@/lib/usuarios/queries";
 
 export const metadata: Metadata = {
   title: "Directorio de Clientes",
@@ -28,7 +31,13 @@ function SinDato() {
 export default async function ClientesPage({ searchParams }: PageProps<"/clientes">) {
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
-  const { clientes, total, totalGeneral } = await getClientesListado(q);
+  const ejecutivo = typeof params.ejecutivo === "string" ? params.ejecutivo.slice(0, 64) : "";
+  const user = await requireUser();
+  const [{ clientes, total, totalGeneral }, ejecutivos] = await Promise.all([
+    getClientesListado(q, ejecutivo || undefined),
+    // Un ejecutivo que solo ve su cartera no filtra por ejecutivo.
+    user.soloSuCartera ? Promise.resolve(undefined) : getEjecutivos(user.agenciaId),
+  ]);
 
   return (
     <>
@@ -59,17 +68,20 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
         </Card>
       ) : (
         <div className="space-y-4">
-          <BusquedaUrl
-            q={q}
-            placeholder="Buscar por nombre, RFC, teléfono o correo"
-            etiqueta="Buscar clientes"
-          />
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <BusquedaUrl
+              q={q}
+              placeholder="Buscar por nombre, RFC, teléfono o correo"
+              etiqueta="Buscar clientes"
+            />
+            {ejecutivos && <FiltroEjecutivo ejecutivos={ejecutivos} usuarioId={user.id} valor={ejecutivo} />}
+          </div>
           <Card className="gap-0 py-0">
             {clientes.length === 0 ? (
               <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
                 <SearchX className="size-7 text-muted-foreground" />
                 <p className="font-medium">Ningún cliente coincide con la búsqueda</p>
-                <p className="text-sm text-muted-foreground">Prueba con otro nombre, RFC o dato de contacto.</p>
+                <p className="text-sm text-muted-foreground">Prueba con otro nombre, RFC, dato de contacto o ejecutivo.</p>
               </div>
             ) : (
               <Table>
@@ -79,6 +91,7 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
                     <TableHead>RFC</TableHead>
                     <TableHead>Teléfono</TableHead>
                     <TableHead>Correo</TableHead>
+                    {ejecutivos && <TableHead>Ejecutivo</TableHead>}
                     <TableHead className="pr-5 text-right">Pólizas</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -92,6 +105,9 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
                         >
                           {c.nombre}
                         </Link>
+                        {c.tipoPersona === "MORAL" && (
+                          <span className="text-[11px] text-muted-foreground">Persona moral</span>
+                        )}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{c.rfc || <SinDato />}</TableCell>
                       <TableCell>
@@ -120,6 +136,11 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
                           <SinDato />
                         )}
                       </TableCell>
+                      {ejecutivos && (
+                        <TableCell className="max-w-[160px] truncate text-sm">
+                          {c.ejecutivo?.nombre ?? <span className="text-xs text-muted-foreground">Sin asignar</span>}
+                        </TableCell>
+                      )}
                       <TableCell className="pr-5 text-right">
                         {c._count.polizas > 0 ? (
                           <Link href={`/clientes/${c.id}`} aria-label={`Ver expediente y pólizas de ${c.nombre}`}>

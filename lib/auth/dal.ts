@@ -24,6 +24,11 @@ export type UsuarioSesion = {
   agenciaPropiaId: string;
   /** Rol de plataforma SUPERADMIN: puede cambiar de agencia y actúa como ADMIN en cualquiera. */
   superadmin: boolean;
+  /**
+   * EJECUTIVO de una agencia con "cartera por ejecutivo": solo ve los clientes y pólizas que
+   * tiene asignados (ver lib/auth/alcance.ts).
+   */
+  soloSuCartera: boolean;
 };
 
 /**
@@ -40,7 +45,13 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
   if (error || !data.user) return null;
   const perfil = await db.usuario.findUnique({
     where: { id: data.user.id },
-    select: { nombre: true, rol: true, activo: true, agencia: { select: { suspendida: true } }, ...SELECT_AGENCIA_SESION },
+    select: {
+      nombre: true,
+      rol: true,
+      activo: true,
+      agencia: { select: { suspendida: true, carteraPorEjecutivo: true } },
+      ...SELECT_AGENCIA_SESION,
+    },
   });
   // Sin perfil no hay agencia (y por lo tanto ningún dato que pueda ver); desactivada: su token
   // puede seguir vigente un rato, pero ya no es una sesión válida.
@@ -60,6 +71,8 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
     agenciaId,
     agenciaPropiaId: perfil.agenciaId,
     superadmin,
+    // La opción es de la agencia propia, que para quien no es SUPERADMIN es la que opera.
+    soloSuCartera: !superadmin && perfil.rol === "EJECUTIVO" && perfil.agencia.carteraPorEjecutivo,
   };
 });
 

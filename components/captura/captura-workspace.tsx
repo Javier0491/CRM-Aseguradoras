@@ -50,17 +50,24 @@ function combinarRenovacion(ocr: PolizaFormInicial, anterior: PolizaFormInicial)
       ? ocr.asegurados.map((a) => ({ ...a, antiguedad: a.antiguedad || antiguedades.get(a.nombre.trim().toUpperCase()) || "" }))
       : anterior.asegurados,
     sumaAseguradaIlimitada: ocr.sumaAseguradaIlimitada ?? anterior.sumaAseguradaIlimitada,
+    // La renovación sigue en la cartera del mismo ejecutivo.
+    ejecutivoId: anterior.ejecutivoId,
   };
 }
 
 export function CapturaWorkspace({
   aseguradoras,
   verComisiones,
+  ejecutivos,
+  ejecutivoPredeterminado,
   renovacion,
 }: {
   aseguradoras: Opcion[];
   /** Solo ADMIN captura el % de comisión personalizado. */
   verComisiones: boolean;
+  /** Cuentas a las que se puede asignar la póliza (sin ella no hay selector). */
+  ejecutivos?: { id: string; nombre: string }[];
+  ejecutivoPredeterminado?: string;
   /** Captura de la renovación de una póliza, con sus datos precargados. */
   renovacion?: { anterior: { id: string; numero: string }; inicial: PolizaFormInicial };
 }) {
@@ -132,6 +139,8 @@ export function CapturaWorkspace({
         inicial={prellenado.inicial}
         aseguradoras={aseguradoras}
         verComisiones={verComisiones}
+        ejecutivos={ejecutivos}
+        ejecutivoPredeterminado={ejecutivoPredeterminado}
         modo={renovacion ? { tipo: "renovacion", anterior: renovacion.anterior } : undefined}
         ref={formRef}
         extrayendo={extrayendo || leyendoComplemento}

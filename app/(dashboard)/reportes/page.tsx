@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Building2, CalendarClock, Download, FileText, Landmark, PieChart, type LucideIcon } from "lucide-react";
+import { Building2, CalendarClock, Download, FileText, Landmark, PieChart, Users, type LucideIcon } from "lucide-react";
 
 import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
 import {
@@ -127,6 +127,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
     emision,
     distribucion,
     distribucionAseguradora,
+    porEjecutivo,
     porVencer,
     totalPorVencer,
     primaPorVencer,
@@ -229,6 +230,20 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
             prima: d.prima,
           }))}
         />
+        {porEjecutivo && porEjecutivo.length > 0 && (
+          <DistribucionCard
+            titulo="Distribución por ejecutivo"
+            icono={Users}
+            descripcion={`${resumenEmision} Según el ejecutivo responsable de cada póliza.`}
+            columna="Ejecutivo"
+            segmentos={porEjecutivo.map((d) => ({
+              clave: d.id ?? "sin",
+              etiqueta: d.ejecutivo,
+              polizas: d.polizas,
+              prima: d.prima,
+            }))}
+          />
+        )}
       </div>
 
       <Card className="gap-0 pb-0">
@@ -251,6 +266,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
                 <TableHead className="pl-6">Póliza</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Aseguradora</TableHead>
+                <TableHead>Ejecutivo</TableHead>
                 <TableHead>Vence</TableHead>
                 <TableHead className="pr-6 text-right">Prima</TableHead>
               </TableRow>
@@ -277,6 +293,9 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
                   </TableCell>
                   <TableCell>
                     <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+                  </TableCell>
+                  <TableCell className="max-w-[140px] truncate text-sm">
+                    {p.ejecutivo?.nombre ?? <span className="text-xs text-muted-foreground">Sin asignar</span>}
                   </TableCell>
                   <TableCell>
                     <EstadoVigenciaIndicador fin={p.vigencia_fin} hoy={hoy} diasAviso={DIAS_POR_VENCER_REPORTE} />

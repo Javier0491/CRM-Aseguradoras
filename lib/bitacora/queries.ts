@@ -16,6 +16,7 @@ export const ENTIDADES_BITACORA = {
   usuario: "Usuarios",
   agencia: "Agencia",
   aseguradora: "Aseguradoras",
+  cliente: "Clientes",
 } as const;
 export type EntidadBitacora = keyof typeof ENTIDADES_BITACORA;
 

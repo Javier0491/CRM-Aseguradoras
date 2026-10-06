@@ -11,6 +11,7 @@ import {
   rutaArchivoValida,
   type TipoArchivo,
 } from "@/lib/archivos/config";
+import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -50,7 +51,10 @@ export async function prepararSubida(
   if (typeof bytes !== "number" || !Number.isInteger(bytes) || bytes <= 0 || bytes > def.maxBytes) {
     return { ok: false, error: "El archivo está vacío o excede el tamaño permitido." };
   }
-  const existe = await db.poliza.findUnique({ where: { id: polizaId, agenciaId: user.agenciaId }, select: { id: true } });
+  const existe = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
+    select: { id: true },
+  });
   if (!existe) return { ok: false, error: "La póliza no existe." };
 
   // Clave nueva en cada subida: nunca se sobrescribe un archivo existente.
@@ -86,8 +90,8 @@ export async function vincularArchivo(
     return { ok: false, error: "Referencia de archivo inválida." };
   }
 
-  const poliza = await db.poliza.findUnique({
-    where: { id: polizaId, agenciaId: user.agenciaId },
+  const poliza = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
     select: { caratula_path: true, negociacion_path: true, expediente_path: true },
   });
   if (!poliza) return { ok: false, error: "La póliza no existe." };

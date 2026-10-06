@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 
+import { recordarAgencia } from "@/lib/agencias/marca-login";
 import { agenciaEfectiva, SELECT_AGENCIA_SESION, sincronizarAgenciaEnAuth } from "@/lib/agencias/sesion";
 import { db } from "@/lib/db";
 import { getSupabaseConfig } from "@/lib/supabase/config";
@@ -52,6 +53,9 @@ export async function iniciarSesion(_prev: LoginState, formData: FormData): Prom
   if (perfil && (await sincronizarAgenciaEnAuth(data.user, agenciaEfectiva(perfil)))) {
     await supabase.auth.refreshSession();
   }
+  // El próximo inicio de sesión en este navegador lleva la marca de su agencia. Un SUPERADMIN
+  // conserva la marca de su propia agencia, no la de la que esté operando.
+  if (perfil) await recordarAgencia(perfil.agenciaId).catch(() => {});
 
   redirect(destinoSeguro(formData.get("next")));
 }

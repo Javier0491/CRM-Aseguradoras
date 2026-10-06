@@ -2,7 +2,7 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { getAgenciaId } from "@/lib/auth/dal";
+import { getAlcance, polizasDe } from "@/lib/auth/alcance";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 
@@ -12,7 +12,8 @@ import { hoyISO } from "@/lib/format";
  */
 export async function getAseguradorasCatalogo() {
   await connection();
-  const agenciaId = await getAgenciaId();
+  const alcance = await getAlcance();
+  const { agenciaId } = alcance;
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
 
   const [aseguradoras, activas, totales] = await Promise.all([
@@ -32,11 +33,12 @@ export async function getAseguradorasCatalogo() {
     }),
     db.poliza.groupBy({
       by: ["aseguradora_id"],
-      where: { agenciaId, vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } },
+      // Activas: en vigencia hoy y no canceladas; de la cartera que ve la sesión.
+      where: { ...polizasDe(alcance), canceladaAt: null, vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } },
       _count: { _all: true },
       _sum: { prima_total: true },
     }),
-    db.poliza.groupBy({ by: ["aseguradora_id"], where: { agenciaId }, _count: { _all: true } }),
+    db.poliza.groupBy({ by: ["aseguradora_id"], where: polizasDe(alcance), _count: { _all: true } }),
   ]);
 
   const activasPor = new Map(activas.map((g) => [g.aseguradora_id, g]));

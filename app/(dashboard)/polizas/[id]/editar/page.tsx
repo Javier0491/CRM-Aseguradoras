@@ -9,6 +9,7 @@ import { requireUser, veComisiones } from "@/lib/auth/dal";
 import { getPolizaParaEditar } from "@/lib/polizas/formulario";
 import { CAMPOS_CALENDARIO } from "@/lib/polizas/guardar";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
+import { getEjecutivos } from "@/lib/usuarios/queries";
 
 export const metadata: Metadata = {
   title: "Editar póliza",
@@ -18,9 +19,11 @@ export default async function EditarPolizaPage({ params }: PageProps<"/polizas/[
   const { id } = await params;
   const user = await requireUser();
   const verComisiones = veComisiones(user);
-  const [poliza, aseguradoras] = await Promise.all([
+  const [poliza, aseguradoras, ejecutivos] = await Promise.all([
     getPolizaParaEditar(id, { incluirComision: verComisiones }),
     getAseguradorasOpciones(),
+    // Un ejecutivo que solo ve su cartera no reasigna sus pólizas.
+    user.soloSuCartera ? Promise.resolve(undefined) : getEjecutivos(user.agenciaId),
   ]);
   if (!poliza) notFound();
 
@@ -35,11 +38,13 @@ export default async function EditarPolizaPage({ params }: PageProps<"/polizas/[
         inicial={poliza.inicial}
         aseguradoras={aseguradoras}
         verComisiones={verComisiones}
+        ejecutivos={ejecutivos}
         modo={{
           tipo: "edicion",
           polizaId: poliza.id,
           numero: poliza.numero,
           bloqueados: poliza.conCobros ? CAMPOS_CALENDARIO : [],
+          cancelada: poliza.cancelada,
         }}
       />
     </div>
