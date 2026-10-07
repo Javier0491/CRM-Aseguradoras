@@ -6,7 +6,7 @@ import { ReglasCobranzaDialog } from "@/components/aseguradoras/reglas-cobranza"
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { getAseguradorasCatalogo } from "@/lib/aseguradoras/queries";
-import { esAdmin, requireUser } from "@/lib/auth/dal";
+import { esAdmin, requireUsuarioCrm } from "@/lib/auth/dal";
 import { normalizarHex } from "@/lib/color";
 import { formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,7 @@ function dominio(url: string) {
 const esUrlWeb = (url: string) => /^https?:\/\//i.test(url.trim());
 
 export default async function AseguradorasPage() {
-  const [aseguradoras, user] = await Promise.all([getAseguradorasCatalogo(), requireUser()]);
+  const [aseguradoras, user] = await Promise.all([getAseguradorasCatalogo(), requireUsuarioCrm()]);
   const puedeEditar = esAdmin(user);
   const totalActivas = aseguradoras.reduce((s, a) => s + a.polizasActivas, 0);
 

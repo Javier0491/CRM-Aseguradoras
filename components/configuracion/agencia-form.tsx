@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, CheckCircle2, ImageUp, Loader2, Moon, Sun, Trash2 } from "lucide-react";
+import { AlertTriangle, ImageUp, Loader2, Moon, Sun, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { LogoAgencia } from "@/components/layout/logo-agencia";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
       if (archivoDocRef.current) formData.set("logoDocumentos", archivoDocRef.current);
       const r = await actualizarAgencia(prev, formData);
       if (r.ok) {
+        toast.success("Cambios guardados");
         // El logo guardado ya llega en las props (el layout se revalida).
         archivoRef.current = null;
         setArchivo(null);
@@ -375,11 +377,6 @@ export function AgenciaForm({ agencia }: { agencia: Agencia }) {
         </Card>
 
         <div className="flex items-center justify-end gap-3">
-          {state.ok && !pendiente && (
-            <span className="flex items-center gap-1.5 text-xs text-success">
-              <CheckCircle2 className="size-3.5" /> Cambios guardados
-            </span>
-          )}
           {state.error && <span className="text-xs text-destructive">{state.error}</span>}
           <Button type="submit" disabled={pendiente || Boolean(errorArchivo) || Boolean(errorArchivoDoc)}>
             {pendiente && <Loader2 className="animate-spin" />} Guardar cambios

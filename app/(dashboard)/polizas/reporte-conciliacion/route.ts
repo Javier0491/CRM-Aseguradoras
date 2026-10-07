@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { ramoLabel } from "@/components/polizas/poliza-ui";
-import { getCurrentUser, veComisiones } from "@/lib/auth/dal";
+import { getUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
 import { etiquetaMotivo, etiquetaNoEncontrada } from "@/lib/polizas/conciliacion-motivos";
@@ -14,7 +14,7 @@ const fechaIso = (d: Date) => d.toISOString().slice(0, 10);
  * póliza no se encontró. La comisión pagada solo la ve el rol ADMIN.
  */
 export async function GET() {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }

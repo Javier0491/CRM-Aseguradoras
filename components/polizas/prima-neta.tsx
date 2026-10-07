@@ -2,11 +2,13 @@
 
 import * as React from "react";
 import { AlertTriangle, Check, Loader2, Pencil, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatMoneda } from "@/lib/format";
 import { actualizarPrimaNeta } from "@/lib/polizas/actions";
+import { conDeshacer } from "@/lib/toast";
 
 /**
  * Prima neta de la póliza con edición en línea. Sin ella no se puede calcular la comisión
@@ -25,6 +27,13 @@ export function PrimaNeta({ polizaId, valor }: { polizaId: string; valor: number
       if (res.ok) {
         setEditando(false);
         setError(null);
+        // Sin valor anterior no hay a qué regresar (la prima neta no se puede dejar vacía).
+        toast.success(
+          "Prima neta guardada",
+          valor === null
+            ? undefined
+            : conDeshacer(() => actualizarPrimaNeta(polizaId, valor.toFixed(2)), `Prima neta de vuelta en ${formatMoneda(valor)}.`)
+        );
       } else {
         setError(res.error);
       }

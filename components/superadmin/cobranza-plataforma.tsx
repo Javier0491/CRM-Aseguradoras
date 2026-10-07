@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { BadgeDollarSign, Loader2, Receipt, Save, Settings2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +23,7 @@ import { formatFecha, formatMoneda } from "@/lib/format";
 import { configurarCobranza, registrarPagoPlataforma } from "@/lib/plataforma/actions";
 import {
   DIAS_AVISO_COBRO,
+  detalleCobro,
   ETIQUETA_ESTADO_COBRO,
   MAX_DIAS_TOLERANCIA,
   MAX_MESES_PAGO,
@@ -40,16 +42,6 @@ export const ESTILO_ESTADO_COBRO: Record<EstadoCobro, string> = {
 };
 
 const fecha = (iso: string) => formatFecha(`${iso}T00:00:00Z`);
-
-/** Detalle del estado de pago: cuántos días faltan o hace cuánto venció. */
-export function detalleCobro(a: Pick<CobranzaAgencia, "estado" | "dias" | "limite">) {
-  if (a.dias === null) return "Sin cuota configurada";
-  if (a.dias > 0) return `Vence en ${a.dias} ${a.dias === 1 ? "día" : "días"}`;
-  if (a.dias === 0) return "Vence hoy";
-  return a.estado === "vencida" && a.limite
-    ? `Venció hace ${-a.dias} d · tolerancia al ${fecha(a.limite)}`
-    : `Venció hace ${-a.dias} d`;
-}
 
 /** Tabla de cobranza de la plataforma: estado de pago de cada agencia, su configuración y sus pagos. */
 export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgencia[]; hoy: string }) {
@@ -72,14 +64,22 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
           </TableRow>
         </TableHeader>
         <TableBody>
+          {agencias.length === 0 && (
+            <TableRow className="hover:bg-transparent">
+              <TableCell colSpan={6} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                Aún no hay agencias en la plataforma.
+              </TableCell>
+            </TableRow>
+          )}
           {agencias.map((a) => (
             <TableRow key={a.id}>
-              <TableCell className="pl-5 font-medium">
+              {/* El nombre (hasta 80 caracteres) se parte: así Configurar y Registrar pago quedan a la vista. */}
+              <TableCell className="max-w-64 min-w-40 pl-5 font-medium whitespace-normal wrap-anywhere">
                 {a.nombre}
                 {a.suspendida && <p className="text-[11px] font-normal text-destructive">Suspendida</p>}
               </TableCell>
-              <TableCell>
-                <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium", ESTILO_ESTADO_COBRO[a.estado])}>
+              <TableCell className="min-w-48 whitespace-normal">
+                <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap", ESTILO_ESTADO_COBRO[a.estado])}>
                   {ETIQUETA_ESTADO_COBRO[a.estado]}
                 </span>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -143,8 +143,12 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
         suspensionAutomatica: automatica,
         correoFacturacion: correo,
       });
-      if (r.ok) onListo();
-      else setError(r.error);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      onListo();
+      toast.success("Cobranza guardada", { description: agencia.nombre });
     });
   }
 
@@ -238,7 +242,6 @@ function FormPago({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; hoy: st
   const [nota, setNota] = React.useState("");
   const [reactivar, setReactivar] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-  const [listo, setListo] = React.useState<string | null>(null);
   const [pendiente, startTransition] = React.useTransition();
   const cubreHasta = siguientePagadoHasta(agencia.pagadoHasta, hoy, meses);
 
@@ -253,23 +256,13 @@ function FormPago({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; hoy: st
     setError(null);
     startTransition(async () => {
       const r = await registrarPagoPlataforma(agencia.id, { fecha: fechaPago, monto: importe, meses, nota, reactivar });
-      if (r.ok) setListo(r.mensaje ?? "Pago registrado.");
-      else setError(r.error);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      onListo();
+      toast.success(`Pago de ${agencia.nombre} registrado`, { description: r.mensaje });
     });
-  }
-
-  if (listo) {
-    return (
-      <div className="space-y-4">
-        <DialogHeader>
-          <DialogTitle>Pago registrado</DialogTitle>
-          <DialogDescription>{listo}</DialogDescription>
-        </DialogHeader>
-        <DialogFooter>
-          <Button onClick={onListo}>Cerrar</Button>
-        </DialogFooter>
-      </div>
-    );
   }
 
   return (

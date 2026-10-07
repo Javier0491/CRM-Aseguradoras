@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { PolizaForm } from "@/components/captura/poliza-form";
 import { Button } from "@/components/ui/button";
-import { requireUser, veComisiones } from "@/lib/auth/dal";
+import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { getPolizaParaEditar } from "@/lib/polizas/formulario";
 import { CAMPOS_CALENDARIO } from "@/lib/polizas/guardar";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default async function EditarPolizaPage({ params }: PageProps<"/polizas/[id]/editar">) {
   const { id } = await params;
-  const user = await requireUser();
+  const user = await requireUsuarioCrm();
   const verComisiones = veComisiones(user);
   const [poliza, aseguradoras, ejecutivos] = await Promise.all([
     getPolizaParaEditar(id, { incluirComision: verComisiones }),

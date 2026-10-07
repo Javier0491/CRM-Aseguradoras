@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 
-import { getAdmin, getCurrentUser, veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
+import { alcanceDe } from "@/lib/auth/alcance";
+import { esAdmin, getAdmin, getConciliador, getCurrentUser, veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
 import { AclaracionError, registrarSeguimiento } from "@/lib/conciliacion/aclaraciones";
 import { agruparPorFolio, descartarRecibosDuplicados } from "@/lib/conciliacion/agrupar";
 import {
@@ -57,20 +58,24 @@ function sanitizarFilas(raw: unknown): FilaEstado[] | null {
 }
 
 type Validacion =
-  | { ok: true; admin: UsuarioSesion; aseguradoraId: string; filas: FilaEstado[] }
+  | { ok: true; usuario: UsuarioSesion; aseguradoraId: string; filas: FilaEstado[] }
   | { ok: false; error: string };
 
+/** Respuesta para quien no puede conciliar: su rol no lo permite o su sesión expiró. */
+async function sinPermiso(accion: string) {
+  return (await getCurrentUser())
+    ? { ok: false as const, error: `Tu rol no permite ${accion}. Pídeselo a un administrador.` }
+    : { ok: false as const, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+}
+
 async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Validacion> {
-  const admin = await getAdmin();
-  if (!admin) {
-    return (await getCurrentUser())
-      ? { ok: false, error: "Solo un administrador puede conciliar la cobranza." }
-      : { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
-  }
+  // Concilian el Administrador y el Ejecutivo comercial (ver puedeConciliar).
+  const usuario = await getConciliador();
+  if (!usuario) return sinPermiso("conciliar la cobranza");
   if (typeof aseguradoraId !== "string") return { ok: false, error: "Selecciona la aseguradora." };
-  // Solo aseguradoras de la agencia del administrador.
+  // Solo aseguradoras de la agencia de la sesión.
   const aseguradora = await db.aseguradora.findUnique({
-    where: { id: aseguradoraId, agenciaId: admin.agenciaId },
+    where: { id: aseguradoraId, agenciaId: usuario.agenciaId },
     select: { id: true, ignoraRecibosDuplicados: true },
   });
   if (!aseguradora) return { ok: false, error: "La aseguradora no existe." };
@@ -80,7 +85,25 @@ async function validar(aseguradoraId: unknown, rawFilas: unknown): Promise<Valid
   // aseguradora lo pide); se repite aquí porque no se confía en él.
   let limpias = agruparPorFolio(filas).filas;
   if (aseguradora.ignoraRecibosDuplicados) limpias = descartarRecibosDuplicados(limpias).filas;
-  return { ok: true, admin, aseguradoraId: aseguradora.id, filas: limpias };
+  return { ok: true, usuario, aseguradoraId: aseguradora.id, filas: limpias };
+}
+
+/**
+ * Cruce con el alcance de la sesión. Para quien solo ve su cartera, los renglones de pólizas
+ * ajenas salen como no encontrados: se le explica que pueden ser de otra cartera.
+ */
+async function cruzar(v: Extract<Validacion, { ok: true }>) {
+  const alcance = alcanceDe(v.usuario);
+  const cruce = await cruzarEstadoDeCuenta(alcance, v.aseguradoraId, v.filas);
+  if (!alcance.ejecutivoId) return cruce;
+  return {
+    ...cruce,
+    resultados: cruce.resultados.map((r) =>
+      r.estatus === "no_encontrado"
+        ? { ...r, detalle: "No está en tu cartera o no está registrada con esta aseguradora." }
+        : r
+    ),
+  };
 }
 
 /**
@@ -113,8 +136,8 @@ function sinComisiones(resultados: ResultadoMatch[], resumen: ResumenMatch) {
 export async function analizarConciliacion(aseguradoraId: string, filas: FilaEstado[]): Promise<AnalisisResultado> {
   const v = await validar(aseguradoraId, filas);
   if (!v.ok) return { ok: false, error: v.error };
-  const cruce = await cruzarEstadoDeCuenta(v.admin.agenciaId, v.aseguradoraId, v.filas);
-  const { resultados, resumen } = veComisiones(v.admin) ? cruce : sinComisiones(cruce.resultados, cruce.resumen);
+  const cruce = await cruzar(v);
+  const { resultados, resumen } = veComisiones(v.usuario) ? cruce : sinComisiones(cruce.resultados, cruce.resumen);
   return { ok: true, resultados, resumen };
 }
 
@@ -137,12 +160,12 @@ export async function aplicarConciliacion(
   if (!v.ok) return { ok: false, error: v.error };
   const nombre = typeof archivoNombre === "string" && archivoNombre.trim() ? archivoNombre.trim().slice(0, 200) : "archivo sin nombre";
 
-  const { resultados } = await cruzarEstadoDeCuenta(v.admin.agenciaId, v.aseguradoraId, v.filas);
+  const { resultados } = await cruzar(v);
   try {
     const { loteId, conciliados, pagados, creados } = await aplicarResultados(resultados, {
       aseguradoraId: v.aseguradoraId,
       archivoNombre: nombre,
-      usuario: v.admin,
+      usuario: v.usuario,
     });
 
     revalidarCobranza();
@@ -167,17 +190,25 @@ function revalidarCobranza() {
 
 export type RevertirResultado = { ok: true; restaurados: number; borrados: number } | { ok: false; error: string };
 
-/** Revierte un lote de conciliación (ver revertirLote). Solo administradores. */
+/**
+ * Revierte un lote de conciliación (ver revertirLote). El administrador revierte cualquiera; el
+ * ejecutivo comercial, solo los que aplicó él.
+ */
 export async function revertirLoteConciliacion(loteId: string): Promise<RevertirResultado> {
-  const admin = await getAdmin();
-  if (!admin) {
-    return (await getCurrentUser())
-      ? { ok: false, error: "Solo un administrador puede revertir una conciliación." }
-      : { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
-  }
+  const usuario = await getConciliador();
+  if (!usuario) return sinPermiso("revertir una conciliación");
   if (typeof loteId !== "string" || !/^[a-z0-9]+$/i.test(loteId)) return { ok: false, error: "Datos inválidos." };
+  if (!esAdmin(usuario)) {
+    const lote = await db.loteConciliacion.findUnique({
+      where: { id: loteId, agenciaId: usuario.agenciaId },
+      select: { usuario_id: true },
+    });
+    if (lote && lote.usuario_id !== usuario.id) {
+      return { ok: false, error: "Solo quien aplicó la conciliación o un administrador la puede revertir." };
+    }
+  }
   try {
-    const { restaurados, borrados } = await revertirLote(loteId, admin);
+    const { restaurados, borrados } = await revertirLote(loteId, usuario);
     revalidarCobranza();
     return { ok: true, restaurados, borrados };
   } catch (e) {

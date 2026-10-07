@@ -120,6 +120,8 @@ export async function enviarCorreos({
 }): Promise<ResultadoEnvio[]> {
   const { resend, remitente, responderA } = getConfigCorreo();
   const de = remitenteDeAgencia(remitente, marca.nombre);
+  // Las respuestas de los clientes llegan al correo de servicio de la agencia.
+  const responder = marca.correoServicio?.trim() || responderA;
   const { html: cuerpo, adjuntos } = extraerImagenesEnLinea(html);
   const resultados: ResultadoEnvio[] = [];
 
@@ -130,7 +132,7 @@ export async function enviarCorreos({
     const error = await despachar(resend, {
       from: de,
       to: d.email,
-      replyTo: responderA,
+      replyTo: responder,
       subject: asuntoFinal,
       html: htmlFinal,
       text: htmlATexto(htmlFinal),
@@ -187,7 +189,7 @@ export async function enviarCorreoPlataforma({
 /**
  * Envía un aviso automático ya convertido a HTML (plantilla de React Email). Sale de la
  * dirección universal con el nombre de la agencia; `copia` es el buzón de la agencia que recibe
- * copia oculta (bcc) y las respuestas del cliente (reply-to).
+ * copia oculta (bcc) y las respuestas del cliente (reply-to), salvo que `responderA` indique otro.
  */
 export async function enviarAviso({
   agencia,
@@ -196,6 +198,8 @@ export async function enviarAviso({
   html,
   texto,
   copia,
+  responderA: responderAgencia,
+  modulo = "avisos",
 }: {
   agencia: string;
   para: string;
@@ -203,6 +207,9 @@ export async function enviarAviso({
   html: string;
   texto: string;
   copia?: string;
+  responderA?: string;
+  /** Etiqueta del envío en Resend. */
+  modulo?: string;
 }): Promise<{ ok: boolean; error?: string }> {
   const { resend, remitente, responderA } = getConfigCorreo();
   const error = await despachar(resend, {
@@ -210,11 +217,11 @@ export async function enviarAviso({
     to: para,
     // Copia oculta: las ejecutivas se enteran sin que el cliente vea el buzón entre los destinatarios.
     bcc: copia && copia.toLowerCase() !== para.toLowerCase() ? copia : undefined,
-    replyTo: copia ?? responderA,
+    replyTo: responderAgencia ?? copia ?? responderA,
     subject: asunto,
     html,
     text: texto,
-    tags: [{ name: "modulo", value: "avisos" }],
+    tags: [{ name: "modulo", value: modulo }],
   });
   if (error && (error.statusCode === 401 || error.statusCode === 403)) {
     // Llave inválida o dominio no verificado: no tiene caso intentar con el resto.

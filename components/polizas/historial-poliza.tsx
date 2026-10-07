@@ -49,7 +49,7 @@ export function HistorialPoliza({ eventos, limite }: { eventos: EventoHistorial[
                 <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-full border", clase)}>
                   <Icono className="size-3.5" />
                 </span>
-                <div className="min-w-0 flex-1 pt-1">
+                <div className="min-w-0 flex-1 pt-1 wrap-anywhere">
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
                     <p className="text-sm font-medium">{e.titulo}</p>
                     <time dateTime={e.fecha.toISOString()} className="text-xs text-muted-foreground tabular-nums">
@@ -57,7 +57,7 @@ export function HistorialPoliza({ eventos, limite }: { eventos: EventoHistorial[
                     </time>
                   </div>
                   <p className="text-xs text-muted-foreground">{e.usuario ?? "Sistema"}</p>
-                  <p className="mt-1 text-sm break-words text-foreground/90">{e.descripcion}</p>
+                  <p className="mt-1 text-sm text-foreground/90">{e.descripcion}</p>
                   {e.cambios && e.cambios.length > 0 && (
                     <dl className="mt-2 grid gap-1 rounded-lg border bg-background/60 p-2.5 text-xs">
                       {e.cambios.map((c) => (

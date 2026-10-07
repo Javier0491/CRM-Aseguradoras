@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
 import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
-import { getCurrentUser, veComisiones } from "@/lib/auth/dal";
+import { getUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import {
@@ -13,11 +13,12 @@ import {
   type EditarPolizaResultado,
   type GuardarPolizaResultado,
 } from "@/lib/polizas/guardar";
+import { enviarAgradecimientoRenovacion } from "@/lib/polizas/agradecimiento";
 import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
   // Las Server Actions son endpoints públicos: se valida la sesión aquí mismo.
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) {
     return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
@@ -31,16 +32,25 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
     leidaConIa: typeof raw === "object" && raw !== null && "origen" in raw && raw.origen === "ocr",
     ...(renuevaA !== undefined && { renuevaA: String(renuevaA) }),
   });
-  if (resultado.ok) {
-    revalidatePath("/polizas", "layout");
-    revalidatePath("/");
+  if (!resultado.ok) return resultado;
+  revalidatePath("/polizas", "layout");
+  revalidatePath("/");
+  // Renovación: "Gracias por continuar con nosotros" al cliente, salvo que se desmarque en el
+  // formulario. Un fallo del correo no deshace la renovación: solo se informa.
+  const agradecer = !(typeof raw === "object" && raw !== null && "agradecer" in raw && raw.agradecer === false);
+  if (renuevaA !== undefined && agradecer) {
+    const agradecimiento = await enviarAgradecimientoRenovacion(resultado.poliza.id, user.agenciaId).catch((e) => {
+      console.error("[guardarPoliza] agradecimiento", e instanceof Error ? e.message : e);
+      return { enviado: false as const, motivo: "no se pudo enviar el correo." };
+    });
+    return { ...resultado, agradecimiento };
   }
   return resultado;
 }
 
 /** Corrige una póliza existente (ver actualizarPoliza). */
 export async function editarPoliza(polizaId: string, raw: unknown): Promise<EditarPolizaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   const resultado = await actualizarPoliza(polizaId, raw, { permitirComision: veComisiones(user), usuario: user });
   if (resultado.ok) {
@@ -70,7 +80,7 @@ export type EliminarPolizaResultado =
  * póliza apuntando a archivos inexistentes.
  */
 export async function eliminarPoliza(polizaId: string, confirmacion: string): Promise<EliminarPolizaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { ok: false, error: "Datos inválidos." };
 
@@ -129,7 +139,7 @@ export type ActualizarPrimaNetaResultado = { ok: true } | { ok: false; error: st
  * todo para las pólizas registradas antes de que existiera el campo.
  */
 export async function actualizarPrimaNeta(polizaId: string, valor: string): Promise<ActualizarPrimaNetaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || typeof valor !== "string") {
     return { ok: false, error: "Datos inválidos." };

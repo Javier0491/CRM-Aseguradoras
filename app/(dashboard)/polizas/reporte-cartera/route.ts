@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { estadoVigencia, formaPagoLabel, ramoLabel, vigenciaEstilo } from "@/components/polizas/poliza-ui";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import { DIAS_POR_VENCER, getPolizasExportacion } from "@/lib/polizas/queries";
@@ -14,7 +14,7 @@ const esRamo = (v: unknown): v is Ramo => typeof v === "string" && v in ramoLabe
  * filtros del listado (?q=…&ramo=…&ejecutivo=…&estatus=…&contacto=falta), pero sin su límite de renglones.
  */
 export async function GET(request: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }

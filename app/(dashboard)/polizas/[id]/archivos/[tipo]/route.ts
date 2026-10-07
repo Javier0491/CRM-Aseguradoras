@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getAlmacen } from "@/lib/archivos/almacen";
 import { ARCHIVOS, COLUMNAS_ARCHIVO, esTipoArchivo } from "@/lib/archivos/config";
 import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 
 /**
@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
  * `?descargar=1`; el expediente ZIP siempre se descarga.
  */
 export async function GET(req: NextRequest, ctx: RouteContext<"/polizas/[id]/archivos/[tipo]">) {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }

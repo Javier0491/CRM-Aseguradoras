@@ -1,5 +1,6 @@
 // Cobranza de la plataforma a cada agencia: estado del pago, siguiente periodo y qué hace la
 // tarea diaria (funciones puras; fechas YYYY-MM-DD).
+import { formatFecha } from "@/lib/format";
 import { sumarMeses } from "@/lib/polizas/recibos";
 
 /** Días antes de que venza el periodo pagado en que se avisa a la agencia. */
@@ -80,3 +81,16 @@ export const ETIQUETA_ESTADO_COBRO: Record<EstadoCobro, string> = {
   vencida: "Pago vencido",
   suspendible: "Fuera de tolerancia",
 };
+
+/**
+ * Detalle del estado de pago: cuántos días faltan o hace cuánto venció. Vive aquí (no en el
+ * componente de la tabla, que es de cliente) porque también lo usa el servidor en el lobby.
+ */
+export function detalleCobro(a: { estado: EstadoCobro; dias: number | null; limite: string | null }) {
+  if (a.dias === null) return "Sin cuota configurada";
+  if (a.dias > 0) return `Vence en ${a.dias} ${a.dias === 1 ? "día" : "días"}`;
+  if (a.dias === 0) return "Vence hoy";
+  return a.estado === "vencida" && a.limite
+    ? `Venció hace ${-a.dias} d · tolerancia al ${formatFecha(`${a.limite}T00:00:00Z`)}`
+    : `Venció hace ${-a.dias} d`;
+}

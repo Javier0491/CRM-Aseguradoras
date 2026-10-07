@@ -6,7 +6,7 @@ import { Ban, RefreshCcw } from "lucide-react";
 import { CapturaWorkspace } from "@/components/captura/captura-workspace";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { requireUser, veComisiones } from "@/lib/auth/dal";
+import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { getPolizaParaRenovar } from "@/lib/polizas/formulario";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
 import { getEjecutivos } from "@/lib/usuarios/queries";
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 
 export default async function CapturaPage({ searchParams }: PageProps<"/captura">) {
   const { renovar } = await searchParams;
-  const [user, aseguradoras] = await Promise.all([requireUser(), getAseguradorasOpciones()]);
+  const [user, aseguradoras] = await Promise.all([requireUsuarioCrm(), getAseguradorasOpciones()]);
   const verComisiones = veComisiones(user);
   // Un ejecutivo que solo ve su cartera no elige: sus pólizas quedan a su nombre.
   const ejecutivos = user.soloSuCartera ? undefined : await getEjecutivos(user.agenciaId);

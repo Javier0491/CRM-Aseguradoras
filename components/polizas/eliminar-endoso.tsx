@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { eliminarEndoso } from "@/lib/polizas/estatus-actions";
@@ -39,7 +40,8 @@ export function EliminarEndoso({ endosoId }: { endosoId: string }) {
           onClick={() =>
             startTransition(async () => {
               const r = await eliminarEndoso(endosoId);
-              if (!r.ok) setError(r.error);
+              if (r.ok) toast("Endoso eliminado");
+              else setError(r.error);
             })
           }
         >

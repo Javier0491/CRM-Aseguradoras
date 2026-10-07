@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Check, CheckCircle2, Copy, Link2, Loader2, Save, Users } from "lucide-react";
+import { Check, Copy, Link2, Loader2, Mail, Save, Users } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,10 +16,18 @@ import { normalizarSlug } from "@/lib/agencias/slug";
 const sinSuscripcion = () => () => {};
 
 /**
- * Ajustes de operación de la agencia: su liga de acceso con marca y si cada ejecutivo ve solo su
- * cartera de clientes y pólizas.
+ * Ajustes de operación de la agencia: su liga de acceso con marca, si cada ejecutivo ve solo su
+ * cartera de clientes y pólizas, y el correo de servicio de los correos a clientes.
  */
-export function AjustesOperacion({ slug, carteraPorEjecutivo }: { slug: string; carteraPorEjecutivo: boolean }) {
+export function AjustesOperacion({
+  slug,
+  carteraPorEjecutivo,
+  correoServicio,
+}: {
+  slug: string;
+  carteraPorEjecutivo: boolean;
+  correoServicio: string | null;
+}) {
   const [valorSlug, setValorSlug] = React.useState(slug);
   const [cartera, setCartera] = React.useState(carteraPorEjecutivo);
   // El dominio solo se conoce en el navegador (en el servidor queda vacío).
@@ -28,7 +37,11 @@ export function AjustesOperacion({ slug, carteraPorEjecutivo }: { slug: string; 
     () => ""
   );
   const [copiado, setCopiado] = React.useState(false);
-  const [state, action, pendiente] = React.useActionState<AjustesAgenciaState, FormData>(actualizarAjustesAgencia, {});
+  const [state, action, pendiente] = React.useActionState<AjustesAgenciaState, FormData>(async (prev, formData) => {
+    const r = await actualizarAjustesAgencia(prev, formData);
+    if (r.ok) toast.success("Ajustes guardados");
+    return r;
+  }, {});
   const liga = `${origen}/login?agencia=${slug}`;
 
   async function copiar() {
@@ -45,8 +58,10 @@ export function AjustesOperacion({ slug, carteraPorEjecutivo }: { slug: string; 
     <Card>
       <form action={action}>
         <CardHeader>
-          <CardTitle className="text-base">Acceso y cartera</CardTitle>
-          <CardDescription>Cómo entra tu equipo y qué parte de la cartera ve cada ejecutivo.</CardDescription>
+          <CardTitle className="text-base">Acceso, cartera y servicio</CardTitle>
+          <CardDescription>
+            Cómo entra tu equipo, qué parte de la cartera ve cada ejecutivo y a dónde escriben tus clientes.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
@@ -97,12 +112,32 @@ export function AjustesOperacion({ slug, carteraPorEjecutivo }: { slug: string; 
             <input type="hidden" name="carteraPorEjecutivo" value={cartera ? "1" : "0"} />
           </div>
 
-          <div className="flex items-center justify-end gap-3">
-            {state.ok && !pendiente && (
-              <span className="flex items-center gap-1.5 text-sm text-success">
-                <CheckCircle2 className="size-4" /> Guardado
-              </span>
+          <div className="space-y-2">
+            <Label htmlFor="ajuste-servicio" className="flex items-center gap-2">
+              <Mail className="size-4 text-primary" /> Correo de servicio a clientes
+            </Label>
+            <Input
+              id="ajuste-servicio"
+              name="correoServicio"
+              type="email"
+              defaultValue={correoServicio ?? ""}
+              placeholder="servicio@tuagencia.com"
+              maxLength={254}
+              autoComplete="off"
+              className="max-w-sm"
+              aria-invalid={Boolean(state.errores?.correoServicio)}
+            />
+            {state.errores?.correoServicio ? (
+              <p className="text-xs text-destructive">{state.errores.correoServicio}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Aparece al final de los correos masivos y del agradecimiento por renovar («¿Dudas? Escríbenos a…») y
+                recibe las respuestas de los clientes.
+              </p>
             )}
+          </div>
+
+          <div className="flex items-center justify-end gap-3">
             {state.error && <span className="text-sm text-destructive">{state.error}</span>}
             <Button type="submit" disabled={pendiente}>
               {pendiente ? <Loader2 className="animate-spin" /> : <Save />} Guardar ajustes

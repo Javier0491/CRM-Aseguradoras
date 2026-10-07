@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import type { Rol } from "@/lib/generated/prisma/client";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { esRolSoloTareas } from "@/lib/usuarios/reglas";
 
 export type UsuarioSesion = {
   id: string;
@@ -29,6 +30,14 @@ export type UsuarioSesion = {
    * tiene asignados (ver lib/auth/alcance.ts).
    */
   soloSuCartera: boolean;
+  /**
+   * Ejecutiva de operación, Líder de oficina o Auxiliar: solo usan Tareas. El resto del CRM se
+   * les cierra en tres capas: páginas (requireUsuarioCrm), acciones y API (getUsuarioCrm) y
+   * datos (alcanceDe no les deja ver pólizas, clientes ni recibos).
+   */
+  soloTareas: boolean;
+  /** Coordina las tareas del equipo: ve todas, marca la parte de cualquiera y borra cualquiera. */
+  coordinaTareas: boolean;
 };
 
 /**
@@ -73,10 +82,16 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
     superadmin,
     // La opción es de la agencia propia, que para quien no es SUPERADMIN es la que opera.
     soloSuCartera: !superadmin && perfil.rol === "EJECUTIVO" && perfil.agencia.carteraPorEjecutivo,
+    soloTareas: !superadmin && esRolSoloTareas(perfil.rol),
+    coordinaTareas: superadmin || perfil.rol === "ADMIN" || perfil.rol === "LIDER_OFICINA",
   };
 });
 
 export const esAdmin = (user: UsuarioSesion | null) => user?.rol === "ADMIN";
+
+/** Conciliación de cobranza: Administrador y Ejecutivo comercial. */
+export const puedeConciliar = (user: UsuarioSesion | null) =>
+  Boolean(user && !user.soloTareas && (user.rol === "ADMIN" || user.rol === "EJECUTIVO"));
 
 /**
  * Las comisiones (matriz, % por póliza, montos esperados y pagados) solo las ve y edita el
@@ -85,11 +100,37 @@ export const esAdmin = (user: UsuarioSesion | null) => user?.rol === "ADMIN";
  */
 export const veComisiones = (user: UsuarioSesion | null) => Boolean(user?.superadmin);
 
-/** Exige sesión; si no existe redirige a /login. */
+/** Exige sesión; si no existe redirige a /login. Úsala solo en Tareas: el resto del CRM usa requireUsuarioCrm. */
 export async function requireUser(): Promise<UsuarioSesion> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   return user;
+}
+
+/** Exige sesión con acceso al CRM (no solo a Tareas): quien solo usa Tareas va a /tareas. */
+export async function requireUsuarioCrm(): Promise<UsuarioSesion> {
+  const user = await requireUser();
+  if (user.soloTareas) redirect("/tareas");
+  return user;
+}
+
+/** Para Server Actions y Route Handlers del CRM: el usuario de la sesión, o null si no hay o si solo usa Tareas. */
+export async function getUsuarioCrm(): Promise<UsuarioSesion | null> {
+  const user = await getCurrentUser();
+  return user && !user.soloTareas ? user : null;
+}
+
+/** Exige poder conciliar la cobranza (Administrador o Ejecutivo comercial); si no, al dashboard. */
+export async function requireConciliador(): Promise<UsuarioSesion> {
+  const user = await requireUsuarioCrm();
+  if (!puedeConciliar(user)) redirect("/");
+  return user;
+}
+
+/** Para Server Actions: quien puede conciliar, o null. */
+export async function getConciliador(): Promise<UsuarioSesion | null> {
+  const user = await getCurrentUser();
+  return puedeConciliar(user) ? user : null;
 }
 
 /**

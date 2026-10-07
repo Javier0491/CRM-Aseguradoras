@@ -1,7 +1,7 @@
 import "server-only";
 
 import { mensajeAviso, type DatosAviso } from "@/lib/avisos/mensajes";
-import { MAX_DIAS_AVISO, type TipoAviso } from "@/lib/avisos/reglas";
+import { avisoDeRecibo, MAX_DIAS_AVISO, VENTANA_SEGUNDO_AVISO, type TipoAviso } from "@/lib/avisos/reglas";
 import { COLOR_MARCA_PREDETERMINADO, logoParaDocumentos } from "@/lib/agencias/marca";
 import { emailValido, enviarAviso } from "@/lib/comunicaciones/envio";
 import { db } from "@/lib/db";
@@ -12,12 +12,9 @@ import { sumarDias } from "@/lib/polizas/gracia";
 
 /** Tope por ejecución (~0.6 s por correo): lo que no alcance sale en la siguiente. */
 const MAX_POR_EJECUCION = 300;
-/**
- * Un recibo vencido solo se avisa durante esta ventana después de cumplir sus días: al activar
- * la matriz no se reclaman recibos vencidos hace meses.
- */
-const VENTANA_VENCIDO = 7;
 const PAUSA_MS = 550;
+/** Día (YYYY-MM-DD) en la zona horaria de la operación, para saber cuándo salió un aviso. */
+const diaOperacion = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City" });
 
 type Pendiente = { tipo: TipoAviso; referenciaId: string; email: string; datos: DatosAviso };
 
@@ -39,8 +36,10 @@ async function avisosDeAgencia(agenciaId: string, hoy: string): Promise<Pendient
       where: {
         agenciaId,
         estado: "PENDIENTE",
+        // El segundo aviso sale a lo más MAX_DIAS_AVISO días después del primero, que a su vez
+        // sale a lo más MAX_DIAS_AVISO días antes del vencimiento (o, sin primero, del vencimiento).
         fecha_vencimiento: {
-          gte: fechaUtc(sumarDias(hoy, -(MAX_DIAS_AVISO + VENTANA_VENCIDO))),
+          gte: fechaUtc(sumarDias(hoy, -(MAX_DIAS_AVISO + VENTANA_SEGUNDO_AVISO))),
           lte: fechaUtc(sumarDias(hoy, MAX_DIAS_AVISO)),
         },
         poliza: { aseguradora: { OR: [{ avisoDiasAntes: { not: null } }, { avisoDiasVencido: { not: null } }] } },
@@ -62,17 +61,27 @@ async function avisosDeAgencia(agenciaId: string, hoy: string): Promise<Pendient
     }),
   ]);
 
+  // Cuándo salió el primer aviso ("Próximo recibo a pagar") de cada recibo: el segundo se cuenta
+  // desde ahí.
+  const primeros = recibos.length
+    ? await db.avisoEnviado.findMany({
+        where: { agenciaId, tipo: "por_vencer", referencia_id: { in: recibos.map((r) => r.id) } },
+        select: { referencia_id: true, created_at: true },
+      })
+    : [];
+  const primerAviso = new Map(primeros.map((a) => [a.referencia_id, diaOperacion.format(a.created_at)]));
+
   const pendientes: Pendiente[] = [];
   for (const r of recibos) {
     const { aseguradora, cliente, numeroImpreso } = r.poliza;
     const vencimiento = iso(r.fecha_vencimiento);
-    let tipo: TipoAviso | null = null;
-    if (vencimiento >= hoy) {
-      if (aseguradora.avisoDiasAntes !== null && vencimiento <= sumarDias(hoy, aseguradora.avisoDiasAntes)) tipo = "por_vencer";
-    } else if (aseguradora.avisoDiasVencido !== null) {
-      const desde = sumarDias(vencimiento, aseguradora.avisoDiasVencido);
-      if (hoy >= desde && hoy <= sumarDias(desde, VENTANA_VENCIDO)) tipo = "vencido";
-    }
+    const tipo = avisoDeRecibo({
+      vencimiento,
+      hoy,
+      primerAviso: primerAviso.get(r.id) ?? null,
+      diasAntes: aseguradora.avisoDiasAntes,
+      diasSegundo: aseguradora.avisoDiasVencido,
+    });
     if (!tipo) continue;
     pendientes.push({
       tipo,
@@ -86,6 +95,7 @@ async function avisosDeAgencia(agenciaId: string, hoy: string): Promise<Pendient
         monto: Number(r.monto),
         numeroRecibo: r.numero,
         diasGracia: aseguradora.diasGracia,
+        hoy,
       },
     });
   }

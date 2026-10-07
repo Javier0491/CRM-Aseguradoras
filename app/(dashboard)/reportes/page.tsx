@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { requireUsuarioCrm } from "@/lib/auth/dal";
 import { formatFecha, formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
 import {
   esPeriodoReporte,
@@ -118,6 +119,7 @@ function DistribucionCard({
 }
 
 export default async function ReportesPage({ searchParams }: PageProps<"/reportes">) {
+  await requireUsuarioCrm();
   const { periodo: periodoParam } = await searchParams;
   const periodo: PeriodoReporte = esPeriodoReporte(periodoParam) ? periodoParam : PERIODO_REPORTE_PREDETERMINADO;
 

@@ -18,9 +18,15 @@ export const getAgencia = cache(async (agenciaId: string) => {
 export async function getMarcaCorreo(agenciaId: string) {
   const a = await db.agencia.findUniqueOrThrow({
     where: { id: agenciaId },
-    select: { nombre: true, colorHex: true, tema: true, logoUrl: true, logoDocumentosUrl: true },
+    select: { nombre: true, colorHex: true, tema: true, logoUrl: true, logoDocumentosUrl: true, correoServicio: true },
   });
-  return { nombre: a.nombre, colorHex: a.colorHex, tema: a.tema, logoUrl: logoParaDocumentos(a) };
+  return {
+    nombre: a.nombre,
+    colorHex: a.colorHex,
+    tema: a.tema,
+    logoUrl: logoParaDocumentos(a),
+    correoServicio: a.correoServicio,
+  };
 }
 
 /**

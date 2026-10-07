@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus } from "lucide-react";
+import { Check, Loader2, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,23 +16,28 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { crearTarea } from "@/lib/tareas/actions";
-import { MAX_DESCRIPCION_TAREA, MAX_TITULO_TAREA, sumarDiasIso, type ErroresTarea } from "@/lib/tareas/reglas";
+import {
+  MAX_DESCRIPCION_TAREA,
+  MAX_RESPONSABLES_TAREA,
+  MAX_TITULO_TAREA,
+  sumarDiasIso,
+  type ErroresTarea,
+} from "@/lib/tareas/reglas";
+import { rolLabels, type RolUsuario } from "@/lib/usuarios/reglas";
 import { cn } from "@/lib/utils";
-
-const SIN_RESPONSABLE = "__sin_asignar__";
 
 /**
  * Botón y diálogo para crear una tarea. Con `clienteId` o `polizaId` queda ligada a ese registro.
- * `ejecutivos` habilita elegir al responsable (sin él, la tarea es de quien la crea).
+ * `equipo` habilita elegir a sus encargados (uno o varios; cada uno marca su parte); sin él, la
+ * tarea es de quien la crea.
  */
 export function NuevaTarea({
   hoy,
   clienteId,
   polizaId,
-  ejecutivos,
+  equipo,
   usuarioId,
   sugerencia,
   etiqueta = "Nueva tarea",
@@ -41,7 +47,7 @@ export function NuevaTarea({
   hoy: string;
   clienteId?: string;
   polizaId?: string;
-  ejecutivos?: { id: string; nombre: string }[];
+  equipo?: { id: string; nombre: string; rol: string }[];
   usuarioId: string;
   /** Título propuesto (p. ej. "Llamar a Juan por su renovación"). */
   sugerencia?: string;
@@ -53,8 +59,8 @@ export function NuevaTarea({
   const [titulo, setTitulo] = React.useState(sugerencia ?? "");
   const [descripcion, setDescripcion] = React.useState("");
   const [vence, setVence] = React.useState(hoy);
-  const propio = ejecutivos?.some((e) => e.id === usuarioId) ? usuarioId : "";
-  const [responsable, setResponsable] = React.useState(propio);
+  const propios = equipo?.some((e) => e.id === usuarioId) ? [usuarioId] : [];
+  const [responsables, setResponsables] = React.useState<string[]>(propios);
   const [errores, setErrores] = React.useState<ErroresTarea>({});
   const [error, setError] = React.useState<string | null>(null);
   const [pendiente, startTransition] = React.useTransition();
@@ -63,7 +69,7 @@ export function NuevaTarea({
     setTitulo(sugerencia ?? "");
     setDescripcion("");
     setVence(hoy);
-    setResponsable(propio);
+    setResponsables(propios);
     setErrores({});
     setError(null);
     setAbierto(true);
@@ -77,11 +83,21 @@ export function NuevaTarea({
         titulo,
         descripcion,
         vence,
-        ...(ejecutivos && { ejecutivoId: responsable }),
+        ...(equipo && { responsables }),
         ...(polizaId ? { polizaId } : clienteId ? { clienteId } : {}),
       });
-      if (r.ok) setAbierto(false);
-      else {
+      if (r.ok) {
+        setAbierto(false);
+        const otros = responsables.filter((id) => id !== usuarioId).length;
+        toast.success("Tarea creada", {
+          description:
+            equipo && responsables.length > 1
+              ? `${titulo.trim()} · ${responsables.length} encargados`
+              : otros === 1
+                ? `${titulo.trim()} · para ${equipo?.find((e) => responsables.includes(e.id))?.nombre ?? "otra persona"}`
+                : titulo.trim(),
+        });
+      } else {
         setErrores(r.errores ?? {});
         setError(r.error ?? null);
       }
@@ -145,24 +161,13 @@ export function NuevaTarea({
               </div>
               {errores.vence && <p className="text-xs text-destructive">{errores.vence}</p>}
             </div>
-            {ejecutivos && (
-              <div className="space-y-2">
-                <Label htmlFor="tarea-responsable">Responsable</Label>
-                <Select value={responsable || SIN_RESPONSABLE} onValueChange={(v) => setResponsable(v === SIN_RESPONSABLE ? "" : v)}>
-                  <SelectTrigger id="tarea-responsable" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SIN_RESPONSABLE}>Sin asignar</SelectItem>
-                    {ejecutivos.map((e) => (
-                      <SelectItem key={e.id} value={e.id}>
-                        {e.nombre}
-                        {e.id === usuarioId ? " (yo)" : ""}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {equipo && (
+              <SelectorEncargados
+                equipo={equipo}
+                usuarioId={usuarioId}
+                seleccion={responsables}
+                onCambiar={setResponsables}
+              />
             )}
             <div className="space-y-2">
               <Label htmlFor="tarea-descripcion">Notas (opcional)</Label>
@@ -191,5 +196,74 @@ export function NuevaTarea({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+/**
+ * Encargados de la tarea: se elige uno o varios tocando su nombre (cada uno marcará su parte).
+ * Sin ninguno, la tarea queda sin asignar y la marca cualquiera.
+ */
+function SelectorEncargados({
+  equipo,
+  usuarioId,
+  seleccion,
+  onCambiar,
+}: {
+  equipo: { id: string; nombre: string; rol: string }[];
+  usuarioId: string;
+  seleccion: string[];
+  onCambiar: (ids: string[]) => void;
+}) {
+  const alternar = (id: string) =>
+    onCambiar(seleccion.includes(id) ? seleccion.filter((x) => x !== id) : [...seleccion, id].slice(0, MAX_RESPONSABLES_TAREA));
+  const todos = seleccion.length === equipo.length;
+  return (
+    <fieldset className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <legend className="text-sm leading-none font-medium">Encargados</legend>
+        <span className="text-xs text-muted-foreground">
+          {seleccion.length === 0
+            ? "Sin asignar"
+            : seleccion.length === 1
+              ? "1 encargado"
+              : `${seleccion.length} encargados · cada uno marca su parte`}
+        </span>
+      </div>
+      <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-lg border bg-background/60 p-2">
+        {equipo.map((e) => {
+          const elegido = seleccion.includes(e.id);
+          return (
+            <button
+              key={e.id}
+              type="button"
+              onClick={() => alternar(e.id)}
+              aria-pressed={elegido}
+              title={rolLabels[e.rol as RolUsuario] ?? e.rol}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-[background-color,border-color,color,scale] duration-150 ease-out active:scale-95",
+                elegido
+                  ? "border-primary bg-primary/15 font-medium text-foreground"
+                  : "bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              )}
+            >
+              <Check className={cn("size-3 transition-opacity duration-150", elegido ? "opacity-100" : "opacity-0")} aria-hidden />
+              {e.nombre}
+              {e.id === usuarioId && " (yo)"}
+            </button>
+          );
+        })}
+      </div>
+      {equipo.length > 1 && (
+        <div className="flex gap-3 text-xs">
+          <button
+            type="button"
+            className="text-primary hover:underline"
+            onClick={() => onCambiar(todos ? [] : equipo.slice(0, MAX_RESPONSABLES_TAREA).map((e) => e.id))}
+          >
+            {todos ? "Quitar a todos" : "Todo el equipo"}
+          </button>
+        </div>
+      )}
+    </fieldset>
   );
 }

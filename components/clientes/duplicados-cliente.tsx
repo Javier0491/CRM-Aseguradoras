@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { Combine, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fusionarClientes } from "@/lib/clientes/actions";
+import { formatNumero } from "@/lib/format";
 
 type Duplicado = {
   id: string;
@@ -39,12 +41,17 @@ export function DuplicadosCliente({ destino, duplicados }: { destino: { id: stri
       <ul className="divide-y">
         {duplicados.map((d) => (
           <li key={d.id} className="flex flex-wrap items-center gap-3 px-5 py-3">
-            <div className="min-w-0 flex-1">
-              <Link href={`/clientes/${d.id}`} className="block truncate text-sm font-medium hover:text-primary hover:underline">
+            <div className="min-w-0 flex-1 basis-40">
+              <Link
+                href={`/clientes/${d.id}`}
+                title={d.nombre}
+                className="block truncate text-sm font-medium hover:text-primary hover:underline"
+              >
                 {d.nombre}
               </Link>
-              <p className="text-xs text-muted-foreground">
-                <span className="font-mono">{d.rfc}</span> · {d._count.polizas} {d._count.polizas === 1 ? "póliza" : "pólizas"}
+              <p className="text-xs text-muted-foreground wrap-anywhere">
+                <span className="font-mono">{d.rfc}</span> · {formatNumero(d._count.polizas)}{" "}
+                {d._count.polizas === 1 ? "póliza" : "pólizas"}
                 {d.telefono && ` · ${d.telefono}`}
               </p>
             </div>
@@ -89,8 +96,12 @@ export function DuplicadosCliente({ destino, duplicados }: { destino: { id: stri
                 origen &&
                 startTransition(async () => {
                   const r = await fusionarClientes(destino.id, origen.id);
-                  if (r.ok) setOrigen(null);
-                  else setError(r.error);
+                  if (!r.ok) {
+                    setError(r.error);
+                    return;
+                  }
+                  setOrigen(null);
+                  toast.success("Clientes fusionados", { description: `${origen.nombre} quedó integrado a ${destino.nombre}.` });
                 })
               }
             >

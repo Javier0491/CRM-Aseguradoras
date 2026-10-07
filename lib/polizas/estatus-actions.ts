@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
-import { getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
+import { getUsuarioCrm, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import { formatFecha, formatMoneda } from "@/lib/format";
@@ -55,7 +55,7 @@ export async function cancelarPoliza(
   polizaId: string,
   datos: { fecha: string; motivo: string; detalle?: string }
 ): Promise<EstatusResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   const poliza = await polizaVisible(user, polizaId);
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
@@ -101,7 +101,7 @@ export async function cancelarPoliza(
 
 /** Deshace la cancelación: la póliza vuelve a estar en vigor y sus recibos cancelados, pendientes. */
 export async function reactivarPoliza(polizaId: string): Promise<EstatusResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   const poliza = await polizaVisible(user, polizaId);
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
@@ -137,7 +137,7 @@ export type EndosoResultado = { ok: true } | { ok: false; error?: string; errore
 
 /** Registra un endoso de la póliza (cambio durante la vigencia con su movimiento de prima). */
 export async function registrarEndoso(polizaId: string, raw: EndosoValores): Promise<EndosoResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   const poliza = await polizaVisible(user, polizaId);
   if (!poliza) return { ok: false, error: "La póliza ya no existe." };
@@ -186,7 +186,7 @@ export async function registrarEndoso(polizaId: string, raw: EndosoValores): Pro
 
 /** Borra un endoso capturado por error. */
 export async function eliminarEndoso(endosoId: string): Promise<EstatusResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   if (typeof endosoId !== "string" || !ID.test(endosoId)) return { ok: false, error: "Datos inválidos." };
   const endoso = await db.endoso.findFirst({

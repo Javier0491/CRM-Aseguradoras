@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AlertCircle, Loader2, Pencil, Percent, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import { eliminarEsquema, guardarEsquema, type EsquemaInput } from "@/lib/comisi
 import { claveRango, coberturaDeAnios, MAX_ANIO_POLIZA, MAX_EDAD, textoRangoEdad } from "@/lib/comisiones/reglas";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import type { Opcion } from "@/lib/polizas/ramos";
+import { conDeshacer } from "@/lib/toast";
 
 export type Esquema = {
   id: string;
@@ -135,6 +137,7 @@ export function MatrizComisiones({
       if (res.ok) {
         setFormulario(null);
         setError(null);
+        toast.success(formulario.id ? "Regla de comisión actualizada" : "Regla de comisión agregada");
       } else {
         setError({ mensaje: res.error, campo: res.campo });
       }
@@ -145,8 +148,25 @@ export function MatrizComisiones({
     if (!aEliminar) return;
     startTransition(async () => {
       const res = await eliminarEsquema(aEliminar.id);
-      if (res.ok) setAEliminar(null);
-      else setError({ mensaje: res.error });
+      if (!res.ok) {
+        setError({ mensaje: res.error });
+        return;
+      }
+      setAEliminar(null);
+      // Deshacer la vuelve a crear igual (nada más apunta a su id).
+      const e = aEliminar;
+      const regla = {
+        aseguradoraId: e.aseguradoraId,
+        ramo: e.ramo,
+        anio: e.anio,
+        porcentaje: e.porcentaje,
+        edadMinima: e.edadMinima,
+        edadMaxima: e.edadMaxima,
+      };
+      toast("Regla de comisión eliminada", {
+        description: `${e.aseguradora} · ${e.porcentaje}%`,
+        ...conDeshacer(() => guardarEsquema(regla), "Regla de comisión recuperada."),
+      });
     });
   }
 

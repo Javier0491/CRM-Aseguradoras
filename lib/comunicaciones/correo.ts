@@ -91,7 +91,14 @@ function aplicarEstilosEnLinea(html: string, estilos: Record<string, string>) {
 }
 
 /** Marca de la agencia que envía: su nombre, color, logo y tema visten el correo. */
-export type MarcaCorreo = { nombre: string; colorHex: string | null; logoUrl: string | null; tema: string };
+export type MarcaCorreo = {
+  nombre: string;
+  colorHex: string | null;
+  logoUrl: string | null;
+  tema: string;
+  /** Correo de servicio de la agencia: se invita al cliente a escribirle y recibe sus respuestas. */
+  correoServicio?: string | null;
+};
 
 /**
  * Remitente con el nombre de la agencia y la dirección universal de EMAIL_SENDER
@@ -129,6 +136,14 @@ export function construirCorreoHtml({
   // Solo logos servidos por https (Storage): una ruta relativa de /public no carga en un correo.
   const logo = marca.logoUrl?.startsWith("https://") ? marca.logoUrl : null;
   const titulo = `font-family:Georgia,'Times New Roman',serif;font-size:20px;letter-spacing:0.5px;color:${color};`;
+  const servicio = marca.correoServicio?.trim() || null;
+  const enlaceServicio = servicio
+    ? `<a href="mailto:${escaparHtml(servicio)}" style="color:${acento};text-decoration:underline;">${escaparHtml(servicio)}</a>`
+    : "";
+  // Al final de todo correo a clientes: a dónde escribir sus dudas.
+  const contacto = servicio
+    ? `<p style="margin:24px 0 0;padding-top:16px;border-top:1px solid #e4e4e7;font-size:14px;line-height:1.5;color:#52525b;">¿Dudas o aclaraciones? Escríbenos a ${enlaceServicio} y con gusto te atenderemos.</p>`
+    : "";
   const encabezado = logo
     ? `<img src="${escaparHtml(logo)}" alt="${escaparHtml(empresa)}" height="44" style="height:44px;width:auto;max-width:260px;border:0;display:block;${titulo}">`
     : `<span style="${titulo}">${escaparHtml(empresa)}</span>`;
@@ -149,9 +164,10 @@ ${encabezado}
 </td></tr>
 <tr><td style="padding:32px;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#27272a;">
 ${aplicarEstilosEnLinea(limpiarHtml(cuerpo), estilos)}
+${contacto}
 </td></tr>
 <tr><td style="padding:18px 32px;background-color:#fafafa;border-top:1px solid #e4e4e7;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#71717a;">
-Recibes este correo porque eres cliente de ${escaparHtml(empresa)}. Si tienes dudas, responde directamente a este mensaje.<br>
+Recibes este correo porque eres cliente de ${escaparHtml(empresa)}. ${servicio ? `Si tienes dudas, escríbenos a ${enlaceServicio}.` : "Si tienes dudas, responde directamente a este mensaje."}<br>
 &copy; ${anio} ${escaparHtml(empresa)}
 </td></tr>
 </table>

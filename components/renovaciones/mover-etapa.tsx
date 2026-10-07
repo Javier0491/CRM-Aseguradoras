@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ArrowRightLeft, Check, Loader2, XCircle } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +27,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { cambiarEtapaRenovacion } from "@/lib/renovaciones/actions";
 import { COLUMNAS_EMBUDO, MOTIVOS_PERDIDA, type ColumnaEmbudo, type EtapaManual } from "@/lib/renovaciones/reglas";
+import { conDeshacer } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+
+const tituloDe = (c: ColumnaEmbudo) => COLUMNAS_EMBUDO.find((x) => x.clave === c)?.titulo ?? c;
+
+/**
+ * "Deshacer" de un cambio de etapa: regresa a la anterior. No aplica si venía de "Perdida" (habría
+ * que volver a pedir el motivo) ni de "Renovada" (no se elige a mano).
+ */
+function deshacerHacia(polizaId: string, anterior: ColumnaEmbudo) {
+  if (anterior === "perdida" || anterior === "renovada") return {};
+  return conDeshacer(() => cambiarEtapaRenovacion(polizaId, anterior), `Regresó a «${tituloDe(anterior)}».`);
+}
 
 /**
  * Menú para mover una póliza entre las etapas del embudo. "Perdida" pide el motivo en un diálogo;
@@ -44,14 +57,19 @@ export function MoverEtapa({
   compacto?: boolean;
 }) {
   const [pendiente, startTransition] = React.useTransition();
-  const [error, setError] = React.useState<string | null>(null);
   const [perdida, setPerdida] = React.useState(false);
 
   function mover(etapa: EtapaManual) {
-    setError(null);
     startTransition(async () => {
       const r = await cambiarEtapaRenovacion(polizaId, etapa);
-      if (!r.ok) setError(r.error);
+      if (!r.ok) {
+        toast.error(r.error, { description: `Póliza ${numero}` });
+        return;
+      }
+      toast.success(`Movida a «${tituloDe(etapa)}»`, {
+        description: `Póliza ${numero}`,
+        ...deshacerHacia(polizaId, actual),
+      });
     });
   }
 
@@ -88,8 +106,13 @@ export function MoverEtapa({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-      {error && <p className="text-xs text-destructive">{error}</p>}
-      <MarcarPerdida polizaId={polizaId} numero={numero} abierto={perdida} onCerrar={() => setPerdida(false)} />
+      <MarcarPerdida
+        polizaId={polizaId}
+        numero={numero}
+        actual={actual}
+        abierto={perdida}
+        onCerrar={() => setPerdida(false)}
+      />
     </>
   );
 }
@@ -97,11 +120,13 @@ export function MoverEtapa({
 function MarcarPerdida({
   polizaId,
   numero,
+  actual,
   abierto,
   onCerrar,
 }: {
   polizaId: string;
   numero: string;
+  actual: ColumnaEmbudo;
   abierto: boolean;
   onCerrar: () => void;
 }) {
@@ -133,8 +158,15 @@ function MarcarPerdida({
             }
             startTransition(async () => {
               const r = await cambiarEtapaRenovacion(polizaId, "perdida", { motivo, nota });
-              if (r.ok) onCerrar();
-              else setError(r.error);
+              if (!r.ok) {
+                setError(r.error);
+                return;
+              }
+              onCerrar();
+              toast("Renovación marcada como perdida", {
+                description: `Póliza ${numero} · ${motivo}`,
+                ...deshacerHacia(polizaId, actual),
+              });
             });
           }}
         >

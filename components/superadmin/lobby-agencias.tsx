@@ -15,6 +15,7 @@ import {
   Sun,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { LogoAgencia } from "@/components/layout/logo-agencia";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ import {
 } from "@/lib/agencias/superadmin";
 import { colorTextoSobre, normalizarHex } from "@/lib/color";
 import { formatFecha, formatNumero } from "@/lib/format";
+import { conDeshacer } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 /**
@@ -87,10 +89,11 @@ export function LobbyAgencias({
     });
   }
 
-  async function reactivar(id: string) {
+  async function reactivar(a: AgenciaLobby) {
     setError(null);
-    const r = await cambiarSuspensionAgencia(id, false);
+    const r = await cambiarSuspensionAgencia(a.id, false);
     if (!r.ok) setError(r.error);
+    else toast.success(`${a.nombre} reactivada`, { description: "Su equipo ya puede volver a entrar." });
   }
 
   return (
@@ -112,7 +115,7 @@ export function LobbyAgencias({
             bloqueada={entrando !== null}
             onEntrar={() => entrar(a.id)}
             onSuspender={() => setASuspender(a)}
-            onReactivar={() => reactivar(a.id)}
+            onReactivar={() => reactivar(a)}
             cobro={cobros[a.id]}
           />
         ))}
@@ -154,7 +157,7 @@ function TarjetaAgencia({
 
   return (
     // El menú va fuera del botón de la tarjeta: no se anidan botones.
-    <div className="relative">
+    <div className="relative min-w-0">
       <button
         type="button"
         onClick={onEntrar}
@@ -162,7 +165,7 @@ function TarjetaAgencia({
         style={acento}
         aria-label={`Entrar a ${a.nombre}`}
         className={cn(
-          "group relative flex min-h-44 flex-col overflow-hidden rounded-xl border bg-card p-5 text-left transition-all",
+          "group relative flex min-h-44 w-full flex-col overflow-hidden rounded-xl border bg-card p-5 text-left transition-[translate,border-color,background-color,box-shadow,opacity] duration-150 ease-out motion-reduce:hover:translate-y-0",
           "hover:-translate-y-0.5 hover:border-primary hover:bg-primary/[0.06] hover:shadow-lg",
           "focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none",
           "disabled:cursor-wait disabled:hover:translate-y-0",
@@ -185,16 +188,18 @@ function TarjetaAgencia({
           </div>
         </div>
 
-        <h2 className="mt-4 truncate text-base font-semibold tracking-wide uppercase">{a.nombre}</h2>
+        <h2 className="mt-4 truncate text-base font-semibold tracking-wide uppercase" title={a.nombre}>
+          {a.nombre}
+        </h2>
         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Users className="size-3.5" /> {formatNumero(a._count.usuarios)}
           </span>
           <span className="flex items-center gap-1">
-            <Building2 className="size-3.5" /> {formatNumero(a._count.clientes)} clientes
+            <Building2 className="size-3.5" /> {formatNumero(a._count.clientes)} {a._count.clientes === 1 ? "cliente" : "clientes"}
           </span>
           <span className="flex items-center gap-1">
-            <FileText className="size-3.5" /> {formatNumero(a._count.polizas)} pólizas
+            <FileText className="size-3.5" /> {formatNumero(a._count.polizas)} {a._count.polizas === 1 ? "póliza" : "pólizas"}
           </span>
         </p>
         {cobro && !a.suspendida && (
@@ -211,7 +216,7 @@ function TarjetaAgencia({
 
         <div className="mt-auto flex items-center justify-between pt-4 text-xs text-muted-foreground">
           <span className="flex items-center gap-1.5">
-            <span aria-hidden className="size-2.5 rounded-full bg-primary" />
+            <span aria-hidden className="size-2.5 rounded-full bg-primary ring-1 ring-foreground/20" />
             <span className="font-mono">{color}</span>
             <TemaIcono className="ml-1 size-3.5" aria-label={a.tema === "light" ? "Modo claro" : "Modo oscuro"} />
           </span>
@@ -244,7 +249,11 @@ function TarjetaAgencia({
           <DropdownMenuItem
             onSelect={() => {
               // Liga de inicio de sesión con la marca de la agencia, para compartirla con su equipo.
-              void navigator.clipboard?.writeText(`${window.location.origin}/login?agencia=${a.slug}`).catch(() => {});
+              const liga = `${window.location.origin}/login?agencia=${a.slug}`;
+              void navigator.clipboard?.writeText(liga).then(
+                () => toast.success("Liga de acceso copiada", { description: liga }),
+                () => toast.error("No se pudo copiar la liga", { description: liga })
+              );
             }}
           >
             <Link2 /> Copiar liga de acceso
@@ -274,8 +283,15 @@ function SuspenderAgencia({ agencia, onCerrar }: { agencia: AgenciaLobby | null;
     setError(null);
     startTransition(async () => {
       const r = await cambiarSuspensionAgencia(agencia.id, true, String(formData.get("motivo") ?? ""));
-      if (r.ok) onCerrar();
-      else setError(r.error);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      onCerrar();
+      toast(`${agencia.nombre} suspendida`, {
+        description: "Sus usuarios ya no pueden entrar.",
+        ...conDeshacer(() => cambiarSuspensionAgencia(agencia.id, false), `${agencia.nombre} vuelve a estar activa.`),
+      });
     });
   }
 

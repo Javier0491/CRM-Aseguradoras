@@ -22,12 +22,17 @@ import {
 } from "@/lib/polizas/validacion";
 import { leerEjecutivoSolicitado, resolverEjecutivo } from "@/lib/usuarios/asignacion";
 
+/** Correo de agradecimiento de una renovación: a quién se envió o por qué no salió. */
+export type AgradecimientoRenovacion = { enviado: true; email: string } | { enviado: false; motivo: string };
+
 export type GuardarPolizaResultado =
   | {
       ok: true;
       poliza: { id: string; numero: string };
       recibos: number;
       cliente: { nombre: string; nuevo: boolean };
+      /** Solo en renovaciones con el agradecimiento activado. */
+      agradecimiento?: AgradecimientoRenovacion;
     }
   | { ok: false; error?: string; errores?: Errores };
 

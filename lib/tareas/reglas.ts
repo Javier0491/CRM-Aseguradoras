@@ -2,6 +2,17 @@
 
 export const MAX_TITULO_TAREA = 140;
 export const MAX_DESCRIPCION_TAREA = 1000;
+export const MAX_RESPONSABLES_TAREA = 20;
+
+/**
+ * Avance de una tarea por sus encargados: cuántos terminaron su parte, de cuántos, y el
+ * porcentaje redondeado. Sin encargados, el avance es la tarea misma (0 % o 100 %).
+ */
+export function avanceTarea(partes: readonly { hecha: boolean }[], completada: boolean) {
+  if (partes.length === 0) return { hechas: completada ? 1 : 0, total: 1, porcentaje: completada ? 100 : 0 };
+  const hechas = partes.filter((p) => p.hecha).length;
+  return { hechas, total: partes.length, porcentaje: Math.round((hechas / partes.length) * 100) };
+}
 
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 

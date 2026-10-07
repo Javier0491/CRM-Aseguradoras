@@ -49,6 +49,17 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Curvas de movimiento (sustituyen a las de Tailwind, que se quedan cortas): ease-out para lo que
+ * entra o sale, ease-in-out para lo que se desplaza en pantalla y ease-drawer para los paneles
+ * inferiores (curva de iOS). Ningún movimiento de interfaz pasa de 300 ms, salvo los paneles.
+ */
+@theme {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
 :root,
 .dark {
   /* Paleta base: modo oscuro (<html class="dark">); el modo claro la redefine abajo. --primary (y
@@ -199,5 +210,45 @@ html.light,
   }
   .correo-editor > :last-child {
     margin-bottom: 0;
+  }
+}
+
+/*
+ * View Transitions (tarjetas del embudo que cambian de columna, tareas que entran o salen de una
+ * lista). Mientras corren, los clics pasan a la página: nunca se pierde un clic por una animación.
+ */
+::view-transition {
+  pointer-events: none;
+}
+
+/* La tarjeta viaja a su nueva columna: desplazamiento en pantalla, 300 ms. */
+::view-transition-group(.mover-tarjeta) {
+  animation-duration: 300ms;
+  animation-timing-function: var(--ease-in-out);
+}
+
+/* Una tarea que se completa o se borra se desvanece en vez de desaparecer de golpe. */
+::view-transition-old(.tarea-sale) {
+  animation: 150ms var(--ease-out) both desvanecer;
+}
+::view-transition-new(.tarea-entra) {
+  animation: 200ms var(--ease-out) both aparecer;
+}
+
+@keyframes desvanecer {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes aparecer {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Con "reducir movimiento" no hay desplazamientos: el cambio es inmediato (las opacidades se quedan). */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
   }
 }

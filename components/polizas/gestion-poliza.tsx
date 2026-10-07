@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Ban, EllipsisVertical, FilePenLine, Loader2, RotateCcw } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +25,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { formatFecha } from "@/lib/format";
-import { MOTIVOS_CANCELACION, TIPOS_ENDOSO, type EndosoValores, type ErroresEndoso } from "@/lib/polizas/estatus";
+import {
+  etiquetaEndoso,
+  MOTIVOS_CANCELACION,
+  TIPOS_ENDOSO,
+  type EndosoValores,
+  type ErroresEndoso,
+} from "@/lib/polizas/estatus";
 import { cancelarPoliza, reactivarPoliza, registrarEndoso } from "@/lib/polizas/estatus-actions";
+import { conDeshacer } from "@/lib/toast";
 
 type Dialogo = "endoso" | "cancelar" | "reactivar" | null;
 
@@ -142,8 +150,19 @@ function FormCancelar({
     setError(null);
     startTransition(async () => {
       const r = await cancelarPoliza(polizaId, { fecha, motivo, detalle });
-      if (r.ok) onListo();
-      else setError(r.error);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      onListo();
+      // Deshacer = reactivarla: vuelve a estar en vigor con sus recibos pendientes.
+      toast(`Póliza ${numero} cancelada`, {
+        description:
+          recibosPendientes === 0
+            ? motivo
+            : `${motivo} · ${recibosPendientes === 1 ? "su recibo pendiente" : `${recibosPendientes} recibos pendientes`} cancelado${recibosPendientes === 1 ? "" : "s"}`,
+        ...conDeshacer(() => reactivarPoliza(polizaId), `La póliza ${numero} vuelve a estar en vigor.`),
+      });
     });
   }
 
@@ -242,8 +261,19 @@ function FormReactivar({
           onClick={() =>
             startTransition(async () => {
               const r = await reactivarPoliza(polizaId);
-              if (r.ok) onListo();
-              else setError(r.error);
+              if (!r.ok) {
+                setError(r.error);
+                return;
+              }
+              onListo();
+              toast.success(`Póliza ${numero} reactivada`, {
+                description:
+                  recibosCancelados === 0
+                    ? undefined
+                    : recibosCancelados === 1
+                      ? "Su recibo vuelve a pendiente de cobro."
+                      : `${recibosCancelados} recibos vuelven a pendiente de cobro.`,
+              });
             })
           }
         >
@@ -287,8 +317,10 @@ function FormEndoso({
     setError(null);
     startTransition(async () => {
       const r = await registrarEndoso(polizaId, valores);
-      if (r.ok) onListo();
-      else {
+      if (r.ok) {
+        onListo();
+        toast.success("Endoso registrado", { description: `Póliza ${numero} · ${etiquetaEndoso(valores.tipo)}` });
+      } else {
         setErrores(r.errores ?? {});
         setError(r.error ?? null);
       }

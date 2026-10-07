@@ -17,8 +17,15 @@ import { cn } from "@/lib/utils";
  * `superadmin` solo llega para un SUPERADMIN: botón al panel de agencias. `ajena` = está operando
  * una agencia que no es la suya (el botón se resalta para que no pase desapercibido); `alertas`,
  * problemas graves de la plataforma (migraciones, tarea diaria) que se marcan con un punto.
+ * `soloTareas`: sin búsqueda de clientes y pólizas ni avisos de cobranza (no los ve).
  */
-export function AppHeader({ superadmin }: { superadmin?: { ajena: boolean; alertas?: number } }) {
+export function AppHeader({
+  superadmin,
+  soloTareas = false,
+}: {
+  superadmin?: { ajena: boolean; alertas?: number };
+  soloTareas?: boolean;
+}) {
   const pathname = usePathname();
   const current =
     allNav.find((item) => isActivePath(pathname, item.href)) ?? allNav[0];
@@ -54,8 +61,12 @@ export function AppHeader({ superadmin }: { superadmin?: { ajena: boolean; alert
             </Link>
           </Button>
         )}
-        <BusquedaGlobal />
-        <CampanaAvisos />
+        {!soloTareas && (
+          <>
+            <BusquedaGlobal />
+            <CampanaAvisos />
+          </>
+        )}
         <form action={cerrarSesion}>
           <Button type="submit" variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground">
             <LogOut />

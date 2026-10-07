@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { AlertCircle, CheckCircle2, Loader2, Save } from "lucide-react";
+import { AlertCircle, Loader2, Save } from "lucide-react";
+import { toast } from "sonner";
 
 import { AseguradoraTag } from "@/components/polizas/poliza-ui";
 import { Button } from "@/components/ui/button";
@@ -28,12 +29,12 @@ const aCeldas = (aseguradoras: AseguradoraAvisos[]): Celdas =>
 export function MatrizAvisos({ correoCopia, aseguradoras }: { correoCopia: string; aseguradoras: AseguradoraAvisos[] }) {
   const [copia, setCopia] = React.useState(correoCopia);
   const [celdas, setCeldas] = React.useState(() => aCeldas(aseguradoras));
-  const [estado, setEstado] = React.useState<{ ok: boolean; mensaje: string } | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
   const [guardando, startGuardar] = React.useTransition();
 
   function cambiar(id: string, campo: CampoAviso, valor: string) {
     setCeldas((c) => ({ ...c, [id]: { ...c[id], [campo]: valor.replace(/\D/g, "").slice(0, 2) } }));
-    setEstado(null);
+    setError(null);
   }
 
   function guardar() {
@@ -47,12 +48,15 @@ export function MatrizAvisos({ correoCopia, aseguradoras }: { correoCopia: strin
       TIPOS_AVISO.some((t) => f[t.campo] !== null && (f[t.campo]! < MIN_DIAS_AVISO || f[t.campo]! > MAX_DIAS_AVISO))
     );
     if (invalida) {
-      setEstado({ ok: false, mensaje: `Los días deben estar entre ${MIN_DIAS_AVISO} y ${MAX_DIAS_AVISO}, o quedar en blanco.` });
+      setError(`Los días deben estar entre ${MIN_DIAS_AVISO} y ${MAX_DIAS_AVISO}, o quedar en blanco.`);
       return;
     }
     startGuardar(async () => {
       const r = await guardarConfigAvisos({ correoCopia: copia, filas });
-      setEstado(r.ok ? { ok: true, mensaje: "Cambios guardados." } : { ok: false, mensaje: r.error });
+      if (r.ok) {
+        setError(null);
+        toast.success("Matriz de avisos guardada");
+      } else setError(r.error);
     });
   }
 
@@ -62,7 +66,8 @@ export function MatrizAvisos({ correoCopia, aseguradoras }: { correoCopia: strin
         <CardTitle className="text-base">Matriz de avisos</CardTitle>
         <CardDescription>
           Un recibo ya pagado o conciliado no recibe avisos, y una póliza con su renovación capturada tampoco. Cada
-          aviso se envía una sola vez.
+          aviso se envía una sola vez. El segundo aviso de cobro sale los días indicados después del primero (por
+          ejemplo, 10) solo si el recibo sigue sin pagarse.
         </CardDescription>
       </CardHeader>
 
@@ -78,7 +83,7 @@ export function MatrizAvisos({ correoCopia, aseguradoras }: { correoCopia: strin
             placeholder="servicios@tuagencia.com"
             onChange={(e) => {
               setCopia(e.target.value);
-              setEstado(null);
+              setError(null);
             }}
           />
           <p className="text-xs text-muted-foreground">
@@ -130,9 +135,9 @@ export function MatrizAvisos({ correoCopia, aseguradoras }: { correoCopia: strin
       )}
 
       <CardFooter className="justify-between gap-3 border-t px-5 py-4 [.border-t]:pt-4">
-        <p className={`flex items-center gap-2 text-sm ${estado?.ok ? "text-success" : "text-destructive"}`}>
-          {estado && (estado.ok ? <CheckCircle2 className="size-4 shrink-0" /> : <AlertCircle className="size-4 shrink-0" />)}
-          {estado?.mensaje}
+        <p className="flex items-center gap-2 text-sm text-destructive">
+          {error && <AlertCircle className="size-4 shrink-0" />}
+          {error}
         </p>
         <Button onClick={guardar} disabled={guardando}>
           {guardando ? <Loader2 className="animate-spin" /> : <Save />} Guardar

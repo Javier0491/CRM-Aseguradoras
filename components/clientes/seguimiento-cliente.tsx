@@ -149,7 +149,7 @@ function Registro({ r, puedeBorrar }: { r: RegistroSeguimiento; puedeBorrar: boo
       <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border bg-background text-primary">
         <Icono className="size-3.5" />
       </span>
-      <div className="min-w-0 flex-1 space-y-1">
+      <div className="min-w-0 flex-1 space-y-1 wrap-anywhere">
         <p className="text-xs text-muted-foreground">
           <span className="font-medium text-foreground">{tipo?.label ?? r.tipo}</span> · {fechaHora.format(r.createdAt)}
           {r.usuarioEmail && ` · ${r.usuarioEmail}`}

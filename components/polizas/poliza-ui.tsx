@@ -1,7 +1,7 @@
 // Etiquetas y piezas de presentación compartidas por el listado y el detalle de pólizas.
 import { normalizarHex } from "@/lib/color";
 import type { EstadoRecibo, FormaPago, Ramo } from "@/lib/generated/prisma/client";
-import { diasDesdeHoy, formatFecha } from "@/lib/format";
+import { diasDesdeHoy, formatFecha, formatNumero } from "@/lib/format";
 import { situacionCobro } from "@/lib/polizas/gracia";
 
 export const ramoLabel: Record<Ramo, string> = {
@@ -33,16 +33,20 @@ export const estadoRecibo: Record<EstadoRecibo, { label: string; className: stri
 /** Recibo cobrado: pagado (con diferencia de comisión por aclarar) o conciliado. */
 export const esCobrado = (estado: EstadoRecibo) => estado === "PAGADO" || estado === "CONCILIADO";
 
+/**
+ * Aseguradora con su color. Un nombre largo se recorta al espacio disponible (el completo queda en el
+ * tooltip); el aro hace visible el punto con cualquier color de marca, también blanco o muy oscuro.
+ */
 export function AseguradoraTag({ nombre, color }: { nombre: string; color: string }) {
   const hex = normalizarHex(color);
   return (
-    <span className="inline-flex items-center gap-2">
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2" title={nombre}>
       <span
         aria-hidden
-        className="size-2 shrink-0 rounded-full bg-muted-foreground"
+        className="size-2 shrink-0 rounded-full bg-muted-foreground ring-1 ring-foreground/20"
         style={hex ? { backgroundColor: hex } : undefined}
       />
-      {nombre}
+      <span className="truncate">{nombre}</span>
     </span>
   );
 }
@@ -211,7 +215,9 @@ export function AseguradosResumen({
   if (ramo === "GMM_COLECTIVO") {
     return (
       <span className="flex min-w-0 flex-col">
-        <span className="truncate text-sm">{contratante}</span>
+        <span className="truncate text-sm" title={contratante}>
+          {contratante}
+        </span>
         <span className="text-[11px] text-muted-foreground">Colectivo · censo</span>
       </span>
     );
@@ -222,12 +228,16 @@ export function AseguradosResumen({
   const resumen = titular
     ? dependientes === 0
       ? "Solo titular"
-      : `Titular + ${dependientes} ${dependientes === 1 ? "dependiente" : "dependientes"}`
-    : `${total} ${total === 1 ? "asegurado" : "asegurados"}`;
+      : `Titular + ${formatNumero(dependientes)} ${dependientes === 1 ? "dependiente" : "dependientes"}`
+    : `${formatNumero(total)} ${total === 1 ? "asegurado" : "asegurados"}`;
   return (
     <span className="flex min-w-0 flex-col">
       <span className="text-sm">{resumen}</span>
-      {titular && <span className="truncate text-[11px] text-muted-foreground">{titular}</span>}
+      {titular && (
+        <span className="truncate text-[11px] text-muted-foreground" title={titular}>
+          {titular}
+        </span>
+      )}
     </span>
   );
 }

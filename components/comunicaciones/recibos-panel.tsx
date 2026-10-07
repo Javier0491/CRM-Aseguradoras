@@ -144,7 +144,7 @@ export function RecibosPanel({
                     activo && "bg-primary/[0.06] shadow-[inset_2px_0_0_var(--primary)] hover:bg-primary/[0.08]"
                   )}
                 >
-                  <TableCell className="max-w-[200px] pl-5">
+                  <TableCell className="max-w-50 pl-5">
                     <p className="truncate font-medium">{r.cliente}</p>
                     <p className="font-mono text-xs text-muted-foreground">
                       {r.poliza} · {r.aseguradora}

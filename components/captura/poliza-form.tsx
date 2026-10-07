@@ -23,6 +23,7 @@ import {
   HeartPulse,
   House,
   Loader2,
+  Mail,
   RotateCcw,
   Save,
   Scale,
@@ -34,6 +35,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -280,6 +282,8 @@ export function PolizaForm({
     return Boolean(vigor) && vigor !== extraerPolizaVigor(inicial?.generales?.numeroImpreso ?? "");
   });
   const [subiendo, setSubiendo] = React.useState<TipoArchivo | null>(null);
+  // Renovación: al guardar, el cliente recibe "Gracias por continuar con nosotros" (se puede apagar).
+  const [agradecer, setAgradecer] = React.useState(true);
   const router = useRouter();
   const editando = modo.tipo === "edicion";
 
@@ -482,6 +486,7 @@ export function PolizaForm({
     if (modo.tipo === "edicion") {
       const editada = await editarPoliza(modo.polizaId, datos);
       if (editada.ok) {
+        toast.success(`Póliza ${modo.numero} actualizada`);
         router.push(`/polizas/${modo.polizaId}`);
         router.refresh();
         return;
@@ -495,7 +500,7 @@ export function PolizaForm({
 
     const res = await guardarPoliza({
       ...datos,
-      ...(modo.tipo === "renovacion" && { renuevaA: modo.anterior.id }),
+      ...(modo.tipo === "renovacion" && { renuevaA: modo.anterior.id, agradecer }),
       ...(leidaConIa && { origen: "ocr" }),
     });
     if (res.ok) {
@@ -829,6 +834,18 @@ export function PolizaForm({
                 {exito.cliente.nuevo ? "Cliente nuevo registrado" : "Asignada al cliente existente"}:{" "}
                 {exito.cliente.nombre}
               </p>
+              {exito.agradecimiento &&
+                (exito.agradecimiento.enviado ? (
+                  <p className="flex items-center gap-1.5 text-xs text-muted-foreground wrap-anywhere">
+                    <Mail className="size-3.5 shrink-0 text-success" />
+                    Se le envió el agradecimiento por renovar a {exito.agradecimiento.email}.
+                  </p>
+                ) : (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs text-warning">
+                    <AlertCircle className="size-3.5 shrink-0" />
+                    No se envió el agradecimiento: {exito.agradecimiento.motivo}
+                  </p>
+                ))}
               {TIPOS_ARCHIVO.map((tipo) => {
                 const r = exito.archivos[tipo];
                 if (!r) return null;
@@ -853,6 +870,27 @@ export function PolizaForm({
             <Button type="button" size="sm" onClick={reiniciar}>
               Capturar otra
             </Button>
+          </div>
+        )}
+
+        {modo.tipo === "renovacion" && !exito && (
+          <div className="mx-6 mb-6 flex items-start justify-between gap-4 rounded-lg border bg-background/60 px-4 py-3">
+            <div className="space-y-0.5">
+              <Label htmlFor="agradecer-renovacion" className="flex items-center gap-2">
+                <Mail className="size-4 text-primary" /> Enviar al cliente el agradecimiento por renovar
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Al guardar, le llega a su correo registrado «¡Gracias por continuar con nosotros!» con el número y la
+                vigencia nuevos.
+              </p>
+            </div>
+            <Switch
+              id="agradecer-renovacion"
+              checked={agradecer}
+              onCheckedChange={setAgradecer}
+              disabled={bloqueado}
+              className="mt-0.5"
+            />
           </div>
         )}
 

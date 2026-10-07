@@ -3,10 +3,11 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, Loader2, UploadCloud } from "lucide-react";
+import { toast } from "sonner";
 
 import { ArchivoInput } from "@/components/archivos/archivo-input";
 import { Button } from "@/components/ui/button";
-import { validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
+import { ARCHIVOS, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { subirArchivo } from "@/lib/archivos/subir";
 
 /** Sube o reemplaza un archivo de una póliza ya registrada. */
@@ -40,6 +41,9 @@ export function ArchivoUploader({
       return;
     }
     setArchivo(null);
+    toast.success(reemplazar ? "Archivo reemplazado" : "Archivo subido", {
+      description: `${ARCHIVOS[tipo].etiqueta.replace(/\s*\(.*\)$/, "")} · ${archivo.name}`,
+    });
     router.refresh();
   }
 

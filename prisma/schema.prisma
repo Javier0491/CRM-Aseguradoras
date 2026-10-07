@@ -53,10 +53,15 @@ enum EtapaRenovacion {
   PERDIDA
 }
 
-// ADMIN: acceso total. EJECUTIVO: operación diaria, sin comisiones, conciliación ni configuración.
+// ADMIN (Administrador): acceso total. EJECUTIVO (Ejecutivo comercial): operación diaria con
+// conciliación de cobranza, sin comisiones ni configuración. OPERACION (Ejecutiva de operación),
+// LIDER_OFICINA (Líder de oficina) y AUXILIAR solo usan Tareas (ver lib/usuarios/reglas.ts).
 enum Rol {
   ADMIN
   EJECUTIVO
+  OPERACION
+  LIDER_OFICINA
+  AUXILIAR
 }
 
 // Broker o agencia cliente del SaaS: dueña de todos sus datos (tenant).
@@ -75,6 +80,9 @@ model Agencia {
   // Buzón de la agencia (p. ej. servicios@…) que recibe copia de cada aviso automático y las
   // respuestas de los clientes (Configuración → Avisos automáticos).
   correoCopiaAvisos String? @map("correo_copia_avisos")
+  // Correo de atención a clientes (p. ej. servicio@…): va en los correos masivos y en el de
+  // agradecimiento por renovar, y es a donde responden (Configuración → Mi agencia).
+  correoServicio    String? @map("correo_servicio")
   // Suspensión por falta de pago (la decide el SUPERADMIN): sus usuarios no pueden entrar y no
   // salen sus avisos automáticos. No borra nada; al reactivarla todo sigue como estaba.
   suspendida        Boolean   @default(false)
@@ -117,6 +125,7 @@ model Agencia {
   endosos            Endoso[]
   notasCliente       NotaCliente[]
   tareas             Tarea[]
+  responsablesTareas TareaResponsable[]
   pagosPlataforma    PagoPlataforma[]
 
   @@map("agencias")
@@ -151,9 +160,9 @@ model Usuario {
   desactivado_at  DateTime?
   created_at      DateTime   @default(now())
 
-  clientesAsignados Cliente[] @relation("EjecutivoCliente")
-  polizasAsignadas  Poliza[]  @relation("EjecutivoPoliza")
-  tareasAsignadas   Tarea[]   @relation("ResponsableTarea")
+  clientesAsignados Cliente[]          @relation("EjecutivoCliente")
+  polizasAsignadas  Poliza[]           @relation("EjecutivoPoliza")
+  tareasAsignadas   TareaResponsable[]
 
   @@index([agenciaId])
   @@map("usuarios")
@@ -379,8 +388,8 @@ model Tarea {
   titulo             String
   descripcion        String?
   vence              DateTime  @db.Date
-  responsableId      String?   @map("responsable_id")
-  responsable        Usuario?  @relation("ResponsableTarea", fields: [responsableId], references: [id], onDelete: SetNull)
+  // Encargados: cada uno marca su parte; sin encargados, la marca cualquiera.
+  responsables       TareaResponsable[]
   clienteId          String?   @map("cliente_id")
   cliente            Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
   polizaId           String?   @map("poliza_id")
@@ -388,13 +397,32 @@ model Tarea {
   creadaPorEmail     String?   @map("creada_por_email")
   completadaAt       DateTime? @map("completada_at")
   completadaPorEmail String?   @map("completada_por_email")
+  // Borrado suave: "Deshacer" la recupera tal cual, con sus encargados y su avance.
+  eliminadaAt        DateTime? @map("eliminada_at")
   createdAt          DateTime  @default(now()) @map("created_at")
 
   @@index([agenciaId, completadaAt, vence])
-  @@index([responsableId, completadaAt])
   @@index([clienteId])
   @@index([polizaId])
   @@map("tareas")
+}
+
+// Encargado de una tarea y su parte: la tarea queda hecha (Tarea.completadaAt) cuando todos
+// terminan; el avance es cuántos ya terminaron.
+model TareaResponsable {
+  tareaId      String    @map("tarea_id")
+  tarea        Tarea     @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  usuarioId    String    @map("usuario_id")
+  usuario      Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId    String    @map("agencia_id") @db.Uuid
+  agencia      Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  completadaAt DateTime? @map("completada_at")
+
+  @@id([tareaId, usuarioId])
+  @@index([usuarioId, completadaAt])
+  @@index([agenciaId])
+  @@map("tareas_responsables")
 }
 
 // Pagos de una agencia por el uso de la plataforma (los registra el SUPERADMIN).

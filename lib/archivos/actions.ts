@@ -12,7 +12,7 @@ import {
   type TipoArchivo,
 } from "@/lib/archivos/config";
 import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -42,7 +42,7 @@ export async function prepararSubida(
   tipo: TipoArchivo,
   bytes: number
 ): Promise<PrepararSubidaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION_EXPIRADA };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || !esTipoArchivo(tipo)) {
     return { ok: false, error: "Datos inválidos." };
@@ -79,7 +79,7 @@ export async function vincularArchivo(
   path: string,
   nombreOriginal: string
 ): Promise<VincularArchivoResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION_EXPIRADA };
   if (
     typeof polizaId !== "string" ||

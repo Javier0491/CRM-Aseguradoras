@@ -10,7 +10,8 @@ import {
   validarCliente,
   type ClienteValores,
 } from "@/lib/clientes/reglas";
-import { accionCobroDiaria, estadoCobro, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
+import { formatPorcentaje } from "@/lib/format";
+import { accionCobroDiaria, detalleCobro, estadoCobro, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
 import { primaEndoso, validarEndoso, validarFechaCancelacion } from "@/lib/polizas/estatus";
 import { normalizarTelefono, parseNumero } from "@/lib/polizas/validacion";
 import { columnaDe, notaDePerdida, urgenciaRenovacion } from "@/lib/renovaciones/reglas";
@@ -42,6 +43,21 @@ describe("cobranza de la plataforma", () => {
     assert.equal(accionCobroDiaria(agencia, "2026-11-06"), "suspender");
     assert.equal(accionCobroDiaria({ ...agencia, suspensionAutomatica: false }, "2026-11-06"), "avisar");
     assert.equal(accionCobroDiaria({ ...agencia, suspendida: true }, "2026-11-06"), null);
+  });
+  // Lo usa el servidor en el lobby del superadmin: vive en lib (no en un componente de cliente).
+  it("detalle del estado de pago", () => {
+    assert.equal(detalleCobro(estadoCobro({ ...base, cuotaMensual: null }, "2026-10-20")), "Sin cuota configurada");
+    assert.equal(detalleCobro(estadoCobro(base, "2026-10-30")), "Vence en 1 día");
+    assert.equal(detalleCobro(estadoCobro(base, "2026-10-26")), "Vence en 5 días");
+    assert.equal(detalleCobro(estadoCobro(base, "2026-10-31")), "Vence hoy");
+    assert.equal(detalleCobro(estadoCobro(base, "2026-11-03")), "Venció hace 3 d · tolerancia al 05 nov 2026");
+    assert.equal(detalleCobro(estadoCobro(base, "2026-11-06")), "Venció hace 6 d");
+  });
+  it("porcentajes con separador de miles", () => {
+    assert.equal(formatPorcentaje(12.345), "12.3%");
+    assert.equal(formatPorcentaje(1234.5), "1,234.5%");
+    assert.equal(formatPorcentaje(-87.5), "-87.5%");
+    assert.equal(formatPorcentaje(100, 0), "100%");
   });
 });
 

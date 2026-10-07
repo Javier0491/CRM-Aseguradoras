@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2, Pencil, Save } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { actualizarCliente } from "@/lib/clientes/actions";
 import { TIPOS_PERSONA, type ClienteValores, type ErroresCliente } from "@/lib/clientes/reglas";
+import { conDeshacer } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const SIN_EJECUTIVO = "__sin_asignar__";
@@ -61,8 +63,18 @@ export function EditarCliente({
     setError(null);
     startTransition(async () => {
       const r = await actualizarCliente(cliente.id, { ...valores, ...(ejecutivos && { ejecutivoId: ejecutivo }) });
-      if (r.ok) setAbierto(false);
-      else {
+      if (r.ok) {
+        setAbierto(false);
+        // Deshacer regresa los datos con los que se abrió el diálogo.
+        const { id, ejecutivoId, ...anteriores } = cliente;
+        toast.success("Cliente actualizado", {
+          description: valores.nombre,
+          ...conDeshacer(
+            () => actualizarCliente(id, { ...anteriores, ...(ejecutivos && { ejecutivoId: ejecutivoId ?? "" }) }),
+            "Se restauraron los datos anteriores."
+          ),
+        });
+      } else {
         setErrores(r.errores ?? {});
         setError(r.error ?? null);
       }

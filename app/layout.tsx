@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getTemaSesion } from "@/lib/agencias/tema";
 import { nombrePlataforma } from "@/lib/plataforma/marca";
@@ -34,6 +35,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full">
         <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+        {/* Uno solo, en la raíz: dos Toasters duplicarían cada aviso. */}
+        <Toaster theme={tema} />
       </body>
     </html>
   );

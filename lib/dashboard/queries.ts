@@ -3,7 +3,7 @@ import "server-only";
 import { connection } from "next/server";
 
 import { alcanceDe, clientesDe, polizasDe, recibosDe, type Alcance } from "@/lib/auth/alcance";
-import { requireUser, veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
+import { requireUsuarioCrm, veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
 import { contarRecibosEnRiesgo } from "@/lib/busqueda/queries";
 import { diasParaCumpleanos, fechaNacimientoCliente } from "@/lib/clientes/reglas";
 import {
@@ -283,7 +283,7 @@ async function proximosVencimientos(alcance: Alcance, hoy: Date) {
 /** `incluirComisiones` es false para los ejecutivos: las comisiones ni siquiera se calculan. */
 export async function getDashboard(periodo: Periodo, { incluirComisiones }: { incluirComisiones: boolean }) {
   await connection();
-  const user = await requireUser();
+  const user = await requireUsuarioCrm();
   const alcance = alcanceDe(user);
   const hoyIso = hoyISO();
   const hoy = new Date(`${hoyIso}T00:00:00Z`);

@@ -2,6 +2,7 @@ import "server-only";
 
 import { cruzarFilas } from "@/lib/conciliacion/cruce";
 import type { FilaEstado, ResultadoMatch } from "@/lib/conciliacion/tipos";
+import { polizasDe, type Alcance } from "@/lib/auth/alcance";
 import type { UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
@@ -23,8 +24,11 @@ import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
  * - El estado de cuenta es la fuente de la verdad de lo cobrado: si la póliza existe pero el
  *   recibo no, se propone crearlo ya conciliado ("auto_creado"). Solo cuando el renglón trae
  *   folio o número de recibo, para no duplicar recibos al reprocesar un archivo.
+ * - Solo cruza las pólizas que ve la sesión (`alcance`): un ejecutivo con "cartera por
+ *   ejecutivo" concilia las suyas y el resto de los renglones queda como no encontrado.
  */
-export async function cruzarEstadoDeCuenta(agenciaId: string, aseguradoraId: string, filas: readonly FilaEstado[]) {
+export async function cruzarEstadoDeCuenta(alcance: Alcance, aseguradoraId: string, filas: readonly FilaEstado[]) {
+  const { agenciaId } = alcance;
   const vigores = [...new Set(filas.map((f) => extraerPolizaVigor(f.poliza)).filter(Boolean))];
   const impresos = [...new Set(filas.map((f) => f.poliza.trim().toUpperCase()).filter(Boolean))];
 
@@ -37,7 +41,7 @@ export async function cruzarEstadoDeCuenta(agenciaId: string, aseguradoraId: str
   const [polizas, esquemas] = await Promise.all([
     db.poliza.findMany({
       where: {
-        agenciaId,
+        ...polizasDe(alcance),
         aseguradora_id: aseguradoraId,
         OR: usaPolizaVigor
           ? [{ polizaVigor: { in: vigores } }, { numeroImpreso: { in: impresos } }]

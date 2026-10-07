@@ -6,7 +6,7 @@ import { RedactorCorreo } from "@/components/comunicaciones/redactor-correo";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMarcaCorreo } from "@/lib/agencias/queries";
-import { getAgenciaId } from "@/lib/auth/dal";
+import { requireUsuarioCrm } from "@/lib/auth/dal";
 import { remitenteDeAgencia } from "@/lib/comunicaciones/correo";
 import { plantillasIniciales, recibosPorCobrar } from "@/lib/comunicaciones/data";
 import { getDirectorioCorreo } from "@/lib/comunicaciones/queries";
@@ -16,8 +16,9 @@ export const metadata: Metadata = {
 };
 
 export default async function ComunicacionesPage() {
+  const { agenciaId } = await requireUsuarioCrm();
   const { clientes, sinCorreo } = await getDirectorioCorreo();
-  const marca = await getMarcaCorreo(await getAgenciaId());
+  const marca = await getMarcaCorreo(agenciaId);
   // Dirección universal de la plataforma, con el nombre de la agencia como remitente.
   const direccion = process.env.EMAIL_SENDER?.trim() || null;
   const remitente = direccion ? remitenteDeAgencia(direccion, marca.nombre) : null;

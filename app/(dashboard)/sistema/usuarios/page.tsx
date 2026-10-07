@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AlertTriangle, ShieldCheck, UserRound } from "lucide-react";
+import { AlertTriangle, ListTodo, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 
 import { AccionesUsuario } from "@/components/usuarios/acciones-usuario";
 import { AgregarUsuario } from "@/components/usuarios/agregar-usuario";
@@ -19,12 +19,20 @@ import { requireAdmin } from "@/lib/auth/dal";
 import { formatFecha } from "@/lib/format";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getUsuarios } from "@/lib/usuarios/queries";
-import { rolLabels } from "@/lib/usuarios/reglas";
+import { esRolSoloTareas, rolLabels, type RolUsuario } from "@/lib/usuarios/reglas";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Usuarios",
 };
+
+/** Ícono y color de la insignia de cada rol: administra, opera la cartera o solo usa Tareas. */
+const insigniaRol = (rol: RolUsuario): { icono: LucideIcon; clase: string } =>
+  rol === "ADMIN"
+    ? { icono: ShieldCheck, clase: "border-primary/30 bg-primary/10 text-primary" }
+    : esRolSoloTareas(rol)
+      ? { icono: ListTodo, clase: "border-success/30 bg-success/10 text-success" }
+      : { icono: UserRound, clase: "text-foreground" };
 
 export default async function UsuariosPage() {
   const yo = await requireAdmin();
@@ -41,7 +49,8 @@ export default async function UsuariosPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Usuarios</h1>
         <p className="text-sm text-muted-foreground">
-          Cuentas del equipo y su nivel de acceso. Los ejecutivos no ven conciliación ni configuración.
+          Cuentas del equipo y su nivel de acceso. El Ejecutivo comercial opera la cartera y concilia la cobranza; la
+          Ejecutiva de operación, el Líder de oficina y el Auxiliar solo usan Tareas.
         </p>
       </div>
 
@@ -82,7 +91,11 @@ export default async function UsuariosPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {usuarios.map((u) => (
+            {usuarios.map((u) => {
+              const insignia = insigniaRol(u.rol);
+              const soloTareas = esRolSoloTareas(u.rol);
+              const conPolizas = u._count.polizasAsignadas + u._count.clientesAsignados > 0;
+              return (
               <TableRow key={u.id} className={cn(!u.activo && "text-muted-foreground")}>
                 <TableCell className="pl-5 font-medium">
                   {u.nombre}
@@ -97,20 +110,32 @@ export default async function UsuariosPage() {
                 <TableCell>
                   <Badge
                     variant="outline"
-                    className={cn(
-                      "gap-1 font-medium",
-                      u.rol === "ADMIN" && u.activo
-                        ? "border-primary/30 bg-primary/10 text-primary"
-                        : "text-muted-foreground"
-                    )}
+                    className={cn("gap-1 font-medium whitespace-nowrap", u.activo ? insignia.clase : "text-muted-foreground")}
                   >
-                    {u.rol === "ADMIN" ? <ShieldCheck className="size-3" /> : <UserRound className="size-3" />}
+                    <insignia.icono className="size-3" />
                     {rolLabels[u.rol]}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-xs text-muted-foreground tabular-nums">
-                  {u._count.polizasAsignadas} pól. · {u._count.clientesAsignados} cli.
-                  {u._count.tareasAsignadas > 0 && ` · ${u._count.tareasAsignadas} tareas`}
+                <TableCell
+                  className={cn(
+                    "text-xs text-muted-foreground tabular-nums",
+                    // Pólizas a nombre de quien ya no las ve: hay que reasignarlas.
+                    soloTareas && conPolizas && "font-medium text-warning"
+                  )}
+                  title={soloTareas && conPolizas ? "Con este rol ya no ve su cartera: reasígnala desde el menú." : undefined}
+                >
+                  {soloTareas && !conPolizas ? (
+                    u._count.tareasAsignadas > 0 ? (
+                      `${u._count.tareasAsignadas} ${u._count.tareasAsignadas === 1 ? "tarea pendiente" : "tareas pendientes"}`
+                    ) : (
+                      "Sin pendientes"
+                    )
+                  ) : (
+                    <>
+                      {u._count.polizasAsignadas} pól. · {u._count.clientesAsignados} cli.
+                      {u._count.tareasAsignadas > 0 && ` · ${u._count.tareasAsignadas} tareas`}
+                    </>
+                  )}
                 </TableCell>
                 <TableCell className="tabular-nums">{formatFecha(u.created_at)}</TableCell>
                 <TableCell className="tabular-nums text-muted-foreground">
@@ -125,11 +150,14 @@ export default async function UsuariosPage() {
                       clientes: u._count.clientesAsignados,
                       tareas: u._count.tareasAsignadas,
                     }}
-                    otros={usuarios.filter((o) => o.activo && o.id !== u.id).map((o) => ({ id: o.id, nombre: o.nombre }))}
+                    otros={usuarios
+                      .filter((o) => o.activo && o.id !== u.id)
+                      .map((o) => ({ id: o.id, nombre: o.nombre, rol: o.rol }))}
                   />
                 </TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </Card>

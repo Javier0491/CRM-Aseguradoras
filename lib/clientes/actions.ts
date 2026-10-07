@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { alcanceDe, clientesDe, polizasDe } from "@/lib/auth/alcance";
-import { esAdmin, getAdmin, getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
+import { esAdmin, getAdmin, getUsuarioCrm, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import {
   esTipoPersona,
@@ -61,7 +61,7 @@ const ETIQUETAS: Record<string, string> = {
 
 /** Edita el expediente del cliente. Un RFC que ya tiene otro cliente se resuelve fusionándolos. */
 export async function actualizarCliente(clienteId: string, raw: ClienteValores & { ejecutivoId?: string }): Promise<ClienteResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   const actual = await clienteVisible(user, clienteId);
   if (!actual) return { ok: false, error: "El cliente ya no existe." };
@@ -144,7 +144,7 @@ export async function agregarSeguimiento(
   clienteId: string,
   datos: { tipo: string; texto: string; polizaId?: string }
 ): Promise<NotaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   const cliente = await clienteVisible(user, clienteId);
   if (!cliente) return { ok: false, error: "El cliente ya no existe." };
@@ -183,7 +183,7 @@ export async function agregarSeguimiento(
 
 /** Borra un registro del seguimiento: solo su autor o un administrador. */
 export async function eliminarSeguimiento(notaId: string): Promise<NotaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: SESION };
   if (typeof notaId !== "string" || !ID.test(notaId)) return { ok: false, error: "Datos inválidos." };
   const nota = await db.notaCliente.findFirst({

@@ -7,7 +7,7 @@ import {
   RateLimitError,
 } from "openai";
 
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import {
   getExtractor,
@@ -66,7 +66,7 @@ function errorDeExtraccion(e: unknown) {
  * (ver CONTEXTOS_OCR). La IA cruza todos los documentos y devuelve una sola extracción.
  */
 export async function POST(request: Request) {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return error("No autenticado.", 401);
 
   let formData: FormData;

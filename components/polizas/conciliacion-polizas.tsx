@@ -103,16 +103,18 @@ export function PolizasConciliadas({
         <TableBody>
           {visibles.map((p) => (
             <TableRow key={p.id}>
-              <TableCell className="pl-5">
+              <TableCell className="max-w-52 min-w-36 pl-5 whitespace-normal wrap-anywhere">
                 <Link href={`/polizas/${p.id}`} className="font-mono text-xs hover:text-primary hover:underline">
                   {p.numeroImpreso}
                 </Link>
               </TableCell>
-              <TableCell className="max-w-[240px] truncate font-medium">{p.cliente}</TableCell>
+              <TableCell className="max-w-60 truncate font-medium" title={p.cliente}>
+                {p.cliente}
+              </TableCell>
               <TableCell>
                 <RamoBadge ramo={p.ramo} />
               </TableCell>
-              <TableCell>
+              <TableCell className="max-w-52">
                 <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
               </TableCell>
               <TableCell className="text-right tabular-nums">
@@ -156,7 +158,7 @@ export function PolizasSinConciliar({
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-background text-primary">
           <FileSearch className="size-4" />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 basis-56">
           <p className="text-sm font-medium">
             {formatNumero(polizas.length)} {polizas.length === 1 ? "póliza sin conciliar" : "pólizas sin conciliar"}
             {noEncontradas.length > 0 &&
@@ -206,7 +208,7 @@ export function PolizasSinConciliar({
               <TableBody>
                 {visibles.map((p) => (
                   <TableRow key={p.id}>
-                    <TableCell className="pl-5 align-top">
+                    <TableCell className="max-w-52 min-w-36 pl-5 align-top whitespace-normal wrap-anywhere">
                       <Link href={`/polizas/${p.id}`} className="font-mono text-xs hover:text-primary hover:underline">
                         {p.numeroImpreso}
                       </Link>
@@ -214,14 +216,16 @@ export function PolizasSinConciliar({
                         <p className="font-mono text-[11px] text-destructive">archivo: {p.numeroEnArchivo}</p>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-[220px] align-top">
-                      <p className="truncate font-medium">{p.cliente}</p>
+                    <TableCell className="max-w-56 align-top">
+                      <p className="truncate font-medium" title={p.cliente}>
+                        {p.cliente}
+                      </p>
                       <p className="font-mono text-[11px] text-muted-foreground">{p.rfc}</p>
                     </TableCell>
-                    <TableCell className="align-top">
+                    <TableCell className="max-w-52 align-top">
                       <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
                     </TableCell>
-                    <TableCell className="max-w-[460px] pr-5 align-top whitespace-normal">
+                    <TableCell className="max-w-115 pr-5 align-top whitespace-normal">
                       <Etiqueta className={tonoMotivo[p.motivo.tipo]}>{etiquetaMotivo[p.motivo.tipo]}</Etiqueta>
                       <p className="mt-1 text-xs text-muted-foreground">{p.motivo.texto}</p>
                     </TableCell>
@@ -256,12 +260,16 @@ export function PolizasSinConciliar({
               <TableBody>
                 {noEncontradas.slice(0, limite).map((r) => (
                   <TableRow key={`${r.aseguradora.nombre}-${r.polizaArchivo}`}>
-                    <TableCell className="pl-5 align-top font-mono text-xs">{r.polizaArchivo}</TableCell>
-                    <TableCell className="align-top">
+                    <TableCell className="max-w-52 min-w-36 pl-5 align-top font-mono text-xs whitespace-normal wrap-anywhere">
+                      {r.polizaArchivo}
+                    </TableCell>
+                    <TableCell className="max-w-52 align-top">
                       <AseguradoraTag nombre={r.aseguradora.nombre} color={r.aseguradora.color_hex} />
                     </TableCell>
-                    <TableCell className="max-w-[220px] align-top">
-                      <p className="truncate text-xs">{r.archivo}</p>
+                    <TableCell className="max-w-56 align-top">
+                      <p className="truncate text-xs" title={r.archivo}>
+                        {r.archivo}
+                      </p>
                       <p className="text-[11px] text-muted-foreground">
                         Fila {r.fila} · {formatFecha(r.fecha)}
                         {r.veces > 1 && ` · en ${r.veces} archivos`}
@@ -270,7 +278,7 @@ export function PolizasSinConciliar({
                     {verComisiones && (
                       <TableCell className="text-right align-top tabular-nums">{formatMoneda(r.comisionPagada)}</TableCell>
                     )}
-                    <TableCell className="max-w-[420px] pr-5 align-top whitespace-normal">
+                    <TableCell className="max-w-105 pr-5 align-top whitespace-normal">
                       <Etiqueta className={tonoNoEncontrada[r.estado.tipo]}>{etiquetaNoEncontrada[r.estado.tipo]}</Etiqueta>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {r.estado.texto}

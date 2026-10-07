@@ -8,7 +8,7 @@ import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { MAX_PASSWORD, MIN_PASSWORD, ROLES, type RolUsuario } from "@/lib/usuarios/reglas";
+import { MAX_PASSWORD, MIN_PASSWORD, ROLES, ROLES_CARTERA, rolLabels, type RolUsuario } from "@/lib/usuarios/reglas";
 
 export type NuevoUsuarioInput = {
   nombre: string;
@@ -133,7 +133,7 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
       // Queda en la bitácora de la agencia donde se creó la cuenta.
       await registrarBitacora(
         { id: admin.id, email: admin.email, agenciaId },
-        { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rol}` },
+        { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rolLabels[rol]}` },
         tx
       );
     });
@@ -204,7 +204,7 @@ export async function actualizarUsuario(raw: EdicionUsuarioInput): Promise<Resul
         await tx.usuario.update({ where: { id: raw.id, agenciaId: admin.agenciaId }, data: { nombre, rol } });
         const cambios = [
           actual.nombre !== nombre && `nombre «${actual.nombre}» → «${nombre}»`,
-          actual.rol !== rol && `rol ${actual.rol} → ${rol}`,
+          actual.rol !== rol && `rol ${rolLabels[actual.rol]} → ${rolLabels[rol as RolUsuario]}`,
         ].filter(Boolean);
         if (cambios.length > 0) {
           await registrarBitacora(
@@ -291,7 +291,9 @@ export type ResultadoReasignacion = { ok: true; polizas: number; clientes: numbe
 
 /**
  * ADMIN: pasa la cartera de una cuenta a otra (o la deja sin asignar con `aId` vacío): sus
- * pólizas, sus clientes y sus tareas pendientes. Útil cuando un ejecutivo deja la agencia.
+ * pólizas, sus clientes y sus tareas pendientes. Útil cuando alguien deja la agencia o cambia de
+ * rol. Las pólizas y los clientes solo los lleva un Administrador o un Ejecutivo comercial; si
+ * solo hay tareas, las recibe cualquier cuenta activa.
  */
 export async function reasignarCartera(deId: string, aId: string): Promise<ResultadoReasignacion> {
   const admin = await getAdmin();
@@ -299,26 +301,64 @@ export async function reasignarCartera(deId: string, aId: string): Promise<Resul
   if (typeof deId !== "string" || !deId || typeof aId !== "string" || deId === aId) {
     return { ok: false, error: "Datos inválidos." };
   }
-  const [de, a] = await Promise.all([
+  const [de, a, conCartera] = await Promise.all([
     db.usuario.findFirst({ where: { id: deId, agenciaId: admin.agenciaId }, select: { id: true, nombre: true } }),
     aId
       ? db.usuario.findFirst({
           where: { id: aId, agenciaId: admin.agenciaId, activo: true, rolSistema: "USER" },
-          select: { id: true, nombre: true },
+          select: { id: true, nombre: true, rol: true },
         })
       : Promise.resolve(null),
+    db.poliza
+      .count({ where: { agenciaId: admin.agenciaId, ejecutivoId: deId } })
+      .then(async (n) => n > 0 || (await db.cliente.count({ where: { agenciaId: admin.agenciaId, ejecutivoId: deId } })) > 0),
   ]);
   if (!de) return { ok: false, error: "La cuenta ya no existe; recarga la página." };
   if (aId && !a) return { ok: false, error: "La cuenta que recibe la cartera ya no está activa." };
+  if (a && conCartera && !ROLES_CARTERA.includes(a.rol)) {
+    return {
+      ok: false,
+      error: `${a.nombre} es ${rolLabels[a.rol]}: las pólizas y los clientes solo los recibe un Administrador o un Ejecutivo comercial.`,
+    };
+  }
   const destino = a?.id ?? null;
 
   const resultado = await db.$transaction(async (tx) => {
     const polizas = await tx.poliza.updateMany({ where: { agenciaId: admin.agenciaId, ejecutivoId: de.id }, data: { ejecutivoId: destino } });
     const clientes = await tx.cliente.updateMany({ where: { agenciaId: admin.agenciaId, ejecutivoId: de.id }, data: { ejecutivoId: destino } });
-    const tareas = await tx.tarea.updateMany({
-      where: { agenciaId: admin.agenciaId, responsableId: de.id, completadaAt: null },
-      data: { responsableId: destino },
+    // Tareas pendientes: su parte pasa a quien recibe (si ya era encargado de esa tarea, solo se
+    // quita la suya); sin destino, deja de ser encargado. Si los que quedan ya terminaron, la
+    // tarea queda hecha.
+    const partes = await tx.tareaResponsable.findMany({
+      where: {
+        agenciaId: admin.agenciaId,
+        usuarioId: de.id,
+        completadaAt: null,
+        tarea: { eliminadaAt: null, completadaAt: null },
+      },
+      select: { tareaId: true },
     });
+    const ids = partes.map((p) => p.tareaId);
+    const yaEncargado = new Set(
+      destino && ids.length
+        ? (await tx.tareaResponsable.findMany({ where: { usuarioId: destino, tareaId: { in: ids } }, select: { tareaId: true } })).map(
+            (p) => p.tareaId
+          )
+        : []
+    );
+    for (const tareaId of ids) {
+      const clave = { tareaId_usuarioId: { tareaId, usuarioId: de.id } };
+      if (destino && !yaEncargado.has(tareaId)) {
+        await tx.tareaResponsable.update({ where: clave, data: { usuarioId: destino } });
+        continue;
+      }
+      await tx.tareaResponsable.delete({ where: clave });
+      const restantes = await tx.tareaResponsable.findMany({ where: { tareaId }, select: { completadaAt: true } });
+      if (restantes.length > 0 && restantes.every((r) => r.completadaAt !== null)) {
+        await tx.tarea.update({ where: { id: tareaId }, data: { completadaAt: new Date(), completadaPorEmail: admin.email } });
+      }
+    }
+    const tareas = { count: ids.length };
     await registrarBitacora(
       admin,
       {

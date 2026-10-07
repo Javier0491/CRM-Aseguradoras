@@ -5,7 +5,7 @@ import { MessageSquareWarning } from "lucide-react";
 import { ConciliacionWorkspace } from "@/components/conciliacion/conciliacion-workspace";
 import { HistorialLotes } from "@/components/conciliacion/historial-lotes";
 import { Button } from "@/components/ui/button";
-import { requireAdmin, veComisiones } from "@/lib/auth/dal";
+import { requireConciliador, veComisiones } from "@/lib/auth/dal";
 import { contarAclaraciones } from "@/lib/conciliacion/aclaraciones";
 import { getLotes } from "@/lib/conciliacion/lotes";
 import { db } from "@/lib/db";
@@ -16,14 +16,15 @@ export const metadata: Metadata = {
 };
 
 export default async function ConciliacionPage() {
-  const admin = await requireAdmin();
-  const { agenciaId } = admin;
-  // Sin permiso de comisiones (ADMIN) la conciliación solo marca qué recibos se cobraron.
-  const verComisiones = veComisiones(admin);
+  // Administrador y Ejecutivo comercial.
+  const usuario = await requireConciliador();
+  const { agenciaId } = usuario;
+  // Sin permiso de comisiones (todos menos el SUPERADMIN) la conciliación solo marca qué recibos se cobraron.
+  const verComisiones = veComisiones(usuario);
   const [aseguradoras, conEsquema, lotes, aclaraciones] = await Promise.all([
     getAseguradorasOpciones(),
     db.esquemaComision.findMany({ where: { agenciaId }, distinct: ["aseguradora_id"], select: { aseguradora_id: true } }),
-    getLotes(),
+    getLotes(usuario),
     verComisiones ? contarAclaraciones() : 0,
   ]);
 
@@ -37,6 +38,7 @@ export default async function ConciliacionPage() {
             {verComisiones
               ? "Cruza el estado de cuenta de comisiones de cada aseguradora contra los recibos del CRM."
               : "Cruza el estado de cuenta de cada aseguradora contra los recibos del CRM para marcar los cobrados."}
+            {usuario.soloSuCartera && " Solo se cruzan las pólizas de tu cartera."}
           </p>
         </div>
         {verComisiones && (

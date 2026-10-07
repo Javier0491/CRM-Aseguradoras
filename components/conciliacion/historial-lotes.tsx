@@ -104,7 +104,7 @@ export function HistorialLotes({ lotes }: { lotes: LoteResumen[] }) {
                   <TableCell>
                     <AseguradoraTag nombre={l.aseguradora.nombre} color={l.aseguradora.color_hex} />
                   </TableCell>
-                  <TableCell className="max-w-[240px]">
+                  <TableCell className="max-w-60">
                     <p className="truncate text-sm" title={l.archivo_nombre}>
                       {l.archivo_nombre}
                     </p>
@@ -122,7 +122,7 @@ export function HistorialLotes({ lotes }: { lotes: LoteResumen[] }) {
                       >
                         Revertido
                       </Badge>
-                    ) : (
+                    ) : l.puedeRevertir ? (
                       <Button
                         variant="ghost"
                         size="sm"
@@ -135,7 +135,7 @@ export function HistorialLotes({ lotes }: { lotes: LoteResumen[] }) {
                       >
                         <Undo2 /> Revertir
                       </Button>
-                    )}
+                    ) : null}
                   </TableCell>
                 </TableRow>
               );

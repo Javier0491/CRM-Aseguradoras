@@ -16,7 +16,7 @@ export default async function MiAgenciaPage() {
     getAgencia(agenciaId),
     db.agencia.findUniqueOrThrow({
       where: { id: agenciaId },
-      select: { logoDocumentosUrl: true, slug: true, carteraPorEjecutivo: true },
+      select: { logoDocumentosUrl: true, slug: true, carteraPorEjecutivo: true, correoServicio: true },
     }),
   ]);
 
@@ -25,11 +25,16 @@ export default async function MiAgenciaPage() {
       <div>
         <h1 className="text-xl font-semibold tracking-tight">Mi agencia</h1>
         <p className="text-sm text-muted-foreground">
-          Nombre, ícono, logo y color de tu agencia en la plataforma y en sus correos; liga de acceso y cartera.
+          Nombre, ícono, logo y color de tu agencia en la plataforma y en sus correos; liga de acceso, cartera y
+          correo de servicio.
         </p>
       </div>
       <AgenciaForm agencia={{ ...agencia, logoDocumentosUrl: extra.logoDocumentosUrl }} />
-      <AjustesOperacion slug={extra.slug} carteraPorEjecutivo={extra.carteraPorEjecutivo} />
+      <AjustesOperacion
+        slug={extra.slug}
+        carteraPorEjecutivo={extra.carteraPorEjecutivo}
+        correoServicio={extra.correoServicio}
+      />
     </>
   );
 }

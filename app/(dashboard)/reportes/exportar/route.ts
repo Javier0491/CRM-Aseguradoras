@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { formaPagoLabel, ramoLabel } from "@/components/polizas/poliza-ui";
 import { alcanceDe } from "@/lib/auth/alcance";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import { esPeriodoReporte, PERIODO_REPORTE_PREDETERMINADO } from "@/lib/reportes/periodos";
 import { getPolizasReporte } from "@/lib/reportes/queries";
@@ -17,7 +17,7 @@ function celda(valor: string) {
 
 /** GET /reportes/exportar?periodo=… — CSV con las pólizas emitidas en el periodo del reporte. */
 export async function GET(req: NextRequest) {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) {
     return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
   }

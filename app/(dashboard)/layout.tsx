@@ -5,10 +5,11 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TemaAgencia } from "@/components/layout/tema-agencia";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { getAgencia } from "@/lib/agencias/queries";
-import { esAdmin, getCurrentUser, requireUser } from "@/lib/auth/dal";
+import { esAdmin, getCurrentUser, puedeConciliar, requireUser } from "@/lib/auth/dal";
 import { formatFecha } from "@/lib/format";
 import { getAlertasPlataforma } from "@/lib/plataforma/alertas";
 import { getEstadoPagoAgencia } from "@/lib/plataforma/queries";
+import { rolLabels } from "@/lib/usuarios/reglas";
 
 /** Las pestañas llevan el nombre de la agencia ("Pólizas · Seguros Ruiz"). */
 export async function generateMetadata(): Promise<Metadata> {
@@ -43,13 +44,19 @@ export default async function DashboardLayout({
       <AppSidebar
         email={user.email}
         nombre={user.nombre}
-        esAdmin={admin}
-        superadmin={user.superadmin}
+        rol={user.superadmin ? "Superadministrador" : rolLabels[user.rol]}
+        permisos={{
+          admin,
+          conciliar: puedeConciliar(user),
+          superadmin: user.superadmin,
+          soloTareas: user.soloTareas,
+        }}
         agencia={{ nombre: agencia.nombre, logoUrl: agencia.logoUrl }}
       />
       {/* min-w-0: sin él, el contenido ancho (tablas) estira toda la página en vez de hacer scroll. */}
       <SidebarInset className="min-w-0 bg-background">
         <AppHeader
+          soloTareas={user.soloTareas}
           superadmin={
             user.superadmin
               ? { ajena: user.agenciaId !== user.agenciaPropiaId, alertas: alertas.filter((a) => a.grave).length }

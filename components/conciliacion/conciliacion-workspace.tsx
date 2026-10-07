@@ -11,6 +11,7 @@ import {
   Columns3,
   FilePlus2,
   FileSpreadsheet,
+  FileText,
   Loader2,
   ScanSearch,
   SearchX,
@@ -71,6 +72,14 @@ import {
   type Hoja,
   type Mapeo,
 } from "@/lib/conciliacion/archivo";
+import { leerMonto } from "@/lib/conciliacion/comisiones";
+import {
+  hojaDesdePdf,
+  mismaAseguradora,
+  PDF_MAX_BYTES,
+  type LecturaPdf,
+  type LecturaPdfRespuesta,
+} from "@/lib/conciliacion/pdf-formato";
 import {
   TOLERANCIA_MXN,
   type EstatusMatch,
@@ -111,7 +120,11 @@ type Archivo = {
   encabezado: number;
   mapeo: Mapeo;
   origen: OrigenMapeo;
+  /** Solo si se leyó de un PDF con IA: lo que hay que revisar antes de cruzar. */
+  pdf?: Omit<LecturaPdf, "filas">;
 };
+
+const esPdf = (f: File) => f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
 
 /** Encabezado y columnas detectados en una hoja, listos para el estado del archivo. */
 function autoMapear(hoja: Hoja): Pick<Archivo, "encabezado" | "mapeo" | "origen"> {
@@ -137,7 +150,7 @@ export function ConciliacionWorkspace({
 }) {
   const [aseguradora, setAseguradora] = React.useState("");
   const [archivo, setArchivo] = React.useState<Archivo | null>(null);
-  const [leyendo, setLeyendo] = React.useState(false);
+  const [leyendo, setLeyendo] = React.useState<false | "archivo" | "pdf">(false);
   const [error, setError] = React.useState<string | null>(null);
   const [analisis, setAnalisis] = React.useState<Analisis | null>(null);
   const [analizando, startAnalisis] = React.useTransition();
@@ -165,15 +178,16 @@ export function ConciliacionWorkspace({
     setError(null);
     setAnalisis(null);
     setAplicados(null);
+    if (esPdf(f)) return cargarPdf(f);
     if (!EXTENSIONES_ESTADO.some((ext) => f.name.toLowerCase().endsWith(ext))) {
-      setError("Formato no soportado: usa un archivo CSV o Excel (.xlsx, .xls).");
+      setError("Formato no soportado: usa un archivo CSV, Excel (.xlsx, .xls) o PDF.");
       return;
     }
     if (f.size > ESTADO_MAX_BYTES) {
       setError("El archivo excede el límite de 10 MB.");
       return;
     }
-    setLeyendo(true);
+    setLeyendo("archivo");
     try {
       const hojas = await leerArchivoEstado(f);
       // La primera hoja donde se detectan póliza y comisión (a veces la primera es un resumen);
@@ -186,6 +200,49 @@ export function ConciliacionWorkspace({
       console.error("[conciliacion] lectura", e);
       setArchivo(null);
       setError("No se pudo leer el archivo. Verifica que sea un CSV o Excel válido y que no esté vacío.");
+    } finally {
+      setLeyendo(false);
+    }
+  }
+
+  /**
+   * El PDF lo lee la IA en el servidor (no se guarda) y regresa como una tabla con encabezados
+   * conocidos: el mapeo se detecta solo y el usuario revisa la vista previa antes de cruzar.
+   */
+  async function cargarPdf(f: File) {
+    if (f.size > PDF_MAX_BYTES) {
+      setError("El PDF excede el límite de 10 MB.");
+      return;
+    }
+    setLeyendo("pdf");
+    try {
+      const datos = new FormData();
+      datos.append("archivo", f);
+      if (aseguradora) datos.append("aseguradoraId", aseguradora);
+      const respuesta = await fetch("/api/conciliacion/pdf", { method: "POST", body: datos });
+      const res = (await respuesta.json().catch(() => null)) as LecturaPdfRespuesta | null;
+      if (!res?.ok) {
+        setArchivo(null);
+        setError(
+          res?.error ??
+            (respuesta.status === 504
+              ? "La lectura del PDF tardó demasiado. Divide el archivo o usa el Excel del portal de la aseguradora."
+              : "No se pudo leer el PDF. Intenta de nuevo.")
+        );
+        return;
+      }
+      const hoja = hojaDesdePdf(res);
+      setArchivo({
+        nombre: f.name,
+        hojas: [hoja],
+        hoja: 0,
+        ...autoMapear(hoja),
+        pdf: { aseguradora: res.aseguradora, periodo: res.periodo, totalImpreso: res.totalImpreso, incompleto: res.incompleto },
+      });
+    } catch (e) {
+      console.error("[conciliacion] pdf", e);
+      setArchivo(null);
+      setError("No se pudo enviar el PDF. Revisa tu conexión e intenta de nuevo.");
     } finally {
       setLeyendo(false);
     }
@@ -248,8 +305,8 @@ export function ConciliacionWorkspace({
             1. Estado de cuenta {verComisiones ? "de comisiones" : "de la aseguradora"}
           </CardTitle>
           <CardDescription>
-            Elige la aseguradora y sube su estado de cuenta en CSV o Excel. El archivo se lee en tu
-            navegador; solo se envían los renglones de póliza y comisión.
+            Elige la aseguradora y sube su estado de cuenta en CSV, Excel o PDF. Los CSV y Excel se leen en tu
+            navegador; los PDF los lee la IA (sin guardarlos) y revisas lo leído antes de cruzar.
           </CardDescription>
           {archivo && (
             <CardAction>
@@ -324,7 +381,16 @@ export function ConciliacionWorkspace({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 px-5 py-5">
-            <AvisoDeteccion archivo={archivo} encabezados={encabezados} />
+            {archivo.pdf ? (
+              <RevisionPdf
+                pdf={archivo.pdf}
+                filas={hojaActual.filas}
+                aseguradora={nombreAseguradora}
+                verComisiones={verComisiones}
+              />
+            ) : (
+              <AvisoDeteccion archivo={archivo} encabezados={encabezados} />
+            )}
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               {archivo.hojas.length > 1 && (
                 <SelectorColumna
@@ -523,7 +589,7 @@ export function ConciliacionWorkspace({
                         <p className="text-[11px] text-muted-foreground">archivo: {r.polizaArchivo}</p>
                       )}
                     </TableCell>
-                    <TableCell className="max-w-[220px] truncate">
+                    <TableCell className="max-w-56 truncate">
                       {r.poliza?.cliente ?? <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="text-muted-foreground tabular-nums">
@@ -572,7 +638,7 @@ export function ConciliacionWorkspace({
                       <Badge variant="outline" className={cn("gap-1", c.clase)}>
                         <c.icono className="size-3" /> {etiqueta(r.estatus)}
                       </Badge>
-                      {r.detalle && <p className="mt-1 max-w-[220px] text-[11px] text-muted-foreground">{r.detalle}</p>}
+                      {r.detalle && <p className="mt-1 max-w-56 text-[11px] text-muted-foreground">{r.detalle}</p>}
                     </TableCell>
                   </TableRow>
                 );
@@ -656,6 +722,75 @@ export function ConciliacionWorkspace({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/**
+ * Lo que leyó la IA de un PDF y qué revisar antes de cruzar: cuántos renglones, si su suma cuadra
+ * con el total impreso, si el PDF es de otra aseguradora y si quedó incompleto. Los montos solo
+ * se muestran a quien ve comisiones.
+ */
+function RevisionPdf({
+  pdf,
+  filas,
+  aseguradora,
+  verComisiones,
+}: {
+  pdf: NonNullable<Archivo["pdf"]>;
+  filas: Celda[][];
+  aseguradora: string | undefined;
+  verComisiones: boolean;
+}) {
+  // La tabla del PDF siempre trae la comisión en la última columna (ver ENCABEZADOS_PDF).
+  const renglones = filas.slice(1);
+  const total = renglones.reduce((s, f) => {
+    const m = leerMonto(f[4]);
+    return Number.isNaN(m) ? s : s + m;
+  }, 0);
+  const cuadra = pdf.totalImpreso !== null && Math.abs(total - pdf.totalImpreso) <= 1;
+  const otraAseguradora = aseguradora && pdf.aseguradora && !mismaAseguradora(aseguradora, pdf.aseguradora);
+  return (
+    <div className="space-y-1.5 rounded-md border border-primary/30 bg-primary/[0.07] px-3 py-2.5 text-sm">
+      <p className="flex items-start gap-2">
+        <FileText className="mt-0.5 size-4 shrink-0 text-primary" />
+        <span>
+          <span className="font-medium text-primary">Leído con IA del PDF</span>
+          {pdf.periodo && ` · ${pdf.periodo}`}: {formatNumero(renglones.length)}{" "}
+          {renglones.length === 1 ? "renglón" : "renglones"}.{" "}
+          <span className="text-muted-foreground">Compara la vista previa con el PDF antes de analizar.</span>
+        </span>
+      </p>
+      {pdf.totalImpreso === null ? (
+        <p className="pl-6 text-xs text-muted-foreground">El PDF no trae un total impreso para cuadrar lo leído.</p>
+      ) : cuadra ? (
+        <p className="flex items-start gap-2 text-success">
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          La suma de lo leído cuadra con el total impreso en el PDF
+          {verComisiones && ` (${formatMoneda(pdf.totalImpreso)})`}.
+        </p>
+      ) : (
+        <p className="flex items-start gap-2 text-warning">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          <span>
+            La suma de lo leído{verComisiones && ` (${formatMoneda(total)})`} no cuadra con el total impreso en el PDF
+            {verComisiones && ` (${formatMoneda(pdf.totalImpreso)})`}: puede faltar o sobrar algún renglón.
+          </span>
+        </p>
+      )}
+      {pdf.incompleto && (
+        <p className="flex items-start gap-2 text-warning">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          El PDF es muy largo y la IA solo alcanzó a leer estos renglones: divide el PDF o usa el Excel del portal de la
+          aseguradora.
+        </p>
+      )}
+      {otraAseguradora && (
+        <p className="flex items-start gap-2 text-warning">
+          <CircleAlert className="mt-0.5 size-4 shrink-0" />
+          El PDF parece ser de «{pdf.aseguradora}», no de {aseguradora}: revisa la aseguradora elegida.
+        </p>
+      )}
     </div>
   );
 }
@@ -798,9 +933,11 @@ function ZonaArchivo({
   nombre,
 }: {
   onArchivo: (f: File) => void;
-  leyendo: boolean;
+  /** "pdf": la IA lo está leyendo (tarda más que un Excel). */
+  leyendo: false | "archivo" | "pdf";
   nombre?: string;
 }) {
+  const pdf = nombre?.toLowerCase().endsWith(".pdf");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [arrastrando, setArrastrando] = React.useState(false);
   return (
@@ -808,7 +945,7 @@ function ZonaArchivo({
       <span className="text-sm font-medium">Archivo</span>
       <button
         type="button"
-        disabled={leyendo}
+        disabled={leyendo !== false}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => {
           e.preventDefault();
@@ -829,6 +966,8 @@ function ZonaArchivo({
       >
         {leyendo ? (
           <Loader2 className="size-5 shrink-0 animate-spin text-primary" />
+        ) : nombre && pdf ? (
+          <FileText className="size-5 shrink-0 text-primary" />
         ) : nombre ? (
           <FileSpreadsheet className="size-5 shrink-0 text-primary" />
         ) : (
@@ -836,17 +975,25 @@ function ZonaArchivo({
         )}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">
-            {leyendo ? "Leyendo archivo…" : nombre ?? (arrastrando ? "Suelta el archivo aquí" : "Arrastra el estado de cuenta o haz clic para seleccionar")}
+            {leyendo === "pdf"
+              ? "Leyendo el PDF con IA…"
+              : leyendo
+                ? "Leyendo archivo…"
+                : nombre ?? (arrastrando ? "Suelta el archivo aquí" : "Arrastra el estado de cuenta o haz clic para seleccionar")}
           </span>
           <span className="block text-xs text-muted-foreground">
-            {nombre ? "Haz clic para cambiar el archivo" : "CSV, XLSX o XLS · máximo 10 MB"}
+            {leyendo === "pdf"
+              ? "Puede tardar hasta un minuto según el número de páginas"
+              : nombre
+                ? "Haz clic para cambiar el archivo"
+                : "CSV, XLSX, XLS o PDF · máximo 10 MB"}
           </span>
         </span>
       </button>
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        accept=".csv,.xlsx,.xls,.pdf,text/csv,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         className="sr-only"
         tabIndex={-1}
         onChange={(e) => {

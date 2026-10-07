@@ -2,6 +2,7 @@ import "server-only";
 
 import type { UsuarioSesion } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { ROLES_CARTERA } from "@/lib/usuarios/reglas";
 
 export type ResultadoAsignacion = { ok: true; ejecutivoId: string | null } | { ok: false; error: string };
 
@@ -39,8 +40,9 @@ export async function resolverEjecutivo(
   // El responsable que ya tenía se conserva aunque su cuenta se haya desactivado.
   if (solicitado === actual) return { ok: true, ejecutivoId: actual };
   if (!ID_USUARIO.test(solicitado)) return { ok: false, error: "Ejecutivo inválido." };
+  // Solo quien lleva cartera (Administrador o Ejecutivo comercial): los roles de solo Tareas no ven pólizas.
   const cuenta = await db.usuario.findFirst({
-    where: { id: solicitado, agenciaId: usuario.agenciaId, activo: true, rolSistema: "USER" },
+    where: { id: solicitado, agenciaId: usuario.agenciaId, activo: true, rolSistema: "USER", rol: { in: [...ROLES_CARTERA] } },
     select: { id: true },
   });
   return cuenta

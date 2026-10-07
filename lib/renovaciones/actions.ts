@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { alcanceDe, polizasDe } from "@/lib/auth/alcance";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import {
@@ -26,7 +26,7 @@ export async function cambiarEtapaRenovacion(
   etapa: EtapaManual,
   datos: { motivo?: string; nota?: string } = {}
 ): Promise<CambioEtapaResultado> {
-  const user = await getCurrentUser();
+  const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId) || !esEtapaManual(etapa)) {
     return { ok: false, error: "Datos inválidos." };

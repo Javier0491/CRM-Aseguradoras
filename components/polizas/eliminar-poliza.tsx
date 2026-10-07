@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, AlertTriangle, Loader2, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +57,7 @@ export function EliminarPoliza({
         setAviso(res.avisoAlmacen);
         return;
       }
+      toast(`Póliza ${numero} eliminada`, { description: "Con sus recibos, asegurados y archivos." });
       router.replace("/polizas");
     });
   }

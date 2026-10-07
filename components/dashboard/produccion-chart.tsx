@@ -47,7 +47,7 @@ export function ProduccionChart({ datos }: { datos: ProduccionAseguradora[] }) {
               width={anchoEtiquetas}
               tickLine={false}
               axisLine={false}
-              tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+              tick={(props: EtiquetaEjeProps) => <EtiquetaEje {...props} ancho={anchoEtiquetas - 8} />}
             />
             <Tooltip
               cursor={{ fill: "var(--accent)", opacity: 0.5 }}
@@ -100,6 +100,25 @@ export function ProduccionChart({ datos }: { datos: ProduccionAseguradora[] }) {
         </table>
       </details>
     </div>
+  );
+}
+
+type EtiquetaEjeProps = { x?: number | string; y?: number | string; payload?: { value?: unknown } };
+
+/**
+ * Nombre en el eje: en un solo renglón, recortado con "…" si no cabe. En varios renglones, los
+ * nombres largos ("Qualitas Compañía de Seguros, S.A. de C.V.") se encimaban con la barra de al
+ * lado; el nombre completo queda en el tooltip, en la vista de tabla y en el <title> de la etiqueta.
+ */
+function EtiquetaEje({ x, y, payload, ancho }: EtiquetaEjeProps & { ancho: number }) {
+  const nombre = String(payload?.value ?? "");
+  const caben = Math.max(4, Math.floor(ancho / 6.5));
+  const texto = nombre.length > caben ? `${nombre.slice(0, caben - 1).trimEnd()}…` : nombre;
+  return (
+    <text x={Number(x)} y={Number(y)} dy={4} textAnchor="end" fill="var(--muted-foreground)" fontSize={12}>
+      <title>{nombre}</title>
+      {texto}
+    </text>
   );
 }
 

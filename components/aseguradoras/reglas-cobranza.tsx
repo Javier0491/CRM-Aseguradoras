@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2, Settings2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -58,8 +59,12 @@ export function ReglasCobranzaDialog({
     }
     startGuardar(async () => {
       const r = await actualizarReglasCobranza(aseguradora.id, { ...reglas, diasGracia });
-      if (r.ok) setAbierto(false);
-      else setError(r.error);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      setAbierto(false);
+      toast.success("Reglas de cobranza guardadas", { description: aseguradora.nombre });
     });
   }
 

@@ -1,6 +1,6 @@
 import { getMarcaCorreo } from "@/lib/agencias/queries";
 import { alcanceDe } from "@/lib/auth/alcance";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { getUsuarioCrm } from "@/lib/auth/dal";
 import {
   cuerpoVacio,
   MAX_ASUNTO,
@@ -33,7 +33,7 @@ function error(mensaje: string, status: number) {
  * Las direcciones siempre se leen de la base de datos, nunca del navegador.
  */
 export async function POST(request: Request) {
-  const usuario = await getCurrentUser();
+  const usuario = await getUsuarioCrm();
   if (!usuario) return error("No autenticado.", 401);
 
   const largo = Number(request.headers.get("content-length") ?? 0);

@@ -28,7 +28,7 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { cerrarSesion } from "@/lib/auth/actions";
-import { isActivePath, mainNav, navPara, systemNav, type NavItem } from "@/lib/navigation";
+import { isActivePath, mainNav, navPara, systemNav, type NavItem, type PermisosNav } from "@/lib/navigation";
 
 function NavGroup({ label, items, pathname }: { label: string; items: NavItem[]; pathname: string }) {
   return (
@@ -69,18 +69,22 @@ function inicialesDe(email: string | null) {
 export function AppSidebar({
   email,
   nombre,
-  esAdmin,
-  superadmin,
+  rol,
+  permisos,
   agencia,
 }: {
   email: string | null;
   nombre: string | null;
-  esAdmin: boolean;
-  superadmin: boolean;
+  /** Nombre del rol para mostrar ("Ejecutivo comercial"). */
+  rol: string;
+  permisos: PermisosNav;
   agencia: { nombre: string; logoUrl: string | null };
 }) {
   const pathname = usePathname();
-  const sistema = navPara(systemNav, esAdmin, superadmin);
+  const operacion = navPara(mainNav, permisos);
+  const sistema = navPara(systemNav, permisos);
+  // Quien solo usa Tareas no tiene dashboard: el logo lo lleva a sus tareas.
+  const inicio = permisos.soloTareas ? "/tareas" : "/";
 
   return (
     <Sidebar collapsible="icon">
@@ -88,7 +92,7 @@ export function AppSidebar({
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip={agencia.nombre}>
-              <Link href="/">
+              <Link href={inicio}>
                 {/* 32 px: también es el tamaño del botón con el menú colapsado. */}
                 <LogoAgencia nombre={agencia.nombre} logoUrl={agencia.logoUrl} />
                 <div className="grid flex-1 text-left leading-tight">
@@ -106,7 +110,7 @@ export function AppSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        <NavGroup label="Operación" items={navPara(mainNav, esAdmin, superadmin)} pathname={pathname} />
+        <NavGroup label="Operación" items={operacion} pathname={pathname} />
         {sistema.length > 0 && <NavGroup label="Sistema" items={sistema} pathname={pathname} />}
       </SidebarContent>
 
@@ -133,7 +137,7 @@ export function AppSidebar({
               <DropdownMenuContent side="right" align="end" className="w-56">
                 <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
                   {email}
-                  <span className="block text-[11px] text-primary">{esAdmin ? "Administrador" : "Ejecutivo"}</span>
+                  <span className="block text-[11px] text-primary">{rol}</span>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <form action={cerrarSesion}>

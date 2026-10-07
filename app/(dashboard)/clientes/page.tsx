@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { requireUser } from "@/lib/auth/dal";
+import { requireUsuarioCrm } from "@/lib/auth/dal";
 import { getClientesListado, LIMITE_CLIENTES } from "@/lib/clientes/queries";
 import { formatNumero } from "@/lib/format";
 import { getEjecutivos } from "@/lib/usuarios/queries";
@@ -32,7 +32,7 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
   const ejecutivo = typeof params.ejecutivo === "string" ? params.ejecutivo.slice(0, 64) : "";
-  const user = await requireUser();
+  const user = await requireUsuarioCrm();
   const [{ clientes, total, totalGeneral }, ejecutivos] = await Promise.all([
     getClientesListado(q, ejecutivo || undefined),
     // Un ejecutivo que solo ve su cartera no filtra por ejecutivo.

@@ -113,12 +113,19 @@ export async function actualizarAgencia(_prev: AgenciaFormState, formData: FormD
   return { ok: true };
 }
 
-export type AjustesAgenciaState = { ok?: boolean; error?: string; errores?: Partial<Record<"slug", string>> };
+export type AjustesAgenciaState = {
+  ok?: boolean;
+  error?: string;
+  errores?: Partial<Record<"slug" | "correoServicio", string>>;
+};
+
+const EMAIL_VALIDO = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/;
 
 /**
  * Ajustes de operación de la agencia del administrador: la liga de acceso con su marca
- * (/login?agencia=<slug>) y si cada ejecutivo ve solo su cartera.
- * Campos: slug y carteraPorEjecutivo ("1" activa).
+ * (/login?agencia=<slug>), si cada ejecutivo ve solo su cartera y el correo de servicio que
+ * aparece en los correos a clientes.
+ * Campos: slug, carteraPorEjecutivo ("1" activa) y correoServicio (vacío = sin él).
  */
 export async function actualizarAjustesAgencia(_prev: AjustesAgenciaState, formData: FormData): Promise<AjustesAgenciaState> {
   const admin = await getAdmin();
@@ -132,11 +139,15 @@ export async function actualizarAjustesAgencia(_prev: AjustesAgenciaState, formD
   const { agenciaId } = admin;
   const slug = normalizarSlug(String(formData.get("slug") ?? ""));
   const carteraPorEjecutivo = formData.get("carteraPorEjecutivo") === "1";
+  const correoServicio = String(formData.get("correoServicio") ?? "").trim().toLowerCase() || null;
   if (!slugValido(slug)) return { errores: { slug: "Usa de 2 a 60 letras, números o guiones." } };
+  if (correoServicio && (correoServicio.length > 254 || !EMAIL_VALIDO.test(correoServicio))) {
+    return { errores: { correoServicio: "Escribe un correo válido o déjalo en blanco." } };
+  }
 
   const actual = await db.agencia.findUniqueOrThrow({
     where: { id: agenciaId },
-    select: { slug: true, carteraPorEjecutivo: true },
+    select: { slug: true, carteraPorEjecutivo: true, correoServicio: true },
   });
   if (slug !== actual.slug) {
     const ocupado = await db.agencia.findUnique({ where: { slug }, select: { id: true } });
@@ -146,12 +157,13 @@ export async function actualizarAjustesAgencia(_prev: AjustesAgenciaState, formD
     slug !== actual.slug && `liga de acceso «${actual.slug}» → «${slug}»`,
     carteraPorEjecutivo !== actual.carteraPorEjecutivo &&
       (carteraPorEjecutivo ? "cada ejecutivo ve solo su cartera" : "los ejecutivos ven toda la cartera"),
+    correoServicio !== actual.correoServicio && `correo de servicio → ${correoServicio ?? "sin correo"}`,
   ].filter((c): c is string => Boolean(c));
   if (cambios.length === 0) return { ok: true };
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.agencia.update({ where: { id: agenciaId }, data: { slug, carteraPorEjecutivo } });
+      await tx.agencia.update({ where: { id: agenciaId }, data: { slug, carteraPorEjecutivo, correoServicio } });
       await registrarBitacora(
         admin,
         { accion: "agencia.editar", entidad: "agencia", entidadId: agenciaId, descripcion: cambios.join(", ") },
