@@ -144,3 +144,51 @@ export async function contarPorRenovar(alcance: Alcance, dias = 30) {
 }
 
 export type { ColumnaEmbudo };
+
+const SELECT_RENOVADA = {
+  id: true,
+  numeroImpreso: true,
+  polizaVigor: true,
+  cadenaId: true,
+  ramo: true,
+  vigencia_inicio: true,
+  vigencia_fin: true,
+  prima_total: true,
+  prima_neta: true,
+  forma_pago: true,
+  ejecutivo: { select: { nombre: true } },
+  cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
+  aseguradora: { select: { nombre: true } },
+} as const satisfies Prisma.PolizaSelect;
+
+/**
+ * Pólizas renovadas para el reporte en Excel: cada póliza que ve la sesión y ya tiene capturada
+ * su renovación (la siguiente vigencia de su cadena), con ambas vigencias. De la renovación más
+ * reciente a la más antigua. `ejecutivo` filtra por responsable de la póliza anterior (id o "sin").
+ */
+export async function getRenovadasReporte({ ejecutivo }: { ejecutivo?: string } = {}) {
+  await connection();
+  const alcance = await getAlcance();
+  const filtro = ejecutivo?.slice(0, 64);
+  const polizas = await db.poliza.findMany({
+    where: { ...polizasDe(alcance), ...(filtro && { ejecutivoId: filtro === "sin" ? null : filtro }) },
+    select: SELECT_RENOVADA,
+  });
+  const cadenas = [...new Set(polizas.map((p) => p.cadenaId))];
+  // La renovación se busca en toda la agencia: puede estar en la cartera de otro ejecutivo.
+  const cadena = cadenas.length
+    ? await db.poliza.findMany({
+        where: { agenciaId: alcance.agenciaId, cadenaId: { in: cadenas } },
+        orderBy: { vigencia_inicio: "asc" },
+        select: SELECT_RENOVADA,
+      })
+    : [];
+  return polizas
+    .flatMap((anterior) => {
+      const nueva = cadena.find(
+        (c) => c.id !== anterior.id && c.cadenaId === anterior.cadenaId && c.vigencia_inicio >= anterior.vigencia_fin
+      );
+      return nueva ? [{ anterior, nueva }] : [];
+    })
+    .sort((a, b) => b.nueva.vigencia_inicio.getTime() - a.nueva.vigencia_inicio.getTime());
+}

@@ -1,6 +1,6 @@
 import { ViewTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarClock, CheckCircle2, MessageCircle, RefreshCcw, Send, TrendingUp, XCircle } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, Download, MessageCircle, RefreshCcw, Send, TrendingUp, XCircle } from "lucide-react";
 
 import { FiltroEjecutivo } from "@/components/layout/filtro-ejecutivo";
 import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
@@ -81,7 +81,18 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
             las que están en seguimiento.
           </p>
         </div>
-        {filtro && <FiltroEjecutivo ejecutivos={filtro.ejecutivos} usuarioId={filtro.usuarioId} valor={filtro.valor} />}
+        <div className="flex flex-wrap items-center gap-2">
+          {filtro && <FiltroEjecutivo ejecutivos={filtro.ejecutivos} usuarioId={filtro.usuarioId} valor={filtro.valor} />}
+          <Button asChild variant="outline">
+            {/* Descarga: no es una página, así que va con <a> y no con Link. */}
+            <a
+              href={filtro?.valor ? `/renovaciones/reporte?ejecutivo=${encodeURIComponent(filtro.valor)}` : "/renovaciones/reporte"}
+              download
+            >
+              <Download /> Renovadas en Excel
+            </a>
+          </Button>
+        </div>
       </div>
 
       <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
