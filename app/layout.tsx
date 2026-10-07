@@ -16,12 +16,47 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-/** Título neutro de la plataforma; dentro del CRM, el layout del dashboard usa el de la agencia. */
+const SITIO = "https://crm-aseguradoras-eight.vercel.app";
+const titulo = "CRM Aseguradoras | Gestión Inteligente & Automatización para Agentes de Seguros";
+const descripcion =
+  "Plataforma CRM integral de alta seguridad diseñada para agentes y promotorías de seguros. Centraliza carteras, automatiza seguimiento de pólizas, digitalización de recibos y conciliaciones con rapidez y control total.";
+
+/**
+ * Metadatos SEO de la plataforma. El template usa el nombre neutro (PLATAFORMA_NOMBRE…); dentro
+ * del CRM, el layout del dashboard lo reemplaza por el de la agencia y el login fija el suyo.
+ */
 export function generateMetadata(): Metadata {
   const nombre = nombrePlataforma();
   return {
-    title: { default: nombre, template: `%s · ${nombre}` },
-    description: "CRM financiero y operativo para la gestión de pólizas y conciliación de cobranza.",
+    metadataBase: new URL(SITIO),
+    title: { default: titulo, template: `%s · ${nombre}` },
+    description: descripcion,
+    applicationName: "CRM Aseguradoras",
+    keywords: [
+      "crm para agentes de seguros",
+      "software de seguros mexico",
+      "gestion de polizas",
+      "plataforma corredores de seguros",
+      "conciliacion automatica polizas",
+      "crm aseguradoras",
+      "software promotorias",
+    ],
+    alternates: { canonical: "/" },
+    openGraph: {
+      type: "website",
+      locale: "es_MX",
+      url: "/",
+      siteName: "CRM Aseguradoras",
+      title: titulo,
+      description: descripcion,
+      images: [{ url: "/logo-pj.png", width: 958, height: 780, alt: "CRM Aseguradoras" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: titulo,
+      description: descripcion,
+      images: ["/logo-pj.png"],
+    },
   };
 }
 
