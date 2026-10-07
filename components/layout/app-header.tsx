@@ -6,6 +6,7 @@ import { LayoutGrid, LogOut } from "lucide-react";
 
 import { BusquedaGlobal } from "@/components/layout/busqueda-global";
 import { CampanaAvisos } from "@/components/layout/campana-avisos";
+import { ChatRapido } from "@/components/mensajes/chat-rapido";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -17,14 +18,18 @@ import { cn } from "@/lib/utils";
  * `superadmin` solo llega para un SUPERADMIN: botón al panel de agencias. `ajena` = está operando
  * una agencia que no es la suya (el botón se resalta para que no pase desapercibido); `alertas`,
  * problemas graves de la plataforma (migraciones, tarea diaria) que se marcan con un punto.
- * `soloTareas`: sin búsqueda de clientes y pólizas ni avisos de cobranza (no los ve).
+ * `soloTareas`: sin búsqueda de clientes y pólizas ni avisos de cobranza (no los ve). El chat
+ * del equipo (`chat`) lo tienen todos.
  */
 export function AppHeader({
   superadmin,
   soloTareas = false,
+  chat,
 }: {
   superadmin?: { ajena: boolean; alertas?: number };
   soloTareas?: boolean;
+  /** `administra`: puede borrar mensajes de otros en el canal del equipo. */
+  chat: { usuarioId: string; administra: boolean };
 }) {
   const pathname = usePathname();
   const current =
@@ -61,12 +66,9 @@ export function AppHeader({
             </Link>
           </Button>
         )}
-        {!soloTareas && (
-          <>
-            <BusquedaGlobal />
-            <CampanaAvisos />
-          </>
-        )}
+        {!soloTareas && <BusquedaGlobal />}
+        <ChatRapido usuarioId={chat.usuarioId} administra={chat.administra} />
+        {!soloTareas && <CampanaAvisos />}
         <form action={cerrarSesion}>
           <Button type="submit" variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground">
             <LogOut />

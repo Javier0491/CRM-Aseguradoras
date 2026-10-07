@@ -127,6 +127,9 @@ model Agencia {
   tareas             Tarea[]
   responsablesTareas TareaResponsable[]
   pagosPlataforma    PagoPlataforma[]
+  conversaciones     Conversacion[]
+  mensajes           Mensaje[]
+  lecturasMensajes   ConversacionLectura[]
 
   @@map("agencias")
 }
@@ -163,6 +166,10 @@ model Usuario {
   clientesAsignados Cliente[]          @relation("EjecutivoCliente")
   polizasAsignadas  Poliza[]           @relation("EjecutivoPoliza")
   tareasAsignadas   TareaResponsable[]
+  conversacionesA   Conversacion[]        @relation("ConversacionUsuarioA")
+  conversacionesB   Conversacion[]        @relation("ConversacionUsuarioB")
+  mensajes          Mensaje[]
+  lecturasMensajes  ConversacionLectura[]
 
   @@index([agenciaId])
   @@map("usuarios")
@@ -423,6 +430,66 @@ model TareaResponsable {
   @@index([usuarioId, completadaAt])
   @@index([agenciaId])
   @@map("tareas_responsables")
+}
+
+// Mensajería interna del equipo de una agencia: el canal de todos ("equipo", uno por agencia) y
+// las conversaciones directas entre dos personas ("dm:<idA>:<idB>", ids ordenados: una por pareja).
+model Conversacion {
+  id              String                @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId       String                @map("agencia_id") @db.Uuid
+  agencia         Agencia               @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  clave           String
+  // Solo en las directas: sus dos participantes.
+  usuarioAId      String?               @map("usuario_a_id")
+  usuarioA        Usuario?              @relation("ConversacionUsuarioA", fields: [usuarioAId], references: [id], onDelete: Cascade)
+  usuarioBId      String?               @map("usuario_b_id")
+  usuarioB        Usuario?              @relation("ConversacionUsuarioB", fields: [usuarioBId], references: [id], onDelete: Cascade)
+  ultimoMensajeAt DateTime?             @map("ultimo_mensaje_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  mensajes        Mensaje[]
+  lecturas        ConversacionLectura[]
+
+  @@unique([agenciaId, clave])
+  @@index([usuarioAId])
+  @@index([usuarioBId])
+  @@map("conversaciones")
+}
+
+model Mensaje {
+  id             String       @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId      String       @map("agencia_id") @db.Uuid
+  agencia        Agencia      @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  conversacionId String       @map("conversacion_id")
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  autorId        String?      @map("autor_id")
+  autor          Usuario?     @relation(fields: [autorId], references: [id], onDelete: SetNull)
+  texto          String
+  createdAt      DateTime     @default(now()) @map("created_at")
+  // Borrado suave: queda "Mensaje eliminado" en su lugar.
+  eliminadoAt    DateTime?    @map("eliminado_at")
+
+  @@index([conversacionId, createdAt])
+  @@index([agenciaId])
+  @@map("mensajes")
+}
+
+// Hasta dónde leyó cada persona una conversación: lo posterior (de otros) cuenta como no leído.
+model ConversacionLectura {
+  conversacionId String       @map("conversacion_id")
+  conversacion   Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  usuarioId      String       @map("usuario_id")
+  usuario        Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId      String       @map("agencia_id") @db.Uuid
+  agencia        Agencia      @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  leidoHasta     DateTime     @map("leido_hasta")
+
+  @@id([conversacionId, usuarioId])
+  @@index([usuarioId])
+  @@index([agenciaId])
+  @@map("conversaciones_lecturas")
 }
 
 // Pagos de una agencia por el uso de la plataforma (los registra el SUPERADMIN).

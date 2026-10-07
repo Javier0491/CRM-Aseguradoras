@@ -57,6 +57,8 @@ export default async function DashboardLayout({
       <SidebarInset className="min-w-0 bg-background">
         <AppHeader
           soloTareas={user.soloTareas}
+          // El chat es del equipo de su propia agencia; modera el canal quien la administra.
+          chat={{ usuarioId: user.id, administra: admin && user.agenciaId === user.agenciaPropiaId }}
           superadmin={
             user.superadmin
               ? { ajena: user.agenciaId !== user.agenciaPropiaId, alertas: alertas.filter((a) => a.grave).length }

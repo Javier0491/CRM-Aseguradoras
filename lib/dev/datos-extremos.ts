@@ -13,10 +13,12 @@ import type { DatosPoliza } from "@/components/polizas/vista-poliza";
 import type { DatosPolizas } from "@/components/polizas/vista-polizas";
 import type { DatosRenovaciones } from "@/components/renovaciones/vista-renovaciones";
 import type { DatosSuperadmin } from "@/components/superadmin/vista-superadmin";
+import type { DatosMensajesDev } from "@/components/dev/vista-mensajes-dev";
 import type { DatosTareas } from "@/components/tareas/vista-tareas";
 import { hoyISO } from "@/lib/format";
 import { Prisma, type EstadoRecibo, type FormaPago, type Ramo } from "@/lib/generated/prisma/client";
 import { estadoCobro } from "@/lib/plataforma/cobranza";
+import type { MensajeChat } from "@/lib/mensajes/reglas";
 import { COLUMNAS_EMBUDO, columnaDe, type ColumnaEmbudo } from "@/lib/renovaciones/reglas";
 import { MAX_RESPONSABLES_TAREA } from "@/lib/tareas/reglas";
 import type { RolUsuario } from "@/lib/usuarios/reglas";
@@ -692,6 +694,94 @@ export function datosTareas(c: Conjunto): DatosTareas {
             hechas: ciclo([30, 5, 0, 2_031, 0], i),
           })),
     hoy: hoyISO(),
+  };
+}
+
+const MENSAJE_LARGO =
+  "Les comparto el resumen de la junta con la aseguradora: 1) la renovación de la flotilla de Transportes y Logística Integral del Noreste sube 12% por siniestralidad; 2) hay que pedir al cliente el listado actualizado de unidades con número de serie, placas y uso; 3) la cotización vence el viernes. ".repeat(7);
+const URL_SIN_ESPACIOS =
+  "https://drive.example.com/drive/folders/1a2B3c4D5e6F7g8H9i0JkLmNoPqRsTuVwXyZ-carpeta-de-renovaciones-2026-flotillas-y-gmm-colectivo?usp=sharing";
+const haceMin = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
+
+/**
+ * Chat del equipo visto por la primera persona del equipo: lista de conversaciones, el canal con
+ * mensajes de varios días (largos, con enlaces, borrados y pendientes) y el selector de personas.
+ */
+export function datosMensajes(c: Conjunto): DatosMensajesDev {
+  const equipo = equipoOpciones(c);
+  const yo = equipo[0]?.id ?? "usr0";
+  const otros = equipo.slice(1);
+  const nombre = (i: number) => otros[i % Math.max(1, otros.length)]?.nombre ?? "Ana Sofía Rodríguez";
+  const idDe = (i: number) => otros[i % Math.max(1, otros.length)]?.id ?? "eq0";
+
+  const textos =
+    c === "demo"
+      ? ["¿Ya quedó la renovación de GNP?", "Sí, la subo hoy al CRM.", "Gracias 🙌", "Les recuerdo la junta de las 5."]
+      : ["Ok", MENSAJE_LARGO, `Aquí está la carpeta: ${URL_SIN_ESPACIOS}`, "Primera línea\nSegunda línea\n\nTercera después de un espacio", "👍🏽🎉", "¿Alguien tiene el teléfono del ajustador?"];
+  const n = { demo: 8, extremos: 14, vacio: 0, uno: 1, masivo: 50 }[c];
+  const mensajes: MensajeChat[] = rango(n).map((i) => {
+    // Del más antiguo al más reciente: tres días atrás, ayer y hoy.
+    const min = (n - i) * (c === "masivo" ? 90 : 260);
+    const autor = i % 3 === 2 ? yo : idDe(i);
+    const eliminado = c === "extremos" && i === 5;
+    return {
+      id: `msg${i}`,
+      autorId: autor,
+      autor: autor === yo ? (equipo[0]?.nombre ?? "Yo") : nombre(i),
+      texto: eliminado ? "" : ciclo(textos, i),
+      at: haceMin(min),
+      eliminado,
+    };
+  });
+
+  const ultimo = mensajes.at(-1);
+  const conversaciones: DatosMensajesDev["conversaciones"] = [
+    {
+      id: "conv-equipo",
+      tipo: "equipo",
+      titulo: "Todo el equipo",
+      otro: null,
+      ultimo: ultimo
+        ? { texto: ultimo.texto.slice(0, 120), autor: ultimo.autor, mio: ultimo.autorId === yo, at: ultimo.at, eliminado: ultimo.eliminado }
+        : null,
+      noLeidos: { demo: 2, extremos: 1_284, vacio: 0, uno: 1, masivo: 37 }[c],
+    },
+    ...rango({ demo: 2, extremos: 5, vacio: 0, uno: 1, masivo: 22 }[c]).map((i) => {
+      const otro = otros[i % Math.max(1, otros.length)] ?? { id: `eq${i}`, nombre: "Ana Sofía Rodríguez", rol: "EJECUTIVO" as const };
+      const borrado = c === "extremos" && i === 3;
+      return {
+        id: `conv-${i}`,
+        tipo: "directa" as const,
+        titulo: otro.nombre,
+        otro: { id: otro.id, nombre: otro.nombre, rol: otro.rol, activo: !(c === "extremos" && i === 2) },
+        ultimo: {
+          texto: borrado ? "" : ciclo(c === "demo" ? ["Te mando la carátula", "¿Me apoyas con el cliente?"] : [URL_SIN_ESPACIOS, "Ok", MENSAJE_LARGO.slice(0, 120)], i),
+          autor: i % 2 ? (equipo[0]?.nombre ?? "Yo") : otro.nombre,
+          mio: i % 2 === 1,
+          at: haceMin(30 + i * 900),
+          eliminado: borrado,
+        },
+        noLeidos: i % 2 ? 0 : ciclo([1, 12, 3], i),
+      };
+    }),
+  ];
+
+  return {
+    yo,
+    hoy: hoyISO(),
+    conversaciones,
+    mensajes,
+    pendientes:
+      c === "extremos"
+        ? [
+            { id: "tmp-1", autorId: yo, autor: "", texto: "Mensaje que se está enviando…", at: haceMin(0), eliminado: false, estado: "enviando" },
+            { id: "tmp-2", autorId: yo, autor: "", texto: URL_SIN_ESPACIOS, at: haceMin(0), eliminado: false, estado: "error", error: "Sin conexión" },
+          ]
+        : [],
+    miembros: [
+      ...otros.map((o) => ({ id: o.id, nombre: o.nombre, rol: o.rol as string })),
+      ...(c === "extremos" ? [{ id: "super", nombre: "Javier Sánchez", rol: "SUPERADMIN" }] : []),
+    ],
   };
 }
 

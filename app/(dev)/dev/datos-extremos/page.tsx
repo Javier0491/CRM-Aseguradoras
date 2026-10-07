@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { VistaCliente } from "@/components/clientes/vista-cliente";
 import { VistaDashboard } from "@/components/dashboard/vista-dashboard";
 import { BarraDatosDev } from "@/components/dev/barra-datos-dev";
+import { VistaMensajesDev } from "@/components/dev/vista-mensajes-dev";
 import { VistaPoliza } from "@/components/polizas/vista-poliza";
 import { esPestana, VistaPolizas } from "@/components/polizas/vista-polizas";
 import { VistaRenovaciones } from "@/components/renovaciones/vista-renovaciones";
@@ -13,6 +14,7 @@ import {
   CONJUNTOS,
   datosCliente,
   datosDashboard,
+  datosMensajes,
   datosPoliza,
   datosPolizas,
   datosRenovaciones,
@@ -36,6 +38,7 @@ const PANTALLAS = [
   { clave: "renovaciones", titulo: "Renovaciones" },
   { clave: "dashboard", titulo: "Dashboard" },
   { clave: "tareas", titulo: "Tareas (Líder de oficina)" },
+  { clave: "mensajes", titulo: "Mensajes (chat del equipo)" },
   { clave: "superadmin", titulo: "Cobranza de la plataforma" },
 ] as const;
 type Pantalla = (typeof PANTALLAS)[number]["clave"];
@@ -69,6 +72,7 @@ export default async function DatosDePruebaPage({ searchParams }: PageProps<"/de
     renovaciones: () => <VistaRenovaciones {...datosRenovaciones(conjunto, mover)} />,
     dashboard: () => <VistaDashboard {...datosDashboard(conjunto)} />,
     tareas: () => <VistaTareasPagina {...datosTareas(conjunto)} />,
+    mensajes: () => <VistaMensajesDev {...datosMensajes(conjunto)} />,
     superadmin: () => <VistaSuperadmin {...datosSuperadmin(conjunto)} />,
   };
 
