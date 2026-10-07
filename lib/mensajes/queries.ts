@@ -44,8 +44,17 @@ export const SELECT_MENSAJE = {
   texto: true,
   createdAt: true,
   eliminadoAt: true,
+  adjuntoClave: true,
+  adjuntoNombre: true,
+  adjuntoTipo: true,
+  adjuntoBytes: true,
+  adjuntoAncho: true,
+  adjuntoAlto: true,
   autor: { select: { nombre: true } },
 } as const satisfies Prisma.MensajeSelect;
+
+/** El archivo se pide por esta ruta: verifica la sesión y redirige a una URL firmada de corta vigencia. */
+export const urlAdjunto = (mensajeId: string) => `/api/mensajes/adjuntos/${mensajeId}`;
 
 export const aMensajeChat = (m: Prisma.MensajeGetPayload<{ select: typeof SELECT_MENSAJE }>): MensajeChat => ({
   id: m.id,
@@ -55,6 +64,17 @@ export const aMensajeChat = (m: Prisma.MensajeGetPayload<{ select: typeof SELECT
   texto: m.eliminadoAt ? "" : m.texto,
   at: m.createdAt.toISOString(),
   eliminado: m.eliminadoAt !== null,
+  adjunto:
+    !m.eliminadoAt && m.adjuntoClave && m.adjuntoTipo
+      ? {
+          nombre: m.adjuntoNombre ?? "archivo",
+          tipo: m.adjuntoTipo,
+          bytes: m.adjuntoBytes ?? 0,
+          ancho: m.adjuntoAncho,
+          alto: m.adjuntoAlto,
+          url: urlAdjunto(m.id),
+        }
+      : null,
 });
 
 /**
@@ -104,9 +124,19 @@ export async function getResumenChat(user: Pick<UsuarioSesion, "id" | "agenciaPr
   const ids = conversaciones.map((c) => c.id);
 
   const [ultimos, noLeidos] = await Promise.all([
-    db.$queryRaw<{ conversacion_id: string; texto: string; created_at: Date; eliminado: boolean; autor_id: string | null; autor: string | null }[]>`
+    db.$queryRaw<{
+      conversacion_id: string;
+      texto: string;
+      created_at: Date;
+      eliminado: boolean;
+      autor_id: string | null;
+      autor: string | null;
+      adjunto_tipo: string | null;
+      adjunto_nombre: string | null;
+    }[]>`
       SELECT DISTINCT ON (m.conversacion_id)
-        m.conversacion_id, m.texto, m.created_at, (m.eliminado_at IS NOT NULL) AS eliminado, m.autor_id, u.nombre AS autor
+        m.conversacion_id, m.texto, m.created_at, (m.eliminado_at IS NOT NULL) AS eliminado, m.autor_id, u.nombre AS autor,
+        m.adjunto_tipo, m.adjunto_nombre
       FROM mensajes m
       LEFT JOIN usuarios u ON u.id = m.autor_id
       WHERE m.agencia_id = ${agenciaId}::uuid AND m.conversacion_id = ANY(${ids})
@@ -141,6 +171,8 @@ export async function getResumenChat(user: Pick<UsuarioSesion, "id" | "agenciaPr
             mio: u.autor_id === user.id,
             at: u.created_at.toISOString(),
             eliminado: u.eliminado,
+            adjunto:
+              !u.eliminado && u.adjunto_tipo ? { tipo: u.adjunto_tipo, nombre: u.adjunto_nombre ?? "archivo" } : null,
           }
         : null,
       noLeidos: noLeidosDe.get(c.id) ?? 0,

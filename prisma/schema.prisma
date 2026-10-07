@@ -466,6 +466,14 @@ model Mensaje {
   autorId        String?      @map("autor_id")
   autor          Usuario?     @relation(fields: [autorId], references: [id], onDelete: SetNull)
   texto          String
+  // Archivo o imagen adjunto (uno por mensaje): clave del objeto en el almacenamiento
+  // (chat/{agenciaId}/{uuid}.{ext}), nombre original, tipo, tamaño y, si es imagen, sus medidas.
+  adjuntoClave   String?      @unique @map("adjunto_clave")
+  adjuntoNombre  String?      @map("adjunto_nombre")
+  adjuntoTipo    String?      @map("adjunto_tipo")
+  adjuntoBytes   Int?         @map("adjunto_bytes")
+  adjuntoAncho   Int?         @map("adjunto_ancho")
+  adjuntoAlto    Int?         @map("adjunto_alto")
   createdAt      DateTime     @default(now()) @map("created_at")
   // Borrado suave: queda "Mensaje eliminado" en su lugar.
   eliminadoAt    DateTime?    @map("eliminado_at")

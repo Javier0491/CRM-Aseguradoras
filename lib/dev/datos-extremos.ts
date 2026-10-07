@@ -719,18 +719,49 @@ export function datosMensajes(c: Conjunto): DatosMensajesDev {
       ? ["¿Ya quedó la renovación de GNP?", "Sí, la subo hoy al CRM.", "Gracias 🙌", "Les recuerdo la junta de las 5."]
       : ["Ok", MENSAJE_LARGO, `Aquí está la carpeta: ${URL_SIN_ESPACIOS}`, "Primera línea\nSegunda línea\n\nTercera después de un espacio", "👍🏽🎉", "¿Alguien tiene el teléfono del ajustador?"];
   const n = { demo: 8, extremos: 14, vacio: 0, uno: 1, masivo: 50 }[c];
+  // Adjuntos de prueba: una imagen (logo de /public, con sus medidas), un PDF de nombre larguísimo
+  // y un Excel; en el peor caso, también una imagen sin medidas y una con texto.
+  const adjuntoDe = (i: number): MensajeChat["adjunto"] => {
+    if (c === "vacio" || c === "uno") return null;
+    const cual = c === "demo" ? (i === 1 ? 0 : i === 6 ? 1 : -1) : i % 4 === 1 ? i % 3 : -1;
+    if (cual === 0) return { nombre: "carátula-renovación.png", tipo: "image/png", bytes: 248_312, ancho: 958, alto: 780, url: "/logo-pj.png" };
+    if (cual === 1) {
+      return {
+        nombre: "Póliza GMM Colectivo Transportes y Logística Integral del Noreste SAPI de CV - endoso 03 - renovación 2026-2027.pdf",
+        tipo: "application/pdf",
+        bytes: 19_876_543,
+        ancho: null,
+        alto: null,
+        url: "/dev/no-existe.pdf",
+      };
+    }
+    if (cual === 2) {
+      return {
+        nombre: "cartera.xlsx",
+        tipo: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        bytes: 1_234,
+        ancho: null,
+        alto: null,
+        url: "/dev/no-existe.xlsx",
+      };
+    }
+    return null;
+  };
   const mensajes: MensajeChat[] = rango(n).map((i) => {
     // Del más antiguo al más reciente: tres días atrás, ayer y hoy.
     const min = (n - i) * (c === "masivo" ? 90 : 260);
     const autor = i % 3 === 2 ? yo : idDe(i);
     const eliminado = c === "extremos" && i === 5;
+    const adjunto = eliminado ? null : adjuntoDe(i);
     return {
       id: `msg${i}`,
       autorId: autor,
       autor: autor === yo ? (equipo[0]?.nombre ?? "Yo") : nombre(i),
-      texto: eliminado ? "" : ciclo(textos, i),
+      // Algunos adjuntos van solos, sin texto.
+      texto: eliminado || (adjunto && i % 2 === 1) ? "" : ciclo(textos, i),
       at: haceMin(min),
       eliminado,
+      adjunto,
     };
   });
 
@@ -742,7 +773,14 @@ export function datosMensajes(c: Conjunto): DatosMensajesDev {
       titulo: "Todo el equipo",
       otro: null,
       ultimo: ultimo
-        ? { texto: ultimo.texto.slice(0, 120), autor: ultimo.autor, mio: ultimo.autorId === yo, at: ultimo.at, eliminado: ultimo.eliminado }
+        ? {
+            texto: ultimo.texto.slice(0, 120),
+            autor: ultimo.autor,
+            mio: ultimo.autorId === yo,
+            at: ultimo.at,
+            eliminado: ultimo.eliminado,
+            adjunto: ultimo.adjunto && { tipo: ultimo.adjunto.tipo, nombre: ultimo.adjunto.nombre },
+          }
         : null,
       noLeidos: { demo: 2, extremos: 1_284, vacio: 0, uno: 1, masivo: 37 }[c],
     },
@@ -760,6 +798,13 @@ export function datosMensajes(c: Conjunto): DatosMensajesDev {
           mio: i % 2 === 1,
           at: haceMin(30 + i * 900),
           eliminado: borrado,
+          // Una directa cuyo último mensaje fue solo una foto y otra solo un archivo.
+          adjunto:
+            c === "extremos" && i === 1
+              ? { tipo: "image/jpeg", nombre: "foto.jpg" }
+              : c === "extremos" && i === 4
+                ? { tipo: "application/pdf", nombre: "cotización flotilla 2026.pdf" }
+                : null,
         },
         noLeidos: i % 2 ? 0 : ciclo([1, 12, 3], i),
       };
@@ -774,8 +819,30 @@ export function datosMensajes(c: Conjunto): DatosMensajesDev {
     pendientes:
       c === "extremos"
         ? [
-            { id: "tmp-1", autorId: yo, autor: "", texto: "Mensaje que se está enviando…", at: haceMin(0), eliminado: false, estado: "enviando" },
-            { id: "tmp-2", autorId: yo, autor: "", texto: URL_SIN_ESPACIOS, at: haceMin(0), eliminado: false, estado: "error", error: "Sin conexión" },
+            { id: "tmp-1", autorId: yo, autor: "", texto: "Mensaje que se está enviando…", at: haceMin(0), eliminado: false, estado: "enviando", adjunto: null },
+            {
+              id: "tmp-3",
+              autorId: yo,
+              autor: "",
+              texto: "",
+              at: haceMin(0),
+              eliminado: false,
+              estado: "enviando",
+              progreso: 0.42,
+              adjunto: { nombre: "foto.png", tipo: "image/png", bytes: 3_456_789, ancho: 958, alto: 780, url: "/logo-pj.png" },
+            },
+            {
+              id: "tmp-4",
+              autorId: yo,
+              autor: "",
+              texto: "",
+              at: haceMin(0),
+              eliminado: false,
+              estado: "enviando",
+              progreso: 0.7,
+              adjunto: { nombre: "expediente completo del cliente.zip", tipo: "application/zip", bytes: 24_000_000, ancho: null, alto: null, url: "" },
+            },
+            { id: "tmp-2", autorId: yo, autor: "", texto: URL_SIN_ESPACIOS, at: haceMin(0), eliminado: false, estado: "error", error: "Sin conexión", adjunto: null },
           ]
         : [],
     miembros: [

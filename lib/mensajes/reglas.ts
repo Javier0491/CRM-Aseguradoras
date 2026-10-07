@@ -12,25 +12,43 @@ export function claveDirecta(a: string, b: string) {
   return { clave: `dm:${x}:${y}`, usuarioAId: x, usuarioBId: y };
 }
 
-/** Texto listo para guardar (sin espacios sobrantes ni saltos de Windows) o el error para el usuario. */
-export function validarTextoMensaje(raw: unknown): { ok: true; texto: string } | { ok: false; error: string } {
+/**
+ * Texto listo para guardar (sin espacios sobrantes ni saltos de Windows) o el error para el usuario.
+ * Con un adjunto, el texto puede ir vacío.
+ */
+export function validarTextoMensaje(
+  raw: unknown,
+  { conAdjunto = false }: { conAdjunto?: boolean } = {}
+): { ok: true; texto: string } | { ok: false; error: string } {
   if (typeof raw !== "string") return { ok: false, error: "Mensaje inválido." };
   const texto = raw.replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  if (!texto) return { ok: false, error: "Escribe un mensaje." };
+  if (!texto && !conAdjunto) return { ok: false, error: "Escribe un mensaje." };
   if (texto.length > MAX_TEXTO_MENSAJE) return { ok: false, error: `Máximo ${MAX_TEXTO_MENSAJE} caracteres.` };
   return { ok: true, texto };
 }
+
+/** Archivo o imagen de un mensaje; `url` lo abre (o lo descarga) con la sesión de quien lo pide. */
+export type AdjuntoChat = {
+  nombre: string;
+  tipo: string;
+  bytes: number;
+  /** Medidas de la imagen, para reservar su lugar mientras carga. */
+  ancho: number | null;
+  alto: number | null;
+  url: string;
+};
 
 export type MensajeChat = {
   id: string;
   autorId: string | null;
   /** Nombre del autor; "Usuario eliminado" si ya no existe. */
   autor: string;
-  /** Vacío si se eliminó. */
+  /** Vacío si se eliminó (o si solo lleva un adjunto). */
   texto: string;
   /** ISO. */
   at: string;
   eliminado: boolean;
+  adjunto: AdjuntoChat | null;
 };
 
 export type ConversacionResumen = {
@@ -39,7 +57,14 @@ export type ConversacionResumen = {
   /** "Todo el equipo" o el nombre de la otra persona. */
   titulo: string;
   otro: { id: string; nombre: string; rol: string; activo: boolean } | null;
-  ultimo: { texto: string; autor: string; mio: boolean; at: string; eliminado: boolean } | null;
+  ultimo: {
+    texto: string;
+    autor: string;
+    mio: boolean;
+    at: string;
+    eliminado: boolean;
+    adjunto: { tipo: string; nombre: string } | null;
+  } | null;
   noLeidos: number;
 };
 
