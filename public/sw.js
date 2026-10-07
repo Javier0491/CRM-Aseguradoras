@@ -19,8 +19,6 @@ self.addEventListener("push", (event) => {
       tag: aviso.etiqueta,
       // Si reemplaza a otra con la misma etiqueta (p. ej. el recordatorio del día), vuelve a avisar.
       renotify: Boolean(aviso.etiqueta),
-      // Se queda en pantalla hasta que la persona la vea (en los sistemas que lo permiten).
-      requireInteraction: false,
       data: { url: aviso.url || "/" },
     })
   );
