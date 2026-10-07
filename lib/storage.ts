@@ -57,7 +57,10 @@ export async function generarUrlSubida(clave: string, contentType: string, bytes
 }
 
 /** URL firmada de lectura; con `descargarComo`, el navegador descarga el archivo con ese nombre. */
-export async function generarUrlLectura(clave: string, opciones?: { descargarComo?: string }): Promise<string> {
+export async function generarUrlLectura(
+  clave: string,
+  opciones?: { descargarComo?: string; vigenciaS?: number }
+): Promise<string> {
   const { s3, bucket } = getR2();
   const nombre = opciones?.descargarComo;
   return getSignedUrl(
@@ -67,6 +70,7 @@ export async function generarUrlLectura(clave: string, opciones?: { descargarCom
       Key: clave,
       ...(nombre && { ResponseContentDisposition: `attachment; filename*=UTF-8''${encodeURIComponent(nombre)}` }),
     }),
-    { expiresIn: VIGENCIA_LECTURA_S }
+    // Las URLs firmadas de R2 duran a lo más 7 días.
+    { expiresIn: Math.min(opciones?.vigenciaS ?? VIGENCIA_LECTURA_S, 7 * 24 * 3600) }
   );
 }

@@ -23,8 +23,11 @@ export interface Almacen {
    * agencia que todavía existen.
    */
   listarCarpeta(prefijo: string): Promise<string[]>;
-  /** URL firmada de lectura de corta vigencia; con `descargarComo`, fuerza la descarga con ese nombre. */
-  urlDescarga(clave: string, opciones?: { descargarComo?: string }): Promise<string>;
+  /**
+   * URL firmada de lectura de corta vigencia; con `descargarComo`, fuerza la descarga con ese
+   * nombre. `vigenciaS` la alarga (p. ej. un enlace en un correo; máximo 7 días).
+   */
+  urlDescarga(clave: string, opciones?: { descargarComo?: string; vigenciaS?: number }): Promise<string>;
 }
 
 /** Vigencia de las URLs firmadas de Supabase (las de R2 se definen en lib/storage.ts). */

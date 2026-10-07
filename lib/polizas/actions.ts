@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import {
   actualizarPoliza,
   registrarPoliza,
+  type AgradecimientoRenovacion,
   type EditarPolizaResultado,
   type GuardarPolizaResultado,
 } from "@/lib/polizas/guardar";
@@ -35,17 +36,28 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
   if (!resultado.ok) return resultado;
   revalidatePath("/polizas", "layout");
   revalidatePath("/");
-  // Renovación: "Gracias por continuar con nosotros" al cliente, salvo que se desmarque en el
-  // formulario. Un fallo del correo no deshace la renovación: solo se informa.
-  const agradecer = !(typeof raw === "object" && raw !== null && "agradecer" in raw && raw.agradecer === false);
-  if (renuevaA !== undefined && agradecer) {
-    const agradecimiento = await enviarAgradecimientoRenovacion(resultado.poliza.id, user.agenciaId).catch((e) => {
-      console.error("[guardarPoliza] agradecimiento", e instanceof Error ? e.message : e);
-      return { enviado: false as const, motivo: "no se pudo enviar el correo." };
-    });
-    return { ...resultado, agradecimiento };
-  }
   return resultado;
+}
+
+/**
+ * "Gracias por continuar con nosotros" al cliente de una renovación, con su carátula y su
+ * expediente: el formulario lo pide al terminar de subir los archivos. Solo para pólizas que se
+ * registraron como renovación; sale una sola vez por póliza. Un fallo no deshace la renovación.
+ */
+export async function enviarAgradecimientoDeRenovacion(polizaId: string): Promise<AgradecimientoRenovacion> {
+  const user = await getUsuarioCrm();
+  if (!user) return { enviado: false, motivo: "tu sesión expiró." };
+  if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { enviado: false, motivo: "datos inválidos." };
+  const poliza = await db.poliza.findFirst({ where: { id: polizaId, ...polizasDe(alcanceDe(user)) }, select: { id: true } });
+  const renovo = await db.bitacora.findFirst({
+    where: { agenciaId: user.agenciaId, accion: "poliza.renovar", entidad_id: polizaId },
+    select: { id: true },
+  });
+  if (!poliza || !renovo) return { enviado: false, motivo: "la póliza no es una renovación." };
+  return enviarAgradecimientoRenovacion(polizaId, user.agenciaId).catch((e) => {
+    console.error("[enviarAgradecimientoDeRenovacion]", e instanceof Error ? e.message : e);
+    return { enviado: false as const, motivo: "no se pudo enviar el correo." };
+  });
 }
 
 /** Corrige una póliza existente (ver actualizarPoliza). */

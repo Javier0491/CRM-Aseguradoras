@@ -200,6 +200,7 @@ export async function enviarAviso({
   copia,
   responderA: responderAgencia,
   modulo = "avisos",
+  adjuntos,
 }: {
   agencia: string;
   para: string;
@@ -210,6 +211,8 @@ export async function enviarAviso({
   responderA?: string;
   /** Etiqueta del envío en Resend. */
   modulo?: string;
+  /** Archivos adjuntos (el correo completo no debe pasar de 40 MB). */
+  adjuntos?: Attachment[];
 }): Promise<{ ok: boolean; error?: string }> {
   const { resend, remitente, responderA } = getConfigCorreo();
   const error = await despachar(resend, {
@@ -221,6 +224,7 @@ export async function enviarAviso({
     subject: asunto,
     html,
     text: texto,
+    attachments: adjuntos?.length ? adjuntos : undefined,
     tags: [{ name: "modulo", value: modulo }],
   });
   if (error && (error.statusCode === 401 || error.statusCode === 403)) {

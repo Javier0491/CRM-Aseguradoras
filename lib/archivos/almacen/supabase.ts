@@ -61,7 +61,7 @@ export function crearAlmacenSupabase(): Almacen {
     async urlDescarga(clave, opciones) {
       const { data, error } = await (await storage()).createSignedUrl(
         clave,
-        VIGENCIA_DESCARGA_S,
+        opciones?.vigenciaS ?? VIGENCIA_DESCARGA_S,
         opciones?.descargarComo ? { download: opciones.descargarComo } : undefined
       );
       if (error || !data) throw new Error(`No se pudo firmar la descarga: ${error?.message}`);

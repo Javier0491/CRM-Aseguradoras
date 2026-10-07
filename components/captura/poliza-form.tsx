@@ -65,7 +65,7 @@ import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
 import { subirArchivo } from "@/lib/archivos/subir";
 import { hoyISO } from "@/lib/format";
-import { editarPoliza, guardarPoliza } from "@/lib/polizas/actions";
+import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
 import {
   aseguradoVacio,
@@ -145,6 +145,8 @@ const CAMPOS_DEL_COMPLEMENTO = new Set(["condicionesSubgrupo"]);
 type Exito = Extract<GuardarPolizaResultado, { ok: true }> & {
   /** Resultado de la subida de cada archivo adjuntado. */
   archivos: Partial<Record<TipoArchivo, VincularArchivoResultado>>;
+  /** El correo de agradecimiento de la renovación todavía se está enviando. */
+  enviandoAgradecimiento?: boolean;
 };
 
 type FormValues = {
@@ -500,7 +502,7 @@ export function PolizaForm({
 
     const res = await guardarPoliza({
       ...datos,
-      ...(modo.tipo === "renovacion" && { renuevaA: modo.anterior.id, agradecer }),
+      ...(modo.tipo === "renovacion" && { renuevaA: modo.anterior.id }),
       ...(leidaConIa && { origen: "ocr" }),
     });
     if (res.ok) {
@@ -518,7 +520,14 @@ export function PolizaForm({
         archivos[tipo] = await subirArchivo(res.poliza.id, tipo, archivo);
       }
       setSubiendo(null);
-      setExito({ ...res, archivos });
+      // Renovación: el agradecimiento sale ya con la carátula y el expediente que se acaban de subir.
+      if (modo.tipo === "renovacion" && agradecer) {
+        setExito({ ...res, archivos, enviandoAgradecimiento: true });
+        const agradecimiento = await enviarAgradecimientoDeRenovacion(res.poliza.id);
+        setExito({ ...res, archivos, agradecimiento });
+      } else {
+        setExito({ ...res, archivos });
+      }
       return;
     }
     setErrorGeneral(res.error ?? null);
@@ -834,6 +843,11 @@ export function PolizaForm({
                 {exito.cliente.nuevo ? "Cliente nuevo registrado" : "Asignada al cliente existente"}:{" "}
                 {exito.cliente.nombre}
               </p>
+              {exito.enviandoAgradecimiento && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="size-3.5 shrink-0 animate-spin" /> Enviando el agradecimiento con sus documentos…
+                </p>
+              )}
               {exito.agradecimiento &&
                 (exito.agradecimiento.enviado ? (
                   <p className="flex items-center gap-1.5 text-xs text-muted-foreground wrap-anywhere">
@@ -880,8 +894,8 @@ export function PolizaForm({
                 <Mail className="size-4 text-primary" /> Enviar al cliente el agradecimiento por renovar
               </Label>
               <p className="text-xs text-muted-foreground">
-                Al guardar, le llega a su correo registrado «¡Gracias por continuar con nosotros!» con el número y la
-                vigencia nuevos.
+                Al guardar, le llega a su correo registrado «¡Gracias por continuar con nosotros!» con la vigencia nueva y,
+                adjuntos, la carátula y el expediente (ZIP) que subas aquí.
               </p>
             </div>
             <Switch

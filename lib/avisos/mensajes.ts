@@ -100,13 +100,20 @@ export function mensajeAgradecimientoRenovacion(d: {
   inicio: string;
   fin: string;
   correoServicio?: string;
+  /** Lo que va adjunto ("la carátula", "el expediente completo") y lo que va como enlace. */
+  documentos?: { adjuntos: string[]; enlaces: { que: string; url: string }[] };
 }): { asunto: string; titulo: string; mensaje: string } {
+  const unir = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} y ${xs.at(-1)}` : (xs[0] ?? ""));
+  const adjuntos = d.documentos?.adjuntos ?? [];
+  const enlaces = d.documentos?.enlaces ?? [];
   return {
     asunto: `Gracias por continuar con nosotros: tu póliza ${d.poliza} ya está renovada`,
     titulo: "¡Gracias por continuar con nosotros!",
     mensaje: [
       `Tu póliza${d.ramo ? ` de ${d.ramo}` : ""} con ${d.aseguradora} ya quedó renovada. Te agradecemos la confianza de seguir con ${d.agencia}: es un gusto seguir protegiéndote.`,
       `Póliza ${d.poliza}, vigente del ${formatFecha(d.inicio)} al ${formatFecha(d.fin)}.`,
+      ...(adjuntos.length > 0 ? [`Te adjuntamos ${unir(adjuntos)} de tu póliza para que los descargues y los tengas a la mano.`] : []),
+      ...enlaces.map((e) => `Descarga ${e.que} de tu póliza aquí (el enlace está disponible 7 días): ${e.url}`),
       d.correoServicio
         ? `Si tienes cualquier duda o necesitas algo, escríbenos a ${d.correoServicio} y con gusto te atenderemos.`
         : "Si tienes cualquier duda o necesitas algo, responde a este correo y con gusto te atenderemos.",
