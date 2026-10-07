@@ -313,11 +313,20 @@ export async function registrarPoliza(
       });
       // Id propio (mismo formato que los de Prisma) para que una póliza original sea su propia cadena.
       const id = `c${crypto.randomUUID().replace(/-/g, "")}`;
+      // Sin "Renovar" (p. ej. al cargar vigencias pasadas): si ya hay pólizas con el mismo número
+      // original en la aseguradora, esta se suma a su cadena, sea anterior o posterior.
+      const misma = anterior
+        ? null
+        : await tx.poliza.findFirst({
+            where: { agenciaId, aseguradora_id: datos.aseguradora_id, numeroImpreso: datos.numeroImpreso },
+            orderBy: { vigencia_inicio: "asc" },
+            select: { cadenaId: true },
+          });
       const poliza = await tx.poliza.create({
         data: {
           ...datos,
           id,
-          cadenaId: anterior?.cadenaId ?? id,
+          cadenaId: anterior?.cadenaId ?? misma?.cadenaId ?? id,
           agenciaId,
           ejecutivoId: asignado.ejecutivoId,
           cliente_id: cliente.id,
