@@ -185,6 +185,7 @@ export async function enviarMensaje(
   after(async () => {
     await avisarConversacion(conversacionId, agenciaId);
     await notificarMensaje(conversacionId, agenciaId, {
+      id: enviado.id,
       autorId: user.id,
       autor: user.nombre ?? user.email ?? "Alguien del equipo",
       texto: enviado.texto,

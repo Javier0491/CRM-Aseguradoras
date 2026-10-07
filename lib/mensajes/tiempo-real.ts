@@ -29,7 +29,7 @@ async function participantesDe(conversacionId: string, agenciaId: string) {
 export async function notificarMensaje(
   conversacionId: string,
   agenciaId: string,
-  m: { autorId: string; autor: string; texto: string; adjunto: { tipo: string; nombre: string } | null }
+  m: { id: string; autorId: string; autor: string; texto: string; adjunto: { tipo: string; nombre: string } | null }
 ) {
   try {
     const p = await participantesDe(conversacionId, agenciaId);
@@ -44,7 +44,9 @@ export async function notificarMensaje(
         cuerpo: cuerpo.length > 140 ? `${cuerpo.slice(0, 140)}…` : cuerpo,
         // Quien solo usa Tareas no tiene dashboard: el chat se abre sobre su página.
         url: `${esRolSoloTareas(rol.get(id) ?? "") ? "/tareas" : "/"}?chat=${conversacionId}`,
-        etiqueta: `chat-${conversacionId}`,
+        // Una por mensaje: en macOS, reemplazar una notificación con la misma etiqueta no vuelve a
+        // mostrarla en pantalla (solo se actualiza en el Centro de notificaciones).
+        etiqueta: `chat-${m.id}`,
       })
     );
   } catch (e) {
