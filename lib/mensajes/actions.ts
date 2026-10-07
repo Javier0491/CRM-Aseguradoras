@@ -19,7 +19,7 @@ import {
 } from "@/lib/mensajes/adjuntos";
 import { aMensajeChat, agenciaDelChat, conversacionDe, getMensajes, SELECT_MENSAJE } from "@/lib/mensajes/queries";
 import { CLAVE_EQUIPO, claveDirecta, validarTextoMensaje, type MensajeChat } from "@/lib/mensajes/reglas";
-import { avisarConversacion } from "@/lib/mensajes/tiempo-real";
+import { avisarConversacion, notificarMensaje } from "@/lib/mensajes/tiempo-real";
 
 const SESION = "Tu sesión expiró. Vuelve a iniciar sesión.";
 const ID = /^[\w-]{1,64}$/;
@@ -181,8 +181,17 @@ export async function enviarMensaje(
     }
     throw e;
   }
-  after(() => avisarConversacion(conversacionId, agenciaId));
-  return { ok: true, conversacionId, mensaje: aMensajeChat(mensaje) };
+  const enviado = aMensajeChat(mensaje);
+  after(async () => {
+    await avisarConversacion(conversacionId, agenciaId);
+    await notificarMensaje(conversacionId, agenciaId, {
+      autorId: user.id,
+      autor: user.nombre ?? user.email ?? "Alguien del equipo",
+      texto: enviado.texto,
+      adjunto: enviado.adjunto && { tipo: enviado.adjunto.tipo, nombre: enviado.adjunto.nombre },
+    });
+  });
+  return { ok: true, conversacionId, mensaje: enviado };
 }
 
 /** Marca como leída una conversación hasta el mensaje que la persona alcanzó a ver (ISO). */

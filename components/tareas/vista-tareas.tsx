@@ -2,6 +2,7 @@ import Link from "next/link";
 import { AlarmClock, CalendarCheck, CheckCircle2, Coffee, ListTodo, PartyPopper, Users } from "lucide-react";
 
 import { ListaTareas, type TareaVista } from "@/components/tareas/lista-tareas";
+import { ActivarNotificaciones } from "@/components/notificaciones/activar-notificaciones";
 import { NuevaTarea } from "@/components/tareas/nueva-tarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatNumero, iniciales } from "@/lib/format";
@@ -80,7 +81,10 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
               : "Pendientes y recordatorios del equipo; los de un cliente o una póliza también aparecen en su expediente."}
           </p>
         </div>
-        <NuevaTarea hoy={hoy} equipo={equipo} usuarioId={usuario.id} variante="default" />
+        <div className="flex flex-wrap items-center gap-2">
+          <ActivarNotificaciones />
+          <NuevaTarea hoy={hoy} equipo={equipo} usuarioId={usuario.id} variante="default" />
+        </div>
       </div>
 
       <section aria-label="Mi resumen" className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">

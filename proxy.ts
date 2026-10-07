@@ -4,7 +4,8 @@ import { updateSession } from "@/lib/supabase/proxy";
 
 // Rutas accesibles sin sesión. /api/cron no usa sesión: cada ruta exige CRON_SECRET. /dev es la
 // galería de datos de prueba: solo en desarrollo (en producción responde 404) y no lee la base.
-const RUTAS_PUBLICAS = ["/login", "/api/cron", ...(process.env.NODE_ENV === "development" ? ["/dev"] : [])];
+// /sw.js y el manifiesto los pide el navegador por su cuenta (notificaciones e instalación).
+const RUTAS_PUBLICAS = ["/login", "/api/cron", "/sw.js", "/manifest.webmanifest", ...(process.env.NODE_ENV === "development" ? ["/dev"] : [])];
 
 function esPublica(pathname: string) {
   return RUTAS_PUBLICAS.some((ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`));

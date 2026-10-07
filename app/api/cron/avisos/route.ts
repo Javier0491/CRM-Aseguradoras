@@ -4,6 +4,7 @@ import { procesarAvisos, type ResumenAvisos } from "@/lib/avisos/procesar";
 import { CorreoNoConfiguradoError } from "@/lib/comunicaciones/envio";
 import { ejecutarConRegistro } from "@/lib/plataforma/cron";
 import { procesarCobranzaPlataforma, type ResumenCobranza } from "@/lib/plataforma/procesar-cobranza";
+import { recordarTareasDelDia } from "@/lib/tareas/recordatorio";
 
 // Los avisos se envían uno por uno para respetar el límite de Resend.
 export const maxDuration = 300;
@@ -49,7 +50,14 @@ export async function GET(request: Request) {
         if (e instanceof CorreoNoConfiguradoError) correoNoConfigurado = e.message;
         fallas.push(`Avisos: ${mensaje(e)}`);
       }
-      return { resumen: { cobranza, avisos }, fallas };
+      // Recordatorio de tareas del día (notificaciones push del navegador).
+      let tareas: number | null = null;
+      try {
+        tareas = await recordarTareasDelDia();
+      } catch (e) {
+        fallas.push(`Recordatorio de tareas: ${mensaje(e)}`);
+      }
+      return { resumen: { cobranza, avisos, tareas }, fallas };
     });
     if (correoNoConfigurado) return Response.json({ ok: false, error: correoNoConfigurado, ...resumen }, { status: 503 });
     if (fallas.length > 0) return Response.json({ ok: false, error: fallas.join(" | "), ...resumen }, { status: 500 });

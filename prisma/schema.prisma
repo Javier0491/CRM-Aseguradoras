@@ -130,6 +130,7 @@ model Agencia {
   conversaciones     Conversacion[]
   mensajes           Mensaje[]
   lecturasMensajes   ConversacionLectura[]
+  suscripcionesPush  SuscripcionPush[]
 
   @@map("agencias")
 }
@@ -170,6 +171,7 @@ model Usuario {
   conversacionesB   Conversacion[]        @relation("ConversacionUsuarioB")
   mensajes          Mensaje[]
   lecturasMensajes  ConversacionLectura[]
+  suscripcionesPush SuscripcionPush[]
 
   @@index([agenciaId])
   @@map("usuarios")
@@ -504,6 +506,26 @@ model ConversacionLectura {
   @@index([usuarioId])
   @@index([agenciaId])
   @@map("conversaciones_lecturas")
+}
+
+// Notificaciones push del navegador: cada dispositivo (navegador) en el que la persona las activó.
+// Le llegan avisos de mensajes y tareas aunque no tenga el CRM abierto.
+model SuscripcionPush {
+  id        String   @id @default(cuid())
+  // Agencia dueña del registro (la propia de la cuenta).
+  agenciaId String   @map("agencia_id") @db.Uuid
+  agencia   Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  usuarioId String   @map("usuario_id")
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  // Dirección del servicio de push del navegador y sus llaves de cifrado.
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([usuarioId])
+  @@index([agenciaId])
+  @@map("suscripciones_push")
 }
 
 // Pagos de una agencia por el uso de la plataforma (los registra el SUPERADMIN).

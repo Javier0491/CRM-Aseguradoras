@@ -1,10 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 
 import { alcanceDe, clientesDe, polizasDe } from "@/lib/auth/alcance";
 import { getCurrentUser, type UsuarioSesion } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
+import { formatFecha } from "@/lib/format";
+import { enviarPush } from "@/lib/notificaciones/push";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { tareasVisibles } from "@/lib/tareas/queries";
 import { fechaValida, MAX_RESPONSABLES_TAREA, validarTarea, type ErroresTarea } from "@/lib/tareas/reglas";
@@ -134,6 +137,18 @@ export async function crearTarea(raw: NuevaTareaInput): Promise<TareaCreada> {
     select: { id: true },
   });
   revalidar(clienteId, polizaId);
+  // Aviso a los encargados (aunque no tengan el CRM abierto); a quien la creó no.
+  const avisar = responsables.ids.filter((id) => id !== user.id);
+  if (avisar.length > 0) {
+    after(() =>
+      enviarPush(avisar, {
+        titulo: `Nueva tarea de ${user.nombre ?? "tu equipo"}`,
+        cuerpo: `${datos.titulo} · vence el ${formatFecha(`${datos.vence}T00:00:00Z`)}`,
+        url: "/tareas",
+        etiqueta: `tarea-${tarea.id}`,
+      })
+    );
+  }
   return { ok: true, id: tarea.id };
 }
 

@@ -7,6 +7,7 @@ import { LayoutGrid, LogOut } from "lucide-react";
 import { BusquedaGlobal } from "@/components/layout/busqueda-global";
 import { CampanaAvisos } from "@/components/layout/campana-avisos";
 import { ChatRapido } from "@/components/mensajes/chat-rapido";
+import { RegistroNotificaciones } from "@/components/notificaciones/activar-notificaciones";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -68,6 +69,7 @@ export function AppHeader({
         )}
         {!soloTareas && <BusquedaGlobal />}
         <ChatRapido usuarioId={chat.usuarioId} administra={chat.administra} />
+        <RegistroNotificaciones />
         {!soloTareas && <CampanaAvisos />}
         <form action={cerrarSesion}>
           <Button type="submit" variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground">

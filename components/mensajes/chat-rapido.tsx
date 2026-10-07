@@ -5,6 +5,7 @@ import { ArrowLeft, MessageCircle, SquarePen } from "lucide-react";
 import { toast } from "sonner";
 
 import { useAvisosTiempoReal } from "@/components/mensajes/avisos-tiempo-real";
+import { ActivarNotificaciones } from "@/components/notificaciones/activar-notificaciones";
 import {
   AvatarChat,
   Compositor,
@@ -175,6 +176,28 @@ export function ChatRapido({ usuarioId, administra }: { usuarioId: string; admin
       );
     });
   }, [abiertaId, ultimoVisto, noLeidosAbierta]);
+
+  // Al tocar una notificación push: ?chat=<id> en la dirección (CRM cerrado) o un mensaje del
+  // service worker (CRM abierto) abren esa conversación.
+  const abrirDesdeAviso = React.useEffectEvent((url: string) => {
+    const id = new URL(url, window.location.origin).searchParams.get("chat");
+    if (id && /^[\w-]{1,64}$/.test(id)) abrirConversacion(id);
+  });
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("chat")) {
+      abrirDesdeAviso(window.location.href);
+      params.delete("chat");
+      const resto = params.toString();
+      window.history.replaceState(null, "", `${window.location.pathname}${resto ? `?${resto}` : ""}`);
+    }
+    if (!("serviceWorker" in navigator)) return;
+    const alMensaje = (e: MessageEvent) => {
+      if (e.data?.tipo === "notificacion" && typeof e.data.url === "string") abrirDesdeAviso(e.data.url);
+    };
+    navigator.serviceWorker.addEventListener("message", alMensaje);
+    return () => navigator.serviceWorker.removeEventListener("message", alMensaje);
+  }, []);
 
   // Al desmontar se liberan las vistas previas de lo que quedó sin enviar.
   React.useEffect(() => {
@@ -438,6 +461,7 @@ export function ChatRapido({ usuarioId, administra }: { usuarioId: string; admin
 
         {vista.tipo === "lista" && (
           <div className="min-h-0 flex-1 overflow-y-auto">
+            <ActivarNotificaciones compacto />
             <ListaConversaciones conversaciones={resumen?.conversaciones ?? null} hoy={hoy} onAbrir={(c) => setVista({ tipo: "conversacion", id: c.id })} />
           </div>
         )}
