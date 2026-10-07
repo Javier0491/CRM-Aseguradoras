@@ -43,8 +43,8 @@ function combinarRenovacion(ocr: PolizaFormInicial, anterior: PolizaFormInicial)
   const antiguedades = new Map((anterior.asegurados ?? []).map((a) => [a.nombre.trim().toUpperCase(), a.antiguedad]));
   return {
     ramo: ocr.ramo ?? anterior.ramo,
-    // La póliza vigor es la de la cadena, aunque la IA lea otra.
-    generales: { ...anterior.generales, ...conValor(ocr.generales), polizaVigor: anterior.generales?.polizaVigor ?? "" },
+    // El número original se conserva en la renovación; la póliza vigor es la que lea la IA (la nueva).
+    generales: { ...anterior.generales, ...conValor(ocr.generales), numeroImpreso: anterior.generales?.numeroImpreso ?? "" },
     especificos: mismoRamo ? { ...anterior.especificos, ...conValor(ocr.especificos) } : ocr.especificos,
     asegurados: ocr.asegurados?.length
       ? ocr.asegurados.map((a) => ({ ...a, antiguedad: a.antiguedad || antiguedades.get(a.nombre.trim().toUpperCase()) || "" }))

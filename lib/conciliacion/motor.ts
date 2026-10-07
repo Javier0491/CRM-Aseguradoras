@@ -53,6 +53,7 @@ export async function cruzarEstadoDeCuenta(alcance: Alcance, aseguradoraId: stri
         id: true,
         numeroImpreso: true,
         polizaVigor: true,
+        cadenaId: true,
         ramo: true,
         vigencia_inicio: true,
         vigencia_fin: true,
@@ -79,16 +80,16 @@ export async function cruzarEstadoDeCuenta(alcance: Alcance, aseguradoraId: stri
   // Se consulta toda la cadena en la base de datos, no solo las vigencias que menciona el
   // archivo: si el estado de cuenta nombra la renovación por su número impreso, sus vigencias
   // anteriores no vienen entre `polizas` y la renovación se contaría como año 1.
-  const vigoresCadena = [...new Set(polizas.map((p) => p.polizaVigor).filter((v): v is string => Boolean(v)))];
-  const cadenas = vigoresCadena.length
+  const idsCadena = [...new Set(polizas.map((p) => p.cadenaId))];
+  const cadenas = idsCadena.length
     ? await db.poliza.groupBy({
-        by: ["polizaVigor"],
-        where: { agenciaId, aseguradora_id: aseguradoraId, polizaVigor: { in: vigoresCadena } },
+        by: ["cadenaId"],
+        where: { agenciaId, cadenaId: { in: idsCadena } },
         _min: { vigencia_inicio: true },
       })
     : [];
   const primerasVigencias = new Map<string, Date>();
-  for (const c of cadenas) if (c.polizaVigor && c._min.vigencia_inicio) primerasVigencias.set(c.polizaVigor, c._min.vigencia_inicio);
+  for (const c of cadenas) if (c._min.vigencia_inicio) primerasVigencias.set(c.cadenaId, c._min.vigencia_inicio);
 
   return cruzarFilas({
     filas,

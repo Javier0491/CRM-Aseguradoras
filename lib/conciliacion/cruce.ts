@@ -36,6 +36,8 @@ export type PolizaCruce = {
   id: string;
   numeroImpreso: string;
   polizaVigor: string | null;
+  /** Cadena de renovaciones (la primera vigencia define el año de la póliza). */
+  cadenaId: string;
   ramo: string;
   vigencia_inicio: Date;
   vigencia_fin: Date;
@@ -77,10 +79,10 @@ export function cruzarFilas({
   esquemas: readonly EsquemaResolucion[];
   primerasVigencias: ReadonlyMap<string, Date>;
 }): { resultados: ResultadoMatch[]; resumen: ResumenMatch } {
-  // Primera vigencia de cada cadena (misma póliza vigor) para distinguir año 1 de renovación.
+  // Primera vigencia de cada cadena de renovaciones para distinguir año 1 de renovación.
   const primeraVigencia = new Map(primerasVigencias);
   for (const p of polizas) {
-    const clave = p.polizaVigor ?? p.id;
+    const clave = p.cadenaId;
     const actual = primeraVigencia.get(clave);
     if (!actual || p.vigencia_inicio < actual) primeraVigencia.set(clave, p.vigencia_inicio);
   }
@@ -198,7 +200,7 @@ export function cruzarFilas({
       asegurados: recibo.poliza.asegurados,
       vigenciaInicio: recibo.poliza.vigencia_inicio,
       primeraVigencia:
-        primeraVigencia.get(recibo.poliza.polizaVigor ?? recibo.poliza.id) ?? recibo.poliza.vigencia_inicio,
+        primeraVigencia.get(recibo.poliza.cadenaId) ?? recibo.poliza.vigencia_inicio,
       fechaRecibo: recibo.fecha_vencimiento,
     });
     const resuelto = resolverPorcentaje(

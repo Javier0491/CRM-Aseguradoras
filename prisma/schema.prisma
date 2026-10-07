@@ -261,12 +261,15 @@ model Poliza {
   agencia                    Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   // Lectura cruda del número tal como aparece en la carátula (lo captura el OCR).
   numeroImpreso              String    @map("numero_poliza_original")
-  // Póliza raíz: clave exacta de cobranza, derivada de numeroImpreso con
-  // extraerPolizaVigor() (lib/polizas/polizaParser.ts). No es única: las
-  // renovaciones (-01, -02, ...) comparten la misma póliza raíz.
+  // Póliza vigor: clave de cobranza de esta vigencia (se propone con extraerPolizaVigor(),
+  // lib/polizas/polizaParser.ts). Cambia en cada renovación; el número original se conserva.
   // En aseguradoras sin póliza vigor (usaPolizaVigor = false) no se muestra ni se usa para
-  // cobrar: solo encadena las renovaciones y vale el número impreso de la primera póliza.
+  // cobrar: vale el número impreso.
   polizaVigor                String?   @map("numero_poliza_vigor")
+  // Cadena de renovaciones: el id de la primera póliza (la original vale su propio id). Liga
+  // cada renovación con las anteriores aunque cambie la póliza vigor; de ella salen la
+  // renovación siguiente, la anterior y el año de la póliza para la comisión.
+  cadenaId                   String    @map("cadena_id")
   ramo                       Ramo
   cliente_id                 String
   aseguradora_id             String
@@ -329,8 +332,11 @@ model Poliza {
   notas       NotaCliente[]
   tareas      Tarea[]
 
-  @@unique([agenciaId, numeroImpreso])
+  // Las renovaciones comparten el número original; dos pólizas con el mismo número y la misma
+  // vigencia son una captura repetida.
+  @@unique([agenciaId, numeroImpreso, vigencia_inicio])
   @@index([polizaVigor])
+  @@index([cadenaId])
   @@index([cliente_id])
   @@index([aseguradora_id])
   @@index([vigencia_fin])

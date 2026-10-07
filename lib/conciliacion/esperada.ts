@@ -18,7 +18,7 @@ export const SELECT_RECIBO_ESPERADA = {
   poliza: {
     select: {
       id: true,
-      polizaVigor: true,
+      cadenaId: true,
       aseguradora_id: true,
       ramo: true,
       vigencia_inicio: true,
@@ -49,28 +49,26 @@ export async function comisionesEsperadas(
   if (recibos.length === 0) return resultado;
 
   const aseguradoras = [...new Set(recibos.map((r) => r.poliza.aseguradora_id))];
-  const vigores = [...new Set(recibos.map((r) => r.poliza.polizaVigor).filter((v): v is string => Boolean(v)))];
+  const idsCadena = [...new Set(recibos.map((r) => r.poliza.cadenaId))];
   const [esquemas, cadenas] = await Promise.all([
     db.esquemaComision.findMany({
       where: { agenciaId, aseguradora_id: { in: aseguradoras } },
       select: { aseguradora_id: true, ramo: true, anio_poliza: true, porcentaje: true, edad_minima: true, edad_maxima: true },
     }),
-    vigores.length
-      ? db.poliza.groupBy({
-          by: ["aseguradora_id", "polizaVigor"],
-          where: { agenciaId, polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
-          _min: { vigencia_inicio: true },
-        })
-      : Promise.resolve([]),
+    db.poliza.groupBy({
+      by: ["cadenaId"],
+      where: { agenciaId, cadenaId: { in: idsCadena } },
+      _min: { vigencia_inicio: true },
+    }),
   ]);
-  const primera = new Map(cadenas.map((c) => [`${c.aseguradora_id}|${c.polizaVigor}`, c._min.vigencia_inicio]));
+  const primera = new Map(cadenas.map((c) => [c.cadenaId, c._min.vigencia_inicio]));
 
   for (const r of recibos) {
     const p = r.poliza;
     const { anio } = anioParaComision({
       asegurados: p.asegurados,
       vigenciaInicio: p.vigencia_inicio,
-      primeraVigencia: (p.polizaVigor && primera.get(`${p.aseguradora_id}|${p.polizaVigor}`)) || p.vigencia_inicio,
+      primeraVigencia: primera.get(p.cadenaId) ?? p.vigencia_inicio,
       fechaRecibo: r.fecha_vencimiento,
     });
     const porcentaje = resolverPorcentaje(

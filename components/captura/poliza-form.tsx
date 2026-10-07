@@ -541,11 +541,11 @@ export function PolizaForm({
     const esVigor = campo.name === "polizaVigor";
     const bloqueadoPorModo =
       (modo.tipo === "edicion" && modo.bloqueados.includes(campo.name)) ||
-      (modo.tipo === "renovacion" && esVigor);
+      (modo.tipo === "renovacion" && esImpreso);
     const ayudaModo = !bloqueadoPorModo
       ? undefined
       : modo.tipo === "renovacion"
-        ? "Se conserva la de la póliza anterior para mantener la cadena de renovaciones."
+        ? "Se conserva el número original; en la renovación cambia la póliza vigor."
         : modo.tipo === "edicion" && modo.cancelada
           ? "La póliza está cancelada: reactívala para cambiarlo."
           : "Tiene recibos cobrados: para cambiarlo, revierte primero su conciliación.";
@@ -610,7 +610,7 @@ export function PolizaForm({
                 ? "La póliza ya tiene recibos cobrados: la vigencia, la forma de pago y la prima total quedan fijas."
                 : "Si cambias la vigencia, la forma de pago o la prima total, sus recibos se vuelven a generar."
               : modo.tipo === "renovacion"
-                ? "Datos de la vigencia anterior precargados. Sube la carátula nueva o captura el número y las primas."
+                ? "Datos de la vigencia anterior precargados. Sube la carátula nueva o captura la póliza vigor y las primas."
                 : "Revisa los datos extraídos antes de guardar; todos los campos son editables."}
           </CardDescription>
         </CardHeader>

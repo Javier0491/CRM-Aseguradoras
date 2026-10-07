@@ -112,10 +112,10 @@ function mesesDeVigencia(inicio: Date, fin: Date) {
 }
 
 /**
- * Datos iniciales para renovar una póliza: el mismo contratante, aseguradora, ramo, póliza vigor
- * (la cadena), forma de pago, datos del ramo y asegurados (con su antigüedad). La nueva vigencia
- * empieza donde terminó la anterior y dura lo mismo. El número impreso y las primas quedan
- * vacíos: cambian en cada renovación y los trae la carátula nueva.
+ * Datos iniciales para renovar una póliza: el mismo contratante, aseguradora, ramo, número
+ * original (se conserva en toda la cadena), forma de pago, datos del ramo y asegurados (con su
+ * antigüedad). La nueva vigencia empieza donde terminó la anterior y dura lo mismo. La póliza
+ * vigor y las primas quedan vacías: cambian en cada renovación y las trae la carátula nueva.
  */
 export async function getPolizaParaRenovar(id: string, { incluirComision }: { incluirComision: boolean }) {
   await connection();
@@ -132,7 +132,8 @@ export async function getPolizaParaRenovar(id: string, { incluirComision }: { in
       ...base,
       generales: {
         ...base.generales,
-        numeroImpreso: "",
+        numeroImpreso: p.numeroImpreso,
+        polizaVigor: "",
         vigenciaInicio: inicio,
         vigenciaFin: sumarMeses(inicio, mesesDeVigencia(p.vigencia_inicio, p.vigencia_fin)),
         primaTotal: "",
@@ -145,38 +146,20 @@ export async function getPolizaParaRenovar(id: string, { incluirComision }: { in
 }
 
 /** Renovación ya capturada de una póliza: otra póliza de su cadena que empieza cuando termina. */
-export async function getRenovacion(poliza: { polizaVigor: string | null; aseguradora_id: string; vigencia_fin: Date }) {
-  if (!poliza.polizaVigor) return null;
+export async function getRenovacion(poliza: { cadenaId: string; vigencia_fin: Date }) {
   const agenciaId = await getAgenciaId();
   return db.poliza.findFirst({
-    where: {
-      agenciaId,
-      polizaVigor: poliza.polizaVigor,
-      aseguradora_id: poliza.aseguradora_id,
-      vigencia_inicio: { gte: poliza.vigencia_fin },
-    },
+    where: { agenciaId, cadenaId: poliza.cadenaId, vigencia_inicio: { gte: poliza.vigencia_fin } },
     orderBy: { vigencia_inicio: "asc" },
     select: { id: true, numeroImpreso: true },
   });
 }
 
 /** Póliza que esta renueva: la vigencia anterior de su cadena (termina cuando esta empieza o antes). */
-export async function getPolizaAnterior(poliza: {
-  id: string;
-  polizaVigor: string | null;
-  aseguradora_id: string;
-  vigencia_inicio: Date;
-}) {
-  if (!poliza.polizaVigor) return null;
+export async function getPolizaAnterior(poliza: { id: string; cadenaId: string; vigencia_inicio: Date }) {
   const agenciaId = await getAgenciaId();
   return db.poliza.findFirst({
-    where: {
-      agenciaId,
-      id: { not: poliza.id },
-      polizaVigor: poliza.polizaVigor,
-      aseguradora_id: poliza.aseguradora_id,
-      vigencia_fin: { lte: poliza.vigencia_inicio },
-    },
+    where: { agenciaId, id: { not: poliza.id }, cadenaId: poliza.cadenaId, vigencia_fin: { lte: poliza.vigencia_inicio } },
     orderBy: { vigencia_fin: "desc" },
     select: { id: true, numeroImpreso: true },
   });

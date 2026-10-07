@@ -37,8 +37,8 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
           {renovacion ? (
             <>
               <RefreshCcw className="mr-1 inline size-3.5 text-primary" />
-              Se conserva la póliza vigor {renovacion.polizaVigor ?? ""} para que la cadena y el año de la póliza
-              sigan correctos.{" "}
+              Se conserva el número de póliza {renovacion.numero}; captura la póliza vigor de la nueva vigencia (la
+              que se usa para la cobranza).{" "}
               <Link href={`/polizas/${renovacion.id}`} className="text-primary hover:underline">
                 Ver póliza anterior
               </Link>

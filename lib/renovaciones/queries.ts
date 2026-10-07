@@ -19,33 +19,25 @@ import {
 const DIA_MS = 86_400_000;
 const fechaUtc = (iso: string) => new Date(`${iso}T00:00:00Z`);
 
-type Eslabon = { id: string; polizaVigor: string | null; aseguradora_id: string; vigencia_fin: Date };
+type Eslabon = { id: string; cadenaId: string; vigencia_fin: Date };
 
 /**
- * Renovación ya capturada de cada póliza: otra de su cadena (misma póliza vigor y aseguradora)
- * que empieza cuando la anterior termina. Se busca en toda la agencia: la renovación puede estar
- * en la cartera de otro ejecutivo.
+ * Renovación ya capturada de cada póliza: otra de su cadena de renovaciones que empieza cuando
+ * la anterior termina. Se busca en toda la agencia: la renovación puede estar en la cartera de
+ * otro ejecutivo.
  */
 export async function renovacionesDe(agenciaId: string, polizas: readonly Eslabon[]) {
-  const vigores = [...new Set(polizas.flatMap((p) => (p.polizaVigor ? [p.polizaVigor] : [])))];
-  const cadena = vigores.length
+  const cadenas = [...new Set(polizas.map((p) => p.cadenaId))];
+  const cadena = cadenas.length
     ? await db.poliza.findMany({
-        where: { agenciaId, polizaVigor: { in: vigores } },
+        where: { agenciaId, cadenaId: { in: cadenas } },
         orderBy: { vigencia_inicio: "asc" },
-        select: { id: true, numeroImpreso: true, polizaVigor: true, aseguradora_id: true, vigencia_inicio: true },
+        select: { id: true, numeroImpreso: true, cadenaId: true, vigencia_inicio: true },
       })
     : [];
   const resultado = new Map<string, { id: string; numeroImpreso: string } | null>();
   for (const p of polizas) {
-    const r = p.polizaVigor
-      ? cadena.find(
-          (c) =>
-            c.id !== p.id &&
-            c.polizaVigor === p.polizaVigor &&
-            c.aseguradora_id === p.aseguradora_id &&
-            c.vigencia_inicio >= p.vigencia_fin
-        )
-      : undefined;
+    const r = cadena.find((c) => c.id !== p.id && c.cadenaId === p.cadenaId && c.vigencia_inicio >= p.vigencia_fin);
     resultado.set(p.id, r ? { id: r.id, numeroImpreso: r.numeroImpreso } : null);
   }
   return resultado;
@@ -92,6 +84,7 @@ export async function getEmbudo({ ejecutivo }: { ejecutivo?: string } = {}) {
       id: true,
       numeroImpreso: true,
       polizaVigor: true,
+      cadenaId: true,
       aseguradora_id: true,
       ramo: true,
       vigencia_fin: true,
@@ -143,7 +136,7 @@ export async function contarPorRenovar(alcance: Alcance, dias = 30) {
         { vigencia_fin: { gte: hoy, lte: new Date(hoy.getTime() + dias * DIA_MS) } },
       ],
     },
-    select: { id: true, polizaVigor: true, aseguradora_id: true, vigencia_fin: true, renovacionEtapa: true },
+    select: { id: true, cadenaId: true, vigencia_fin: true, renovacionEtapa: true },
   });
   const renovaciones = await renovacionesDe(alcance.agenciaId, polizas);
   const pendientes = polizas.filter((p) => !renovaciones.get(p.id));

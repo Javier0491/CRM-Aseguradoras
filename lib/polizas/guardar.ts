@@ -199,9 +199,12 @@ async function validarFormulario(agenciaId: string, input: PolizaInput, g: Valor
 }
 
 function errorGuardado(e: unknown, numeroImpreso: string, contexto: string) {
-  // El único único alcanzable es numeroImpreso.
+  // El único único alcanzable es número + inicio de vigencia (las renovaciones repiten el número).
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-    return { ok: false as const, errores: { numeroImpreso: `Ya existe una póliza con el número ${numeroImpreso}` } };
+    return {
+      ok: false as const,
+      errores: { numeroImpreso: `Ya existe una póliza con el número ${numeroImpreso} y esa misma vigencia` },
+    };
   }
   console.error(`[${contexto}]`, e);
   return { ok: false as const, error: "No fue posible guardar la póliza. Inténtalo de nuevo." };
@@ -236,8 +239,9 @@ export async function registrarPoliza(
   const asignado = await resolverEjecutivo(usuario, leerEjecutivoSolicitado(raw));
   if (!asignado.ok) return { ok: false, error: asignado.error };
 
-  // Renovación: misma aseguradora, misma póliza vigor e inicio posterior a la vigencia anterior.
-  let anterior: { id: string; numeroImpreso: string } | null = null;
+  // Renovación: misma aseguradora y mismo número original, póliza vigor nueva e inicio posterior
+  // a la vigencia anterior. Queda en la cadena de la póliza que renueva.
+  let anterior: { id: string; numeroImpreso: string; polizaVigor: string | null; cadenaId: string } | null = null;
   if (renuevaA !== undefined) {
     if (typeof renuevaA !== "string" || !/^[a-z0-9]+$/i.test(renuevaA)) return { ok: false, error: "Datos inválidos." };
     const original = await db.poliza.findFirst({
@@ -246,30 +250,29 @@ export async function registrarPoliza(
         id: true,
         numeroImpreso: true,
         polizaVigor: true,
+        cadenaId: true,
         aseguradora_id: true,
         vigencia_inicio: true,
         vigencia_fin: true,
         canceladaAt: true,
-        aseguradora: { select: { nombre: true } },
+        aseguradora: { select: { nombre: true, usaPolizaVigor: true } },
       },
     });
     if (!original) return { ok: false, error: "La póliza que se renueva ya no existe." };
     if (original.canceladaAt) {
       return { ok: false, error: `La póliza ${original.numeroImpreso} está cancelada: reactívala antes de renovarla.` };
     }
-    const yaRenovada = original.polizaVigor
-      ? await db.poliza.findFirst({
-          where: {
-            agenciaId,
-            polizaVigor: original.polizaVigor,
-            aseguradora_id: original.aseguradora_id,
-            vigencia_inicio: { gte: original.vigencia_fin },
-          },
-          select: { numeroImpreso: true },
-        })
-      : null;
+    const yaRenovada = await db.poliza.findFirst({
+      where: { agenciaId, cadenaId: original.cadenaId, vigencia_inicio: { gte: original.vigencia_fin } },
+      select: { polizaVigor: true, vigencia_inicio: true },
+    });
     if (yaRenovada) {
-      return { ok: false, error: `La póliza ${original.numeroImpreso} ya se renovó con la ${yaRenovada.numeroImpreso}.` };
+      return {
+        ok: false,
+        error: `La póliza ${original.numeroImpreso} ya se renovó (vigencia desde ${iso(yaRenovada.vigencia_inicio)}${
+          yaRenovada.polizaVigor ? `, póliza vigor ${yaRenovada.polizaVigor}` : ""
+        }).`,
+      };
     }
     if (g.aseguradora !== original.aseguradora_id) {
       return { ok: false, errores: { aseguradora: `La renovación debe ser con ${original.aseguradora.nombre}.` } };
@@ -280,11 +283,23 @@ export async function registrarPoliza(
         errores: { vigenciaInicio: `Debe iniciar después de la vigencia anterior (${iso(original.vigencia_inicio)}).` },
       };
     }
-    if (original.polizaVigor) g = { ...g, polizaVigor: original.polizaVigor };
-    anterior = { id: original.id, numeroImpreso: original.numeroImpreso };
+    // El número original se conserva; la póliza vigor (clave de cobranza) es la de la nueva vigencia.
+    g = { ...g, numeroImpreso: original.numeroImpreso };
+    if (
+      original.aseguradora.usaPolizaVigor &&
+      original.polizaVigor &&
+      g.polizaVigor.trim().toUpperCase() === original.polizaVigor.toUpperCase()
+    ) {
+      return {
+        ok: false,
+        errores: { polizaVigor: `Captura la póliza vigor de la renovación: la ${original.polizaVigor} es la de la vigencia anterior.` },
+      };
+    }
+    anterior = { id: original.id, numeroImpreso: original.numeroImpreso, polizaVigor: original.polizaVigor, cadenaId: original.cadenaId };
   }
 
-  g = await aplicarReglaVigor(agenciaId, g, anterior ? g.polizaVigor : null);
+  // Sin póliza vigor en la aseguradora, la renovación conserva la clave de la anterior.
+  g = await aplicarReglaVigor(agenciaId, g, anterior?.polizaVigor ?? null);
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const datos = columnasPoliza(input, g);
@@ -296,16 +311,20 @@ export async function registrarPoliza(
         actualizarContacto: "completar",
         ejecutivoId: asignado.ejecutivoId,
       });
+      // Id propio (mismo formato que los de Prisma) para que una póliza original sea su propia cadena.
+      const id = `c${crypto.randomUUID().replace(/-/g, "")}`;
       const poliza = await tx.poliza.create({
         data: {
           ...datos,
+          id,
+          cadenaId: anterior?.cadenaId ?? id,
           agenciaId,
           ejecutivoId: asignado.ejecutivoId,
           cliente_id: cliente.id,
           asegurados: { create: aseguradosData(input.asegurados).map((a) => ({ ...a, agenciaId })) },
           recibos: { create: recibos.map((r) => ({ ...r, agenciaId })) },
         },
-        select: { id: true, numeroImpreso: true },
+        select: { id: true, numeroImpreso: true, polizaVigor: true },
       });
       await registrarBitacora(
         usuario,
@@ -315,7 +334,10 @@ export async function registrarPoliza(
               entidad: "poliza",
               entidadId: poliza.id,
               descripcion:
-                `Renovó la póliza ${anterior.numeroImpreso} con la ${poliza.numeroImpreso} (${cliente.nombre})` +
+                `Renovó la póliza ${anterior.numeroImpreso} (${cliente.nombre})` +
+                (poliza.polizaVigor && poliza.polizaVigor !== anterior.polizaVigor
+                  ? `: póliza vigor ${anterior.polizaVigor ?? "—"} → ${poliza.polizaVigor}`
+                  : "") +
                 (leidaConIa ? " · leída con Captura Inteligente" : ""),
               datos: { renuevaA: anterior.id, ...(leidaConIa && { origen: "ocr" }) },
             }

@@ -136,6 +136,7 @@ export async function getPolizasExportacion(filtros: FiltrosPolizas = {}) {
     select: {
       numeroImpreso: true,
       polizaVigor: true,
+      cadenaId: true,
       ramo: true,
       vigencia_inicio: true,
       vigencia_fin: true,
@@ -219,6 +220,7 @@ export async function getPolizaDetalle(id: string) {
       id: true,
       numeroImpreso: true,
       polizaVigor: true,
+      cadenaId: true,
       aseguradora_id: true,
       ramo: true,
       vigencia_inicio: true,

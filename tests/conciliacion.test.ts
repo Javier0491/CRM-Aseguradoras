@@ -19,6 +19,7 @@ function poliza(extra: Partial<PolizaCruce> = {}): PolizaCruce {
     id: "p1",
     numeroImpreso: "GMM-1234567-01",
     polizaVigor: "1234567",
+    cadenaId: "p1",
     ramo: "GMM_INDIVIDUAL",
     vigencia_inicio: d("2026-01-01"),
     vigencia_fin: d("2027-01-01"),

@@ -57,7 +57,7 @@ async function avisosDeAgencia(agenciaId: string, hoy: string): Promise<Pendient
         OR: [{ renovacionEtapa: null }, { renovacionEtapa: { not: "PERDIDA" } }],
       },
       orderBy: { vigencia_fin: "asc" },
-      select: { id: true, polizaVigor: true, aseguradora_id: true, vigencia_fin: true, ...selectPoliza },
+      select: { id: true, cadenaId: true, vigencia_fin: true, ...selectPoliza },
     }),
   ]);
 
@@ -104,17 +104,15 @@ async function avisosDeAgencia(agenciaId: string, hoy: string): Promise<Pendient
   const porRenovar = polizas.filter(
     (p) => iso(p.vigencia_fin) <= sumarDias(hoy, p.aseguradora.avisoDiasRenovacion ?? 0)
   );
-  const vigores = [...new Set(porRenovar.flatMap((p) => (p.polizaVigor ? [p.polizaVigor] : [])))];
-  const cadena = vigores.length
+  const idsCadena = [...new Set(porRenovar.map((p) => p.cadenaId))];
+  const cadena = idsCadena.length
     ? await db.poliza.findMany({
-        where: { agenciaId, polizaVigor: { in: vigores } },
-        select: { polizaVigor: true, aseguradora_id: true, vigencia_inicio: true },
+        where: { agenciaId, cadenaId: { in: idsCadena } },
+        select: { cadenaId: true, vigencia_inicio: true },
       })
     : [];
   for (const p of porRenovar) {
-    const renovada = cadena.some(
-      (c) => c.polizaVigor === p.polizaVigor && c.aseguradora_id === p.aseguradora_id && c.vigencia_inicio >= p.vigencia_fin
-    );
+    const renovada = cadena.some((c) => c.cadenaId === p.cadenaId && c.vigencia_inicio >= p.vigencia_fin);
     if (renovada) continue;
     pendientes.push({
       tipo: "renovacion",

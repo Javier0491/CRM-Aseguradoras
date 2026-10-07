@@ -49,32 +49,25 @@ function polizasActivas(alcance: Alcance, { desde, hasta }: Rango) {
 }
 
 /**
- * De las pólizas que vencieron en el rango, cuántas se renovaron: existe otra póliza con la
- * misma póliza vigor y aseguradora que inicia después. Las canceladas no cuentan (no llegaron a
+ * De las pólizas que vencieron en el rango, cuántas se renovaron: existe otra póliza de su
+ * cadena de renovaciones que inicia después. Las canceladas no cuentan (no llegaron a
  * renovarse). null si ninguna venció.
  */
 async function tasaRenovacion(alcance: Alcance, { desde, hasta }: Rango, hoy: Date) {
   const tope = hasta < hoy ? hasta : hoy;
   const vencidas = await db.poliza.findMany({
     where: { ...polizasDe(alcance), ...NO_CANCELADA, vigencia_fin: { gte: desde, lte: tope } },
-    select: { polizaVigor: true, aseguradora_id: true, vigencia_inicio: true },
+    select: { cadenaId: true, vigencia_inicio: true },
   });
   if (vencidas.length === 0) return { tasa: null, vencidas: 0, renovadas: 0 };
 
-  const vigores = [...new Set(vencidas.map((p) => p.polizaVigor).filter((v): v is string => Boolean(v)))];
-  const candidatas = vigores.length
-    ? await db.poliza.findMany({
-        where: { agenciaId: alcance.agenciaId, polizaVigor: { in: vigores } },
-        select: { polizaVigor: true, aseguradora_id: true, vigencia_inicio: true },
-      })
-    : [];
+  const cadenas = [...new Set(vencidas.map((p) => p.cadenaId))];
+  const candidatas = await db.poliza.findMany({
+    where: { agenciaId: alcance.agenciaId, cadenaId: { in: cadenas } },
+    select: { cadenaId: true, vigencia_inicio: true },
+  });
   const renovadas = vencidas.filter((v) =>
-    candidatas.some(
-      (c) =>
-        c.polizaVigor === v.polizaVigor &&
-        c.aseguradora_id === v.aseguradora_id &&
-        c.vigencia_inicio > v.vigencia_inicio
-    )
+    candidatas.some((c) => c.cadenaId === v.cadenaId && c.vigencia_inicio > v.vigencia_inicio)
   ).length;
   return { tasa: (renovadas / vencidas.length) * 100, vencidas: vencidas.length, renovadas };
 }
@@ -94,7 +87,7 @@ async function comisionesPendientes(agenciaId: string, { desde, hasta }: Rango) 
       poliza: {
         select: {
           id: true,
-          polizaVigor: true,
+          cadenaId: true,
           aseguradora_id: true,
           ramo: true,
           vigencia_inicio: true,
@@ -112,7 +105,7 @@ async function comisionesPendientes(agenciaId: string, { desde, hasta }: Rango) 
   if (recibos.length === 0) return { valor: 0, recibos: 0, sinPorcentaje: 0, sinPrimaNeta: 0 };
 
   const aseguradoras = [...new Set(recibos.map((r) => r.poliza.aseguradora_id))];
-  const vigores = [...new Set(recibos.map((r) => r.poliza.polizaVigor).filter((v): v is string => Boolean(v)))];
+  const idsCadena = [...new Set(recibos.map((r) => r.poliza.cadenaId))];
   const [esquemas, cadenas] = await Promise.all([
     db.esquemaComision.findMany({
       where: { agenciaId, aseguradora_id: { in: aseguradoras } },
@@ -125,24 +118,20 @@ async function comisionesPendientes(agenciaId: string, { desde, hasta }: Rango) 
         edad_maxima: true,
       },
     }),
-    vigores.length
-      ? db.poliza.groupBy({
-          by: ["aseguradora_id", "polizaVigor"],
-          where: { agenciaId, polizaVigor: { in: vigores }, aseguradora_id: { in: aseguradoras } },
-          _min: { vigencia_inicio: true },
-        })
-      : Promise.resolve([]),
+    db.poliza.groupBy({
+      by: ["cadenaId"],
+      where: { agenciaId, cadenaId: { in: idsCadena } },
+      _min: { vigencia_inicio: true },
+    }),
   ]);
-  const primeraVigencia = new Map(
-    cadenas.map((c) => [`${c.aseguradora_id}|${c.polizaVigor}`, c._min.vigencia_inicio])
-  );
+  const primeraVigencia = new Map(cadenas.map((c) => [c.cadenaId, c._min.vigencia_inicio]));
 
   let valor = 0;
   let sinPorcentaje = 0;
   let sinPrimaNeta = 0;
   for (const r of recibos) {
     const p = r.poliza;
-    const inicio = (p.polizaVigor && primeraVigencia.get(`${p.aseguradora_id}|${p.polizaVigor}`)) || p.vigencia_inicio;
+    const inicio = primeraVigencia.get(p.cadenaId) ?? p.vigencia_inicio;
     const porcentaje = resolverPorcentaje(
       {
         personalizado: p.comision_personalizada_pct !== null ? Number(p.comision_personalizada_pct) : null,
@@ -267,6 +256,7 @@ async function proximosVencimientos(alcance: Alcance, hoy: Date) {
       id: true,
       numeroImpreso: true,
       polizaVigor: true,
+      cadenaId: true,
       aseguradora_id: true,
       ramo: true,
       vigencia_fin: true,
