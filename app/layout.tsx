@@ -58,6 +58,9 @@ export function generateMetadata(): Metadata {
       description: descripcion,
       images: [IMAGEN_COMPARTIR.url],
     },
+    robots: { index: true, follow: true },
+    // Verificación del dominio en Google Search Console (etiqueta meta google-site-verification).
+    verification: { google: "WmbcqDg9FEItsLEG2baq51h8RQxR8G8SlxpU20KKj_Q" },
   };
 }
 

@@ -14,8 +14,9 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(aviso.titulo || "CRM", {
       body: aviso.cuerpo || "",
-      icon: "/marca/plataforma.png",
-      badge: "/marca/plataforma.png",
+      icon: "/marca/icono-192.png",
+      // Android pinta la insignia con su silueta (solo usa la transparencia): el monograma sin fondo.
+      badge: "/marca/zensecure.png",
       tag: aviso.etiqueta,
       // Si reemplaza a otra con la misma etiqueta (p. ej. el recordatorio del día), vuelve a avisar.
       renotify: Boolean(aviso.etiqueta),
