@@ -6,6 +6,7 @@ import { getTemaSesion } from "@/lib/agencias/tema";
 import { nombrePlataforma } from "@/lib/plataforma/marca";
 import { IMAGEN_COMPARTIR, SITIO } from "@/lib/sitio";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/react"
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -76,6 +77,8 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
         {/* Uno solo, en la raíz: dos Toasters duplicarían cada aviso. */}
         <Toaster theme={tema} />
+        {children}
+        <Analytics />
       </body>
     </html>
   );
