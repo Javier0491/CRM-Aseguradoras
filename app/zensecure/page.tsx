@@ -9,7 +9,7 @@ import { LandingNav } from "@/components/landing/LandingNav";
 import { OcrShowcase } from "@/components/landing/OcrShowcase";
 import { PricingTiers } from "@/components/landing/PricingTiers";
 
-const titulo = "ZenSecure · CRM con IA para corredurías de seguros";
+const titulo = "ZenSecure · CRM con IA para Brokers y Agentes de seguros";
 const descripcion =
   "Automatiza la conciliación de recibos, gestiona pólizas en segundos y escala tu agencia sin límites. Un producto de Atelier Zenith.";
 

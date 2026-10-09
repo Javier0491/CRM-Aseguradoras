@@ -8,7 +8,7 @@ export function LandingFooter() {
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div className="space-y-3">
           <MarcaZenSecure />
-          <p className="text-xs text-white/40">CRM con IA para corredurías de seguros.</p>
+          <p className="text-xs text-white/40">CRM con IA para Brokers y Agentes de seguros.</p>
         </div>
         <nav aria-label="Pie de página" className="flex flex-wrap gap-x-7 gap-y-3 text-[13px] text-white/50">
           <a href="#ia" className="[transition:color_200ms_ease] hover:text-white">

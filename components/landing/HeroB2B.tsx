@@ -35,7 +35,7 @@ export function HeroB2B() {
         {/* La firma de Atelier Zenith va en la marca de la barra; aquí, qué es ZenSecure. */}
         <span className="inline-flex animate-landing-entrada items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3.5 py-1.5 text-xs font-medium tracking-wide text-white/60 backdrop-blur-md">
           <span aria-hidden className="size-1.5 rounded-full bg-[#8ea8ff] shadow-[0_0_8px_rgba(142,168,255,0.9)]" />
-          CRM con IA para <span className="text-white/90">corredurías de seguros</span>
+          CRM con IA para <span className="text-white/90">Brokers y Agentes de seguros</span>
         </span>
 
         <h1

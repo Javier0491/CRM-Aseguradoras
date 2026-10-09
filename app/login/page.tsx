@@ -7,7 +7,7 @@ import { LogoAgencia } from "@/components/layout/logo-agencia";
 import { TemaAgencia } from "@/components/layout/tema-agencia";
 import { getMarcaLogin } from "@/lib/agencias/marca-login";
 import { getCurrentUser } from "@/lib/auth/dal";
-import { LOGO_PLATAFORMA, nombrePlataforma } from "@/lib/plataforma/marca";
+import { MONOGRAMA_PLATINO, nombrePlataforma } from "@/lib/plataforma/marca";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { cn } from "@/lib/utils";
 
@@ -49,14 +49,11 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
               className="mb-4 size-14 rounded-xl text-lg shadow-[0_0_40px_-8px_var(--primary)]"
             />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- ficha fija de 64 px servida desde /public
-            <img
-              src={LOGO_PLATAFORMA}
-              alt=""
-              width={64}
-              height={64}
-              className="mb-4 size-16 rounded-xl shadow-[0_0_40px_-8px_var(--primary)]"
-            />
+            // Monograma en platino de ZenSecure sobre una ficha oscura: se ve igual con tema claro u oscuro.
+            <span className="mb-4 grid size-16 place-items-center rounded-xl border border-white/10 bg-[#030303] shadow-[0_0_40px_-8px_var(--primary)]">
+              {/* eslint-disable-next-line @next/next/no-img-element -- imagen fija servida desde /public */}
+              <img src={MONOGRAMA_PLATINO} alt="" width={235} height={192} className="h-9 w-auto" />
+            </span>
           )}
           <h1 className="text-xl font-semibold tracking-[0.2em] uppercase">{nombre}</h1>
           <p className="mt-1 text-xs tracking-wide text-muted-foreground uppercase">

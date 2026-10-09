@@ -4,6 +4,12 @@ import "server-only";
 export const LOGO_PLATAFORMA = "/marca/plataforma.png";
 
 /**
+ * El mismo monograma en platino y sin fondo (235 × 192 px), el de la landing de ZenSecure. Solo
+ * sobre fondo oscuro: en un correo de fondo blanco no se vería (los correos usan LOGO_PLATAFORMA).
+ */
+export const MONOGRAMA_PLATINO = "/marca/zensecure.png";
+
+/**
  * Nombre de la plataforma (por encima de las agencias): PLATAFORMA_NOMBRE o, si no, el nombre
  * visible de EMAIL_SENDER ("Magnus Seguros <servicio@…>" → "Magnus Seguros"); sin ninguno,
  * "Atelier Zenith". Se usa en el inicio de sesión sin marca y en los correos de la plataforma a
