@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { getTemaSesion } from "@/lib/agencias/tema";
 import { nombrePlataforma } from "@/lib/plataforma/marca";
+import { IMAGEN_COMPARTIR, SITIO } from "@/lib/sitio";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -16,10 +17,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const SITIO = "https://crm-aseguradoras-eight.vercel.app";
-const titulo = "CRM Aseguradoras | Gestión Inteligente & Automatización para Agentes de Seguros";
+const titulo = "ZenSecure · CRM con IA para Brokers y Agentes de seguros";
 const descripcion =
-  "Plataforma CRM integral de alta seguridad diseñada para agentes y promotorías de seguros. Centraliza carteras, automatiza seguimiento de pólizas, digitalización de recibos y conciliaciones con rapidez y control total.";
+  "CRM para agentes de seguros, brokers y promotorías en México: captura de pólizas con IA, conciliación de recibos, renovaciones y cartera por ejecutivo. Planes desde $900 MXN al mes.";
 
 /**
  * Metadatos SEO de la plataforma. El template usa el nombre neutro (PLATAFORMA_NOMBRE…); dentro
@@ -31,31 +31,32 @@ export function generateMetadata(): Metadata {
     metadataBase: new URL(SITIO),
     title: { default: titulo, template: `%s · ${nombre}` },
     description: descripcion,
-    applicationName: "CRM Aseguradoras",
+    applicationName: "ZenSecure",
     keywords: [
       "crm para agentes de seguros",
+      "crm para brokers de seguros",
       "software de seguros mexico",
       "gestion de polizas",
-      "plataforma corredores de seguros",
-      "conciliacion automatica polizas",
-      "crm aseguradoras",
-      "software promotorias",
+      "captura de polizas con ia",
+      "conciliacion de recibos de seguros",
+      "software para promotorias",
+      "zensecure",
     ],
     alternates: { canonical: "/" },
     openGraph: {
       type: "website",
       locale: "es_MX",
       url: "/",
-      siteName: "CRM Aseguradoras",
+      siteName: "ZenSecure",
       title: titulo,
       description: descripcion,
-      images: [{ url: "/logo-pj.png", width: 958, height: 780, alt: "CRM Aseguradoras" }],
+      images: [IMAGEN_COMPARTIR],
     },
     twitter: {
       card: "summary_large_image",
       title: titulo,
       description: descripcion,
-      images: ["/logo-pj.png"],
+      images: [IMAGEN_COMPARTIR.url],
     },
   };
 }

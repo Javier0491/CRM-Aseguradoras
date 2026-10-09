@@ -8,10 +8,11 @@ import { LandingFooter } from "@/components/landing/LandingFooter";
 import { LandingNav } from "@/components/landing/LandingNav";
 import { OcrShowcase } from "@/components/landing/OcrShowcase";
 import { PricingTiers } from "@/components/landing/PricingTiers";
+import { IMAGEN_COMPARTIR } from "@/lib/sitio";
 
 const titulo = "ZenSecure · CRM con IA para Brokers y Agentes de seguros";
 const descripcion =
-  "Automatiza la conciliación de recibos, gestiona pólizas en segundos y escala tu agencia sin límites. Un producto de Atelier Zenith.";
+  "CRM para agentes de seguros, brokers y promotorías en México: captura de pólizas con IA, conciliación de recibos y renovaciones. Planes desde $900 MXN al mes. Un producto de Atelier Zenith.";
 
 export const metadata: Metadata = {
   title: { absolute: titulo },
@@ -26,9 +27,9 @@ export const metadata: Metadata = {
     siteName: "ZenSecure",
     title: titulo,
     description: descripcion,
-    images: [{ url: "/marca/plataforma.png", width: 256, height: 256, alt: "ZenSecure by Atelier Zenith" }],
+    images: [IMAGEN_COMPARTIR],
   },
-  twitter: { card: "summary", title: titulo, description: descripcion, images: ["/marca/plataforma.png"] },
+  twitter: { card: "summary_large_image", title: titulo, description: descripcion, images: [IMAGEN_COMPARTIR.url] },
 };
 
 /**

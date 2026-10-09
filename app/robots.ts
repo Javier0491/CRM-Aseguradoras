@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const SITIO = "https://crm-aseguradoras-eight.vercel.app";
+import { SITIO } from "@/lib/sitio";
 
 // Debe seguir en RUTAS_PUBLICAS de proxy.ts: los buscadores no tienen sesión.
 export default function robots(): MetadataRoute.Robots {
