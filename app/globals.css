@@ -252,3 +252,80 @@ html.light,
     animation-duration: 0s !important;
   }
 }
+
+/*
+ * Landing pública (app/zensecure, la raíz para visitantes sin sesión). Siempre oscura aunque
+ * <html> traiga el tema claro de la última agencia; los anclajes (#planes, #demo) se desplazan
+ * suave. La entrada del hero y el borde del botón VIP son animaciones CSS: corren fuera del hilo
+ * principal mientras se descarga three.js.
+ */
+html:has([data-landing]) {
+  background-color: #030303;
+  color-scheme: dark;
+  scroll-behavior: smooth;
+}
+html:has([data-landing]) body {
+  background-color: #030303;
+}
+
+@theme {
+  --animate-landing-entrada: landing-entrada 900ms var(--ease-out) both;
+  --animate-landing-orbita: landing-orbita 4s linear infinite;
+  --animate-landing-recorrido: landing-recorrido 2.4s var(--ease-in-out) infinite;
+  --animate-landing-flujo: landing-flujo 1.6s linear infinite;
+  --animate-landing-brillo: landing-brillo 1.4s ease infinite;
+
+  @keyframes landing-entrada {
+    from {
+      opacity: 0;
+      transform: translateY(0.45em);
+      filter: blur(8px);
+    }
+  }
+  /* El degradado cónico gira detrás del botón y solo asoma por su borde de 1 px. */
+  @keyframes landing-orbita {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+  /* Indicador de desplazamiento del hero: una luz que baja por la línea. */
+  @keyframes landing-recorrido {
+    from {
+      transform: translateY(-100%);
+    }
+    to {
+      transform: translateY(100%);
+    }
+  }
+  /* Datos que viajan del PDF a la tarjeta de campos: el contenedor mide lo mismo que la pista y el
+     punto va en su borde derecho, así que -100 % → 0 lo lleva de un extremo al otro. */
+  @keyframes landing-flujo {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+  @keyframes landing-brillo {
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:has([data-landing]) {
+    scroll-behavior: auto;
+  }
+  /* Sin desplazamientos: la entrada queda en un fundido y lo que gira o viaja se detiene. */
+  .animate-landing-entrada {
+    animation-name: aparecer;
+    animation-duration: 400ms;
+  }
+  .animate-landing-orbita,
+  .animate-landing-recorrido,
+  .animate-landing-flujo {
+    animation: none;
+  }
+}

@@ -12,6 +12,22 @@ function esPublica(pathname: string) {
   return RUTAS_PUBLICAS.some((ruta) => pathname === ruta || pathname.startsWith(`${ruta}/`));
 }
 
+/** Página pública del producto (app/zensecure): es la raíz para quien no tiene sesión. */
+const LANDING = "/zensecure";
+
+/**
+ * Reescribe la raíz a la landing conservando lo que updateSession dejó en la respuesta (cookies
+ * de una sesión vencida que se limpian y encabezados de caché). También las Server Actions de la
+ * landing (el formulario de demo) llegan como POST a "/" y siguen este camino.
+ */
+function mostrarLanding(request: NextRequest, sesion: NextResponse) {
+  const respuesta = NextResponse.rewrite(new URL(LANDING, request.url), { request });
+  for (const cookie of sesion.cookies.getAll()) respuesta.cookies.set(cookie);
+  const cache = sesion.headers.get("cache-control");
+  if (cache) respuesta.headers.set("cache-control", cache);
+  return respuesta;
+}
+
 /**
  * Bloqueo de acceso: todo el CRM requiere sesión.
  * Es una verificación optimista; la sesión se valida de nuevo junto a los
@@ -22,11 +38,12 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (!autenticado && !esPublica(pathname)) {
+    if (pathname === "/") return mostrarLanding(request, response);
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ ok: false, error: "No autenticado." }, { status: 401 });
     }
     const login = new URL("/login", request.url);
-    if (pathname !== "/") login.searchParams.set("next", `${pathname}${search}`);
+    login.searchParams.set("next", `${pathname}${search}`);
     return NextResponse.redirect(login);
   }
 

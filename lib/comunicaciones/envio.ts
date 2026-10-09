@@ -157,13 +157,17 @@ export async function enviarCorreoPlataforma({
   asunto,
   html,
   texto,
+  responderA: responderAEste,
 }: {
   para: string[];
   asunto: string;
   html: string;
   texto: string;
+  /** A quién se responde en lugar de EMAIL_REPLY_TO (p. ej. quien pidió una demo). */
+  responderA?: string;
 }): Promise<{ enviados: number; errores: string[] }> {
-  const { resend, remitente, responderA } = getConfigCorreo();
+  const { resend, remitente, responderA: responderPredeterminado } = getConfigCorreo();
+  const responderA = responderAEste ?? responderPredeterminado;
   let enviados = 0;
   const errores: string[] = [];
   for (const [i, destinatario] of para.entries()) {
