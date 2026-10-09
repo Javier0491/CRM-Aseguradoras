@@ -17,6 +17,8 @@ import {
 import { getAgenciasParaSuperadmin } from "@/lib/agencias/queries";
 import { requireAdmin } from "@/lib/auth/dal";
 import { formatFecha } from "@/lib/format";
+import { getUsoPlan } from "@/lib/planes/limites";
+import { hayCupo, mensajeLimiteUsuarios } from "@/lib/planes/planes";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { getUsuarios } from "@/lib/usuarios/queries";
 import { esRolSoloTareas, rolLabels, type RolUsuario } from "@/lib/usuarios/reglas";
@@ -36,7 +38,8 @@ const insigniaRol = (rol: RolUsuario): { icono: LucideIcon; clase: string } =>
 
 export default async function UsuariosPage() {
   const yo = await requireAdmin();
-  const usuarios = await getUsuarios();
+  const [usuarios, uso] = await Promise.all([getUsuarios(), getUsoPlan(yo.agenciaId)]);
+  const sinCupo = !hayCupo(uso.usuarios.usados, uso.usuarios.limite);
   // Solo el SUPERADMIN elige en qué agencia crea la cuenta; el resto crea en la suya.
   const agencias = yo.superadmin
     ? (await getAgenciasParaSuperadmin()).map((a) => ({ id: a.id, nombre: a.nombre }))
@@ -65,11 +68,25 @@ export default async function UsuariosPage() {
         </Alert>
       )}
 
+      {sinCupo && (
+        <Alert className="border-warning/30 bg-warning/10 text-warning">
+          <AlertTriangle />
+          <AlertTitle>Llegaste al límite del plan {uso.nombre}</AlertTitle>
+          <AlertDescription className="text-warning/90">
+            {mensajeLimiteUsuarios(uso.plan)}
+            {yo.superadmin && " Cámbialo en Mis agencias → Cobranza de la plataforma → Configurar."}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <Card className="gap-0 py-0">
         <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
           <CardTitle className="text-base">Cuentas</CardTitle>
           <CardDescription>
-            {activos} {activos === 1 ? "cuenta activa" : "cuentas activas"}
+            {uso.usuarios.limite === null
+              ? `${activos} ${activos === 1 ? "cuenta activa" : "cuentas activas"}`
+              : `${uso.usuarios.usados} de ${uso.usuarios.limite} ${uso.usuarios.limite === 1 ? "cuenta activa" : "cuentas activas"}`}
+            {` · plan ${uso.nombre}`}
             {usuarios.length > activos && ` · ${usuarios.length - activos} desactivadas`}
           </CardDescription>
           <CardAction>

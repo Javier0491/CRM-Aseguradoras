@@ -7,9 +7,12 @@ import { CapturaWorkspace } from "@/components/captura/captura-workspace";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
+import { getUsoPlan } from "@/lib/planes/limites";
+import { hayCupo } from "@/lib/planes/planes";
 import { getPolizaParaRenovar } from "@/lib/polizas/formulario";
 import { getAseguradorasOpciones } from "@/lib/polizas/queries";
 import { getEjecutivos } from "@/lib/usuarios/queries";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Captura Inteligente",
@@ -19,6 +22,7 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
   const { renovar } = await searchParams;
   const [user, aseguradoras] = await Promise.all([requireUsuarioCrm(), getAseguradorasOpciones()]);
   const verComisiones = veComisiones(user);
+  const { ocr, nombre: plan } = await getUsoPlan(user.agenciaId);
   // Un ejecutivo que solo ve su cartera no elige: sus pólizas quedan a su nombre.
   const ejecutivos = user.soloSuCartera ? undefined : await getEjecutivos(user.agenciaId);
   const ejecutivoPredeterminado = ejecutivos?.some((e) => e.id === user.id) ? user.id : "";
@@ -47,6 +51,11 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
             "Extrae los datos de una póliza con IA o captúrala manualmente por ramo."
           )}
         </p>
+        {ocr.limite !== null && (
+          <p className={cn("mt-1 text-xs tabular-nums", hayCupo(ocr.usados, ocr.limite) ? "text-muted-foreground" : "font-medium text-warning")}>
+            Escaneos con IA este mes: {ocr.usados} de {ocr.limite} (plan {plan}).
+          </p>
+        )}
       </div>
       {renovacion?.cancelada ? (
         <Card className="border-destructive/40">

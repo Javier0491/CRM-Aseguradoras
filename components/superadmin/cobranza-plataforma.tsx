@@ -16,10 +16,23 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { formatFecha, formatMoneda } from "@/lib/format";
+import {
+  CICLOS,
+  esCiclo,
+  esPlan,
+  ETIQUETA_CICLO,
+  hayCupo,
+  PLANES,
+  PLANES_ORDEN,
+  textoUso,
+  type CicloFacturacion,
+  type PlanAgencia,
+} from "@/lib/planes/planes";
 import { configurarCobranza, registrarPagoPlataforma } from "@/lib/plataforma/actions";
 import {
   DIAS_AVISO_COBRO,
@@ -43,6 +56,20 @@ export const ESTILO_ESTADO_COBRO: Record<EstadoCobro, string> = {
 
 const fecha = (iso: string) => formatFecha(`${iso}T00:00:00Z`);
 
+function describirLimites(plan: PlanAgencia) {
+  const { usuarios, ocrMensual } = PLANES[plan];
+  if (usuarios === null && ocrMensual === null) return "Usuarios y escaneos con IA sin límite.";
+  return `${usuarios === null ? "Usuarios ilimitados" : `${usuarios} ${usuarios === 1 ? "usuario" : "usuarios"}`} · ${
+    ocrMensual === null ? "escaneos sin límite" : `${ocrMensual} escaneos con IA al mes`
+  }.`;
+}
+
+function describirPrecio(plan: PlanAgencia, ciclo: CicloFacturacion) {
+  const { precio } = PLANES[plan];
+  if (!precio) return "Precio a la medida (ventas).";
+  return `Lista: ${formatMoneda(precio[ciclo])} ${ciclo === "ANUAL" ? "al año" : "al mes"}.`;
+}
+
 /** Tabla de cobranza de la plataforma: estado de pago de cada agencia, su configuración y sus pagos. */
 export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgencia[]; hoy: string }) {
   const [configurar, setConfigurar] = React.useState<CobranzaAgencia | null>(null);
@@ -54,6 +81,7 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
         <TableHeader>
           <TableRow className="hover:bg-transparent">
             <TableHead className="pl-5">Agencia</TableHead>
+            <TableHead>Plan</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead className="text-right">Cuota mensual</TableHead>
             <TableHead>Pagado hasta</TableHead>
@@ -66,7 +94,7 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
         <TableBody>
           {agencias.length === 0 && (
             <TableRow className="hover:bg-transparent">
-              <TableCell colSpan={6} className="px-5 py-10 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={7} className="px-5 py-10 text-center text-sm text-muted-foreground">
                 Aún no hay agencias en la plataforma.
               </TableCell>
             </TableRow>
@@ -77,6 +105,20 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
               <TableCell className="max-w-64 min-w-40 pl-5 font-medium whitespace-normal wrap-anywhere">
                 {a.nombre}
                 {a.suspendida && <p className="text-[11px] font-normal text-destructive">Suspendida</p>}
+              </TableCell>
+              <TableCell className="min-w-40 whitespace-normal">
+                <p className="text-sm font-medium">
+                  {PLANES[a.plan].nombre} <span className="font-normal text-muted-foreground">· {ETIQUETA_CICLO[a.ciclo]}</span>
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                  {/* En ámbar lo que ya no admite uno más este mes. */}
+                  <span className={cn("block", !hayCupo(a.usuarios.usados, a.usuarios.limite) && "font-medium text-warning")}>
+                    Usuarios: {textoUso(a.usuarios.usados, a.usuarios.limite)}
+                  </span>
+                  <span className={cn("block", !hayCupo(a.ocr.usados, a.ocr.limite) && "font-medium text-warning")}>
+                    Escaneos IA: {textoUso(a.ocr.usados, a.ocr.limite)}
+                  </span>
+                </p>
               </TableCell>
               <TableCell className="min-w-48 whitespace-normal">
                 <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap", ESTILO_ESTADO_COBRO[a.estado])}>
@@ -124,6 +166,8 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
 }
 
 function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; hoy: string; onListo: () => void }) {
+  const [plan, setPlan] = React.useState<PlanAgencia>(agencia.plan);
+  const [ciclo, setCiclo] = React.useState<CicloFacturacion>(agencia.ciclo);
   const [cuota, setCuota] = React.useState(agencia.cuotaMensual === null ? "" : agencia.cuotaMensual.toFixed(2));
   const [pagadoHasta, setPagadoHasta] = React.useState(agencia.pagadoHasta ?? hoy);
   const [tolerancia, setTolerancia] = React.useState(String(agencia.diasTolerancia));
@@ -137,6 +181,8 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
     setError(null);
     startTransition(async () => {
       const r = await configurarCobranza(agencia.id, {
+        plan,
+        ciclo,
         cuotaMensual: cuota,
         pagadoHasta: cuota.trim() ? pagadoHasta : "",
         diasTolerancia: tolerancia,
@@ -157,10 +203,50 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
       <DialogHeader>
         <DialogTitle>Cobranza de {agencia.nombre}</DialogTitle>
         <DialogDescription>
-          Cuota mensual del servicio y hasta qué fecha está pagado. Deja la cuota vacía si esta agencia no paga
-          (p. ej. la tuya).
+          Plan contratado, cuota mensual del servicio y hasta qué fecha está pagado. Deja la cuota vacía si esta agencia
+          no paga (p. ej. la tuya).
         </DialogDescription>
       </DialogHeader>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="cobro-plan">Plan</Label>
+          <Select value={plan} onValueChange={(v) => esPlan(v) && setPlan(v)}>
+            <SelectTrigger id="cobro-plan" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PLANES_ORDEN.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PLANES[p].nombre}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{describirLimites(plan)}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cobro-ciclo">Ciclo de cobro</Label>
+          <Select value={ciclo} onValueChange={(v) => esCiclo(v) && setCiclo(v)}>
+            <SelectTrigger id="cobro-ciclo" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CICLOS.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {ETIQUETA_CICLO[c]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">{describirPrecio(plan, ciclo)}</p>
+        </div>
+      </div>
+      {plan !== agencia.plan && PLANES[plan].usuarios !== null && agencia.usuarios.usados > PLANES[plan].usuarios && (
+        <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+          Tiene {agencia.usuarios.usados} cuentas activas y el plan {PLANES[plan].nombre} incluye {PLANES[plan].usuarios}. No se
+          desactiva ninguna: solo no podrá agregar más hasta quedar dentro del límite.
+        </p>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="cobro-cuota">Cuota mensual</Label>
@@ -237,8 +323,9 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
 
 function FormPago({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; hoy: string; onListo: () => void }) {
   const [fechaPago, setFechaPago] = React.useState(hoy);
-  const [meses, setMeses] = React.useState(1);
-  const [importe, setImporte] = React.useState(agencia.cuotaMensual === null ? "" : agencia.cuotaMensual.toFixed(2));
+  // Cobro anual: el pago cubre el año completo.
+  const [meses, setMeses] = React.useState(agencia.ciclo === "ANUAL" ? 12 : 1);
+  const [importe, setImporte] = React.useState(agencia.cuotaMensual === null ? "" : (agencia.cuotaMensual * meses).toFixed(2));
   const [nota, setNota] = React.useState("");
   const [reactivar, setReactivar] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);

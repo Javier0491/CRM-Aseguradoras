@@ -9,6 +9,7 @@ import { CorreoNoConfiguradoError, emailValido, enviarCorreoPlataforma } from "@
 import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
+import { esCiclo, esPlan, ETIQUETA_CICLO, PLANES, type CicloFacturacion, type PlanAgencia } from "@/lib/planes/planes";
 import { MAX_DIAS_TOLERANCIA, MAX_MESES_PAGO, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
 import { logoPlataformaUrl, nombrePlataforma } from "@/lib/plataforma/marca";
 import { parseNumero } from "@/lib/polizas/validacion";
@@ -36,12 +37,15 @@ function monto(v: unknown): number | null {
 }
 
 /**
- * SUPERADMIN: cuota mensual de una agencia, hasta cuándo está pagada, días de tolerancia,
- * suspensión automática y correo para los avisos de cobro. Cuota vacía = sin cobranza.
+ * SUPERADMIN: plan y ciclo de cobro de una agencia, su cuota mensual, hasta cuándo está pagada,
+ * días de tolerancia, suspensión automática y correo para los avisos de cobro. Cuota vacía = sin
+ * cobranza. Bajar de plan no desactiva cuentas: solo impide agregar más mientras rebase el límite.
  */
 export async function configurarCobranza(
   agenciaId: string,
   datos: {
+    plan: PlanAgencia;
+    ciclo: CicloFacturacion;
     cuotaMensual: string;
     pagadoHasta: string;
     diasTolerancia: string;
@@ -54,6 +58,8 @@ export async function configurarCobranza(
   if (typeof agenciaId !== "string" || !UUID.test(agenciaId) || typeof datos !== "object" || datos === null) {
     return { ok: false, error: "Datos inválidos." };
   }
+  if (!esPlan(datos.plan)) return { ok: false, error: "Elige el plan." };
+  if (!esCiclo(datos.ciclo)) return { ok: false, error: "Elige el ciclo de cobro." };
   const sinCuota = typeof datos.cuotaMensual === "string" && datos.cuotaMensual.trim() === "";
   const cuota = sinCuota ? null : monto(datos.cuotaMensual);
   if (!sinCuota && cuota === null) return { ok: false, error: "Escribe una cuota mensual válida." };
@@ -67,12 +73,21 @@ export async function configurarCobranza(
   const correo = typeof datos.correoFacturacion === "string" ? datos.correoFacturacion.trim().toLowerCase() : "";
   if (correo && !emailValido(correo)) return { ok: false, error: "El correo de facturación no es válido." };
 
-  const agencia = await db.agencia.findUnique({ where: { id: agenciaId }, select: { nombre: true, pagadoHasta: true } });
+  const agencia = await db.agencia.findUnique({
+    where: { id: agenciaId },
+    select: { nombre: true, pagadoHasta: true, plan: true, cicloFacturacion: true },
+  });
   if (!agencia) return { ok: false, error: "La agencia ya no existe." };
+  const cambioPlan =
+    agencia.plan !== datos.plan || agencia.cicloFacturacion !== datos.ciclo
+      ? `plan ${PLANES[datos.plan].nombre} ${ETIQUETA_CICLO[datos.ciclo].toLowerCase()} (antes ${PLANES[agencia.plan].nombre} ${ETIQUETA_CICLO[agencia.cicloFacturacion].toLowerCase()})`
+      : "";
   await db.$transaction(async (tx) => {
     await tx.agencia.update({
       where: { id: agenciaId },
       data: {
+        plan: datos.plan,
+        cicloFacturacion: datos.ciclo,
         cuotaMensual: cuota === null ? null : cuota.toFixed(2),
         pagadoHasta: pagadoHasta ? new Date(`${pagadoHasta}T00:00:00Z`) : null,
         diasToleranciaPago: tolerancia,
@@ -90,8 +105,8 @@ export async function configurarCobranza(
         entidadId: agenciaId,
         descripcion:
           cuota === null
-            ? `${user.email ?? "Superadmin"} quitó la cobranza de ${agencia.nombre}`
-            : `${user.email ?? "Superadmin"} configuró la cobranza de ${agencia.nombre}: ${formatMoneda(cuota)} al mes, pagado hasta el ${formatFecha(`${pagadoHasta}T00:00:00Z`)}`,
+            ? `${user.email ?? "Superadmin"} quitó la cobranza de ${agencia.nombre}${cambioPlan && `; ${cambioPlan}`}`
+            : `${user.email ?? "Superadmin"} configuró la cobranza de ${agencia.nombre}: ${cambioPlan && `${cambioPlan}, `}${formatMoneda(cuota)} al mes, pagado hasta el ${formatFecha(`${pagadoHasta}T00:00:00Z`)}`,
       },
       tx
     );

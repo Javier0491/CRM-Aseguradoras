@@ -23,6 +23,7 @@ import {
   type ContextoOcr,
   type OcrRespuesta,
 } from "@/lib/ocr/types";
+import { liberarEscaneoOcr, reservarEscaneoOcr } from "@/lib/planes/limites";
 
 // La lectura de los documentos con IA puede tardar varias decenas de segundos.
 export const maxDuration = 120;
@@ -105,6 +106,10 @@ export async function POST(request: Request) {
     return error("Contexto de lectura no válido.", 400);
   }
 
+  // Un escaneo del mes por lectura (aunque lleve varios documentos), según el plan de la agencia.
+  const reserva = await reservarEscaneoOcr(user.agenciaId);
+  if (!reserva.ok) return error(reserva.error, 429);
+
   try {
     const extractor = getExtractor();
     // La IA solo puede elegir entre las aseguradoras registradas en la agencia.
@@ -128,6 +133,9 @@ export async function POST(request: Request) {
   } catch (e) {
     // Solo el tipo y mensaje del error: nunca el contenido del documento.
     console.error("[ocr] Error en la extracción:", e instanceof Error ? `${e.name}: ${e.message}` : e);
+    await liberarEscaneoOcr(user.agenciaId, reserva.periodo).catch((e2) =>
+      console.error("[ocr] No se pudo devolver el escaneo:", e2 instanceof Error ? e2.message : e2)
+    );
     return errorDeExtraccion(e);
   }
 }

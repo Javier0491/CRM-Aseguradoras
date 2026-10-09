@@ -47,7 +47,7 @@ export function VistaSuperadmin({ agencias, cobranza, alertas, activaId, propiaI
             <BadgeDollarSign className="size-4 text-primary" /> Cobranza de la plataforma
           </CardTitle>
           <CardDescription>
-            Cuota de cada agencia y hasta cuándo está pagada. La tarea diaria avisa antes de vencer y, si lo activas,
+            Plan y cuota de cada agencia, y hasta cuándo está pagada. La tarea diaria avisa antes de vencer y, si lo activas,
             suspende al pasar la tolerancia; al registrar el pago se reactiva.
           </CardDescription>
         </CardHeader>

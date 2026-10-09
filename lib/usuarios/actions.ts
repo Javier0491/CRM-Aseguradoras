@@ -7,6 +7,7 @@ import { getAdmin, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
 import { Prisma } from "@/lib/generated/prisma/client";
+import { faltaCupoUsuarios, LimitePlanError } from "@/lib/planes/limites";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { MAX_PASSWORD, MIN_PASSWORD, ROLES, ROLES_CARTERA, rolLabels, type RolUsuario } from "@/lib/usuarios/reglas";
 
@@ -101,6 +102,9 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
       campo: "email",
     };
   }
+  // Antes de crear la cuenta en Supabase Auth; la transacción lo vuelve a revisar.
+  const sinCupo = await faltaCupoUsuarios(db, agenciaId);
+  if (sinCupo) return { ok: false, error: sinCupo };
 
   const { data, error } = await supabase.auth.admin.createUser({
     email,
@@ -128,18 +132,28 @@ export async function crearUsuario(raw: NuevoUsuarioInput): Promise<ResultadoUsu
   }
 
   try {
-    await db.$transaction(async (tx) => {
-      await tx.usuario.create({ data: { id: data.user.id, agenciaId, nombre, email, rol } });
-      // Queda en la bitácora de la agencia donde se creó la cuenta.
-      await registrarBitacora(
-        { id: admin.id, email: admin.email, agenciaId },
-        { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rolLabels[rol]}` },
-        tx
-      );
-    });
+    await db.$transaction(
+      async (tx) => {
+        // Serializable: dos altas simultáneas no pueden ocupar ambas el último lugar del plan.
+        const falta = await faltaCupoUsuarios(tx, agenciaId);
+        if (falta) throw new LimitePlanError(falta);
+        await tx.usuario.create({ data: { id: data.user.id, agenciaId, nombre, email, rol } });
+        // Queda en la bitácora de la agencia donde se creó la cuenta.
+        await registrarBitacora(
+          { id: admin.id, email: admin.email, agenciaId },
+          { accion: "usuario.crear", entidad: "usuario", entidadId: data.user.id, descripcion: `Creó a ${nombre} (${email}) como ${rolLabels[rol]}` },
+          tx
+        );
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
   } catch (e) {
     // Sin perfil la cuenta quedaría huérfana: se deshace para poder reintentar.
     await supabase.auth.admin.deleteUser(data.user.id);
+    if (e instanceof LimitePlanError) return { ok: false, error: e.message };
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2034") {
+      return { ok: false, error: "Otra persona agregó usuarios al mismo tiempo. Intenta de nuevo." };
+    }
     console.error("[crearUsuario] Perfil:", e instanceof Error ? e.message : e);
     return { ok: false, error: "No se pudo registrar el usuario. Intenta de nuevo." };
   }
@@ -163,7 +177,7 @@ async function verificarOtroAdmin(tx: Prisma.TransactionClient, agenciaId: strin
 }
 
 function errorDeTransaccion(e: unknown, contexto: string): { ok: false; error: string } {
-  if (e instanceof ReglaUsuarioError) return { ok: false, error: e.message };
+  if (e instanceof ReglaUsuarioError || e instanceof LimitePlanError) return { ok: false, error: e.message };
   if (e instanceof Prisma.PrismaClientKnownRequestError) {
     if (e.code === "P2025") return { ok: false, error: "El usuario ya no existe; recarga la página." };
     if (e.code === "P2034") return { ok: false, error: "Otra persona modificó los usuarios al mismo tiempo. Intenta de nuevo." };
@@ -248,9 +262,14 @@ export async function cambiarEstadoUsuario(id: string, activo: boolean): Promise
       async (tx) => {
         const actual = await tx.usuario.findUniqueOrThrow({
           where: { id, agenciaId: admin.agenciaId },
-          select: { rol: true, email: true },
+          select: { rol: true, email: true, activo: true, rolSistema: true },
         });
         if (!activo && actual.rol === "ADMIN") await verificarOtroAdmin(tx, admin.agenciaId, id, "desactivarlo");
+        // Reactivar ocupa otro lugar del plan (la cuenta desactivada no cuenta).
+        if (activo && !actual.activo && actual.rolSistema === "USER") {
+          const falta = await faltaCupoUsuarios(tx, admin.agenciaId);
+          if (falta) throw new LimitePlanError(falta);
+        }
         await tx.usuario.update({
           where: { id, agenciaId: admin.agenciaId },
           data: { activo, desactivado_at: activo ? null : new Date() },

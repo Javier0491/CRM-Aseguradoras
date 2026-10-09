@@ -3,6 +3,8 @@ import "server-only";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
+import { USUARIOS_DEL_PLAN } from "@/lib/planes/limites";
+import { periodoDe, PLANES } from "@/lib/planes/planes";
 import { estadoCobro } from "@/lib/plataforma/cobranza";
 
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
@@ -15,12 +17,17 @@ export async function getCobranzaAgencias() {
   const user = await getCurrentUser();
   if (!user?.superadmin) return [];
   const hoy = hoyISO();
+  const periodo = new Date(`${periodoDe(hoy)}T00:00:00Z`);
   const agencias = await db.agencia.findMany({
     orderBy: [{ createdAt: "asc" }, { nombre: "asc" }],
     select: {
       id: true,
       nombre: true,
       suspendida: true,
+      plan: true,
+      cicloFacturacion: true,
+      _count: { select: { usuarios: { where: USUARIOS_DEL_PLAN } } },
+      usoOcr: { where: { periodo }, select: { escaneos: true } },
       cuotaMensual: true,
       pagadoHasta: true,
       diasToleranciaPago: true,
@@ -39,10 +46,15 @@ export async function getCobranzaAgencias() {
       pagadoHasta: iso(a.pagadoHasta),
       diasTolerancia: a.diasToleranciaPago,
     };
+    const plan = PLANES[a.plan];
     return {
       id: a.id,
       nombre: a.nombre,
       suspendida: a.suspendida,
+      plan: a.plan,
+      ciclo: a.cicloFacturacion,
+      usuarios: { usados: a._count.usuarios, limite: plan.usuarios },
+      ocr: { usados: a.usoOcr[0]?.escaneos ?? 0, limite: plan.ocrMensual },
       suspensionAutomatica: a.suspensionAutomatica,
       correoFacturacion: a.correoFacturacion,
       ...cobro,

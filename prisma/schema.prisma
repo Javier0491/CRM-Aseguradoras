@@ -104,6 +104,11 @@ model Agencia {
   avisoCobroEnviadoPara DateTime? @db.Date @map("aviso_cobro_enviado_para")
   // A quién se mandan los avisos de cobro; sin él, a los administradores de la agencia.
   correoFacturacion     String?   @map("correo_facturacion")
+  // Plan de suscripción (lo asigna el SUPERADMIN): fija sus límites de usuarios activos y de
+  // escaneos con IA al mes (lib/planes). El estado de la suscripción es el de la cobranza de
+  // arriba: pagadoHasta, la tolerancia y `suspendida`.
+  plan                  PlanAgencia      @default(AGENTE)
+  cicloFacturacion      CicloFacturacion @default(MENSUAL) @map("ciclo_facturacion")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -131,8 +136,34 @@ model Agencia {
   mensajes           Mensaje[]
   lecturasMensajes   ConversacionLectura[]
   suscripcionesPush  SuscripcionPush[]
+  usoOcr             UsoOcr[]
 
   @@map("agencias")
+}
+
+// Planes de ZenSecure. Sus límites y precios están en lib/planes/planes.ts.
+enum PlanAgencia {
+  AGENTE
+  BROKER
+  PROMOTORIA
+}
+
+enum CicloFacturacion {
+  MENSUAL
+  ANUAL
+}
+
+// Escaneos de carátulas con IA (POST /api/ocr) de cada agencia por mes, contra el límite de su
+// plan. Se reserva el escaneo antes de llamar a la IA y se devuelve si la lectura falla.
+model UsoOcr {
+  agenciaId String  @map("agencia_id") @db.Uuid
+  agencia   Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  // Primer día del mes, en hora de la Ciudad de México.
+  periodo   DateTime @db.Date
+  escaneos  Int      @default(0)
+
+  @@id([agenciaId, periodo])
+  @@map("uso_ocr")
 }
 
 // Rol en la plataforma (por encima de las agencias). SUPERADMIN puede entrar a cualquier
