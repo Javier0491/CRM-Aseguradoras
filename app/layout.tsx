@@ -77,7 +77,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
         {/* Uno solo, en la raíz: dos Toasters duplicarían cada aviso. */}
         <Toaster theme={tema} />
-        {children}
         <Analytics />
       </body>
     </html>
