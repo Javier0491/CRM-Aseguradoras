@@ -1,7 +1,7 @@
 // Solicitud de Demo VIP desde la landing pública: opciones, lectura y validación del formulario.
 // Se usa en el servidor (Server Action) y en el cliente (opciones del formulario): nada de servidor.
 
-import { PLANES } from "@/lib/planes/planes";
+import { esEdicion, ETIQUETA_EDICION, PLANES } from "@/lib/planes/planes";
 
 export const PLANES_DEMO = [
   { valor: "agente", etiqueta: PLANES.AGENTE.nombre },
@@ -22,6 +22,8 @@ export type SolicitudDemo = {
   correduria: string;
   telefono: string;
   plan: string;
+  /** BASICO o PRO, o vacío: viene de la tarjeta de precios y solo aplica a Agente y Broker. */
+  edicion: string;
   mensaje: string;
 };
 export type CampoDemo = keyof SolicitudDemo;
@@ -42,6 +44,7 @@ export function leerSolicitudDemo(formData: FormData): { datos: SolicitudDemo; e
       correduria: enUnaLinea(texto("correduria")),
       telefono: enUnaLinea(texto("telefono")),
       plan: texto("plan").trim(),
+      edicion: texto("edicion").trim(),
       mensaje: texto("mensaje").replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim(),
     },
     esBot: texto(CAMPO_TRAMPA).trim() !== "",
@@ -79,7 +82,9 @@ export function correoSolicitudDemo(datos: SolicitudDemo) {
       `Correduría: ${datos.correduria}`,
       `Correo: ${datos.correo}`,
       `Teléfono: ${datos.telefono || "—"}`,
-      `Plan de interés: ${etiqueta(PLANES_DEMO, datos.plan)}`,
+      `Plan de interés: ${etiqueta(PLANES_DEMO, datos.plan)}${
+        (datos.plan === "agente" || datos.plan === "broker") && esEdicion(datos.edicion) ? ` ${ETIQUETA_EDICION[datos.edicion]}` : ""
+      }`,
       ...(datos.mensaje ? [`Mensaje: ${datos.mensaje}`] : []),
       "Responde a este correo para escribirle directamente.",
     ],

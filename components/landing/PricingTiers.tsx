@@ -1,15 +1,15 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRight, Check } from "lucide-react";
-import { useState, type PointerEvent } from "react";
+import { ArrowRight, Check, Sparkles } from "lucide-react";
+import { useState, type PointerEvent, type ReactNode } from "react";
 
 import { BordeBrillante } from "@/components/landing/Botones";
 import { CLASE_CTA_CRISTAL } from "@/components/landing/estilos";
 import { useMovimientoReducido, usePlanElegido } from "@/components/landing/EstadoLanding";
 import { EASE_OUT, Revelar } from "@/components/landing/Revelar";
 import type { PlanDemo } from "@/lib/landing/demo";
-import { PLANES, type CicloFacturacion, type PlanAgencia } from "@/lib/planes/planes";
+import { definicionPlan, PLANES, type CicloFacturacion, type EdicionPlan, type PlanAgencia } from "@/lib/planes/planes";
 import { cn } from "@/lib/utils";
 
 type Tarjeta = {
@@ -17,8 +17,11 @@ type Tarjeta = {
   plan: PlanAgencia;
   lema: string;
   descripcion: string;
-  previo?: string;
+  previo: string;
+  /** Lo que trae en ambas ediciones. */
   incluye: string[];
+  /** Lo que cambia entre Básico y Pro (Promotoría no tiene ediciones). */
+  porEdicion?: Record<EdicionPlan, string>;
   cta: string;
   destacado?: boolean;
 };
@@ -30,18 +33,20 @@ const TARJETAS: Tarjeta[] = [
     id: "agente",
     plan: "AGENTE",
     lema: "Para el agente independiente",
-    descripcion: "Tu cartera en orden y la captura con IA, sin hojas de cálculo.",
+    descripcion: "Tu cartera en orden y tus pólizas al día, sin hojas de cálculo.",
     previo: "Incluye:",
-    incluye: ["1 usuario", "CRM básico: clientes, pólizas, recibos y renovaciones", "50 escaneos OCR con IA al mes"],
+    incluye: ["1 usuario", "CRM: clientes, pólizas, recibos y renovaciones", "Conciliación de recibos"],
+    porEdicion: { BASICO: "Captura manual con validación por ramo", PRO: "50 escaneos OCR con IA al mes" },
     cta: "Elegir Agente",
   },
   {
     id: "broker",
     plan: "BROKER",
     lema: "Para despachos con equipo",
-    descripcion: "La IA captura, el sistema concilia y tu equipo se dedica a vender.",
+    descripcion: "Tu equipo trabaja la misma cartera y tú controlas quién ve qué.",
     previo: "Todo lo de Agente, y además:",
-    incluye: ["5 usuarios", "Superadmin para el dueño de la agencia", "Conciliación financiera", "500 escaneos OCR con IA al mes"],
+    incluye: ["5 usuarios", "Superadmin para el dueño de la agencia", "Conciliación financiera"],
+    porEdicion: { BASICO: "Captura manual con validación por ramo", PRO: "500 escaneos OCR con IA al mes" },
     cta: "Agendar Demo VIP",
     destacado: true,
   },
@@ -50,8 +55,8 @@ const TARJETAS: Tarjeta[] = [
     plan: "PROMOTORIA",
     lema: "Para promotorías y redes",
     descripcion: "Opera a escala con tu propia marca y tus datos en una base aparte.",
-    previo: "Todo lo de Broker, y además:",
-    incluye: ["Usuarios ilimitados", "Marca blanca", "Base de datos aislada"],
+    previo: "Todo lo de Broker Pro, y además:",
+    incluye: ["Usuarios ilimitados", "Escaneos con IA sin límite", "Marca blanca", "Base de datos aislada"],
     cta: "Hablar con Ventas",
   },
 ];
@@ -59,6 +64,11 @@ const TARJETAS: Tarjeta[] = [
 const CICLOS: { id: CicloFacturacion; texto: string }[] = [
   { id: "MENSUAL", texto: "Mensual" },
   { id: "ANUAL", texto: "Anual" },
+];
+
+const EDICIONES: { id: EdicionPlan; texto: string }[] = [
+  { id: "BASICO", texto: "Básico" },
+  { id: "PRO", texto: "Pro" },
 ];
 
 const pesos = new Intl.NumberFormat("es-MX", { maximumFractionDigits: 0 });
@@ -73,6 +83,7 @@ function seguirCursor(e: PointerEvent<HTMLElement>) {
 
 export function PricingTiers() {
   const [ciclo, setCiclo] = useState<CicloFacturacion>("MENSUAL");
+  const [edicion, setEdicion] = useState<EdicionPlan>("PRO");
   // Con el cursor sobre un plan, los otros se atenúan.
   const [enfocado, setEnfocado] = useState<Tarjeta["id"] | null>(null);
 
@@ -88,9 +99,42 @@ export function PricingTiers() {
             Un plan para cada etapa de tu agencia.
           </h2>
           <p className="mt-5 text-base leading-relaxed text-pretty text-white/55 sm:text-lg">
-            Empieza solo, crece con tu equipo y escala a promotoría sin cambiar de sistema.
+            Básico para capturar a mano, Pro para que la IA lea tus carátulas. Empieza solo, crece con tu equipo y
+            escala a promotoría sin cambiar de sistema.
           </p>
-          <SelectorCiclo ciclo={ciclo} onCambio={setCiclo} />
+          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
+            <Segmentado
+              leyenda="Edición"
+              nombre="edicion"
+              layoutId="edicion-activa"
+              opciones={EDICIONES}
+              valor={edicion}
+              onCambio={setEdicion}
+              extra={(id, activo) =>
+                id === "PRO" && <Sparkles className={cn("size-3.5", activo ? "text-[#3d6bff]" : "text-[#8ea8ff]")} aria-hidden />
+              }
+            />
+            <Segmentado
+              leyenda="Facturación"
+              nombre="ciclo"
+              layoutId="ciclo-activo"
+              opciones={CICLOS}
+              valor={ciclo}
+              onCambio={setCiclo}
+              extra={(id, activo) =>
+                id === "ANUAL" && (
+                  <span
+                    className={cn(
+                      "relative rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap [transition:background-color_200ms_ease,color_200ms_ease]",
+                      activo ? "bg-[#3d6bff] text-white" : "bg-[#3d6bff]/20 text-[#c9d3ff]"
+                    )}
+                  >
+                    2 meses gratis
+                  </span>
+                )
+              }
+            />
+          </div>
         </Revelar>
 
         <div
@@ -107,12 +151,13 @@ export function PricingTiers() {
                 {tarjeta.destacado ? (
                   // Borde brillante continuo: el mismo degradado que gira detrás de los CTA VIP.
                   <BordeBrillante className="flex h-full rounded-3xl shadow-[0_40px_120px_-40px_rgba(61,107,255,0.6)]">
-                    <TarjetaPlan tarjeta={tarjeta} ciclo={ciclo} className="rounded-[calc(1.5rem-1px)] bg-[#07080d]" />
+                    <TarjetaPlan tarjeta={tarjeta} ciclo={ciclo} edicion={edicion} className="rounded-[calc(1.5rem-1px)] bg-[#07080d]" />
                   </BordeBrillante>
                 ) : (
                   <TarjetaPlan
                     tarjeta={tarjeta}
                     ciclo={ciclo}
+                    edicion={edicion}
                     className="h-full rounded-3xl border border-[#ffffff15] bg-white/5 backdrop-blur-xl [transition:border-color_250ms_ease] hover:border-white/25"
                   />
                 )}
@@ -125,15 +170,31 @@ export function PricingTiers() {
   );
 }
 
-/** Interruptor Mensual / Anual: radios nativos (flechas del teclado incluidas) con un fondo que se desliza. */
-function SelectorCiclo({ ciclo, onCambio }: { ciclo: CicloFacturacion; onCambio: (ciclo: CicloFacturacion) => void }) {
+/** Interruptor de dos opciones: radios nativos (flechas del teclado incluidas) con un fondo que se desliza. */
+function Segmentado<T extends string>({
+  leyenda,
+  nombre,
+  layoutId,
+  opciones,
+  valor,
+  onCambio,
+  extra,
+}: {
+  leyenda: string;
+  nombre: string;
+  layoutId: string;
+  opciones: { id: T; texto: string }[];
+  valor: T;
+  onCambio: (valor: T) => void;
+  extra?: (id: T, activo: boolean) => ReactNode;
+}) {
   const reducir = useMovimientoReducido();
   return (
-    <fieldset className="mt-10 flex justify-center">
-      <legend className="sr-only">Facturación</legend>
+    <fieldset>
+      <legend className="sr-only">{leyenda}</legend>
       <div className="flex items-center gap-1 rounded-full border border-white/10 bg-white/[0.04] p-1 backdrop-blur-md">
-        {CICLOS.map((opcion) => {
-          const activo = opcion.id === ciclo;
+        {opciones.map((opcion) => {
+          const activo = opcion.id === valor;
           return (
             <label
               key={opcion.id}
@@ -144,7 +205,7 @@ function SelectorCiclo({ ciclo, onCambio }: { ciclo: CicloFacturacion; onCambio:
             >
               <input
                 type="radio"
-                name="ciclo"
+                name={nombre}
                 value={opcion.id}
                 checked={activo}
                 onChange={() => onCambio(opcion.id)}
@@ -152,23 +213,14 @@ function SelectorCiclo({ ciclo, onCambio }: { ciclo: CicloFacturacion; onCambio:
               />
               {activo && (
                 <motion.span
-                  layoutId="ciclo-activo"
+                  layoutId={layoutId}
                   aria-hidden
                   className="absolute inset-0 rounded-full bg-white shadow-[0_0_24px_-6px_rgba(255,255,255,0.55)]"
                   transition={reducir ? { duration: 0 } : { type: "spring", duration: 0.4, bounce: 0.18 }}
                 />
               )}
               <span className="relative">{opcion.texto}</span>
-              {opcion.id === "ANUAL" && (
-                <span
-                  className={cn(
-                    "relative rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap [transition:background-color_200ms_ease,color_200ms_ease]",
-                    activo ? "bg-[#3d6bff] text-white" : "bg-[#3d6bff]/20 text-[#c9d3ff]"
-                  )}
-                >
-                  2 meses gratis
-                </span>
-              )}
+              {extra && <span className="relative inline-flex">{extra(opcion.id, activo)}</span>}
             </label>
           );
         })}
@@ -177,9 +229,20 @@ function SelectorCiclo({ ciclo, onCambio }: { ciclo: CicloFacturacion; onCambio:
   );
 }
 
-function TarjetaPlan({ tarjeta, ciclo, className }: { tarjeta: Tarjeta; ciclo: CicloFacturacion; className?: string }) {
+function TarjetaPlan({
+  tarjeta,
+  ciclo,
+  edicion,
+  className,
+}: {
+  tarjeta: Tarjeta;
+  ciclo: CicloFacturacion;
+  edicion: EdicionPlan;
+  className?: string;
+}) {
   const { elegirPlan } = usePlanElegido();
-  const { destacado } = tarjeta;
+  const { destacado, porEdicion } = tarjeta;
+  const reducir = useMovimientoReducido();
 
   return (
     <article
@@ -201,7 +264,7 @@ function TarjetaPlan({ tarjeta, ciclo, className }: { tarjeta: Tarjeta; ciclo: C
 
       <div className="relative flex items-center justify-between gap-3">
         <h3 id={`plan-${tarjeta.id}`} className="text-lg font-semibold tracking-tight text-white">
-          {PLANES[tarjeta.plan].nombre}
+          {porEdicion ? definicionPlan(tarjeta.plan, edicion).nombre : PLANES[tarjeta.plan].nombre}
         </h3>
         {destacado && (
           <span className="rounded-full border border-[#3d6bff]/50 bg-[#3d6bff]/15 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-[#c9d3ff]">
@@ -214,32 +277,42 @@ function TarjetaPlan({ tarjeta, ciclo, className }: { tarjeta: Tarjeta; ciclo: C
       <p className="relative mt-4 text-sm leading-relaxed text-white/50 lg:min-h-[2lh]">{tarjeta.descripcion}</p>
 
       <div className="relative mt-8 border-y border-white/[0.07] py-6">
-        <Precio plan={tarjeta.plan} ciclo={ciclo} />
+        <Precio plan={tarjeta.plan} ciclo={ciclo} edicion={edicion} />
       </div>
 
       <div className="relative mt-7 flex-1">
-        {tarjeta.previo && <p className="mb-4 text-xs font-medium tracking-wide text-white/40 uppercase">{tarjeta.previo}</p>}
+        <p className="mb-4 text-xs font-medium tracking-wide text-white/40 uppercase">{tarjeta.previo}</p>
         <ul className="space-y-3.5">
           {tarjeta.incluye.map((texto) => (
-            <li key={texto} className="flex items-start gap-3 text-sm leading-snug text-white/75">
-              <span
+            <Rasgo key={texto} destacado={destacado}>
+              {texto}
+            </Rasgo>
+          ))}
+          {porEdicion && (
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.li
+                key={edicion}
+                initial={{ opacity: 0, transform: reducir ? "translateY(0px)" : "translateY(6px)" }}
+                animate={{ opacity: 1, transform: "translateY(0px)" }}
+                exit={{ opacity: 0, transition: { duration: 0.1, ease: "easeOut" } }}
+                transition={{ duration: 0.25, ease: EASE_OUT }}
                 className={cn(
-                  "mt-px grid size-[18px] shrink-0 place-items-center rounded-full border",
-                  destacado ? "border-[#3d6bff]/50 bg-[#3d6bff]/20 text-[#c9d3ff]" : "border-white/15 text-white/70"
+                  "flex items-start gap-3 text-sm leading-snug",
+                  edicion === "PRO" ? "font-medium text-white" : "text-white/75"
                 )}
               >
-                <Check className="size-3" aria-hidden />
-              </span>
-              {texto}
-            </li>
-          ))}
+                <Marca destacado={destacado} ia={edicion === "PRO"} />
+                {porEdicion[edicion]}
+              </motion.li>
+            </AnimatePresence>
+          )}
         </ul>
       </div>
 
       <div className="relative mt-9">
         <a
           href="#demo"
-          onClick={() => elegirPlan(tarjeta.id)}
+          onClick={() => elegirPlan(tarjeta.id, porEdicion ? edicion : null)}
           className={
             destacado
               ? "inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-medium text-[#030303] [transition:scale_160ms_var(--ease-out),background-color_200ms_ease] hover:bg-[#dfe4ee] active:scale-[0.97]"
@@ -254,10 +327,32 @@ function TarjetaPlan({ tarjeta, ciclo, className }: { tarjeta: Tarjeta; ciclo: C
   );
 }
 
-/** Precio del ciclo elegido. Al cambiar de ciclo da un salto corto: entra desde 10 px abajo con un fundido. */
-function Precio({ plan, ciclo }: { plan: PlanAgencia; ciclo: CicloFacturacion }) {
+function Marca({ destacado, ia }: { destacado?: boolean; ia?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "mt-px grid size-[18px] shrink-0 place-items-center rounded-full border",
+        destacado || ia ? "border-[#3d6bff]/50 bg-[#3d6bff]/20 text-[#c9d3ff]" : "border-white/15 text-white/70"
+      )}
+    >
+      {ia ? <Sparkles className="size-2.5" aria-hidden /> : <Check className="size-3" aria-hidden />}
+    </span>
+  );
+}
+
+function Rasgo({ destacado, children }: { destacado?: boolean; children: ReactNode }) {
+  return (
+    <li className="flex items-start gap-3 text-sm leading-snug text-white/75">
+      <Marca destacado={destacado} />
+      {children}
+    </li>
+  );
+}
+
+/** Precio del ciclo y la edición elegidos. Al cambiar da un salto corto: entra desde 10 px abajo con un fundido. */
+function Precio({ plan, ciclo, edicion }: { plan: PlanAgencia; ciclo: CicloFacturacion; edicion: EdicionPlan }) {
   const reducir = useMovimientoReducido();
-  const precio = PLANES[plan].precio;
+  const precio = definicionPlan(plan, edicion).precio;
 
   // Mismo alto que un precio: las tarjetas no se descuadran.
   if (!precio) {
@@ -275,7 +370,7 @@ function Precio({ plan, ciclo }: { plan: PlanAgencia; ciclo: CicloFacturacion })
     <div aria-live="polite" className="flex min-h-[4.6rem] flex-col justify-end">
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
-          key={ciclo}
+          key={`${ciclo}-${edicion}`}
           initial={{ opacity: 0, transform: reducir ? "translateY(0px)" : "translateY(10px)" }}
           animate={{ opacity: 1, transform: "translateY(0px)" }}
           exit={{ opacity: 0, transition: { duration: 0.1, ease: "easeOut" } }}

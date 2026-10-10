@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { solicitarDemo, type EstadoDemo } from "@/lib/landing/actions";
 import { CAMPO_TRAMPA, MAX_DEMO, PLANES_DEMO, type CampoDemo } from "@/lib/landing/demo";
+import { ETIQUETA_EDICION } from "@/lib/planes/planes";
 import { cn } from "@/lib/utils";
 
 const CLASE_CAMPO =
@@ -94,7 +95,7 @@ function FormularioDemo({
   accion: (formData: FormData) => void;
   enviando: boolean;
 }) {
-  const { plan, elegirPlan } = usePlanElegido();
+  const { plan, edicion, elegirPlan } = usePlanElegido();
   const valores = estado.valores;
 
   return (
@@ -152,7 +153,14 @@ function FormularioDemo({
       </div>
 
       <fieldset>
-        <legend className="mb-2 text-xs font-medium text-white/60">Plan de interés</legend>
+        <legend className="mb-2 text-xs font-medium text-white/60">
+          Plan de interés
+          {edicion && (plan === "agente" || plan === "broker") && (
+            <span className="ml-1.5 font-normal text-white/40">· edición {ETIQUETA_EDICION[edicion]}</span>
+          )}
+        </legend>
+        {/* La edición (Básico o Pro) viene de la tarjeta de precios; solo aplica a Agente y Broker. */}
+        <input type="hidden" name="edicion" value={edicion ?? ""} />
         <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 sm:grid-cols-4">
           {PLANES_DEMO.map((opcion) => (
             <label

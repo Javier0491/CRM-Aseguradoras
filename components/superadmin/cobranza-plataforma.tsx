@@ -23,14 +23,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import {
   CICLOS,
+  definicionPlan,
+  EDICIONES,
   esCiclo,
+  esEdicion,
   esPlan,
   ETIQUETA_CICLO,
+  ETIQUETA_EDICION,
   hayCupo,
   PLANES,
   PLANES_ORDEN,
   textoUso,
+  tieneEdiciones,
   type CicloFacturacion,
+  type EdicionPlan,
   type PlanAgencia,
 } from "@/lib/planes/planes";
 import { configurarCobranza, registrarPagoPlataforma } from "@/lib/plataforma/actions";
@@ -56,16 +62,16 @@ export const ESTILO_ESTADO_COBRO: Record<EstadoCobro, string> = {
 
 const fecha = (iso: string) => formatFecha(`${iso}T00:00:00Z`);
 
-function describirLimites(plan: PlanAgencia) {
-  const { usuarios, ocrMensual } = PLANES[plan];
+function describirLimites(plan: PlanAgencia, edicion: EdicionPlan) {
+  const { usuarios, ocrMensual } = definicionPlan(plan, edicion);
   if (usuarios === null && ocrMensual === null) return "Usuarios y escaneos con IA sin límite.";
   return `${usuarios === null ? "Usuarios ilimitados" : `${usuarios} ${usuarios === 1 ? "usuario" : "usuarios"}`} · ${
-    ocrMensual === null ? "escaneos sin límite" : `${ocrMensual} escaneos con IA al mes`
+    ocrMensual === null ? "escaneos sin límite" : ocrMensual === 0 ? "sin captura con IA" : `${ocrMensual} escaneos con IA al mes`
   }.`;
 }
 
-function describirPrecio(plan: PlanAgencia, ciclo: CicloFacturacion) {
-  const { precio } = PLANES[plan];
+function describirPrecio(plan: PlanAgencia, edicion: EdicionPlan, ciclo: CicloFacturacion) {
+  const { precio } = definicionPlan(plan, edicion);
   if (!precio) return "Precio a la medida (ventas).";
   return `Lista: ${formatMoneda(precio[ciclo])} ${ciclo === "ANUAL" ? "al año" : "al mes"}.`;
 }
@@ -108,7 +114,7 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
               </TableCell>
               <TableCell className="min-w-40 whitespace-normal">
                 <p className="text-sm font-medium">
-                  {PLANES[a.plan].nombre} <span className="font-normal text-muted-foreground">· {ETIQUETA_CICLO[a.ciclo]}</span>
+                  {a.nombrePlan} <span className="font-normal text-muted-foreground">· {ETIQUETA_CICLO[a.ciclo]}</span>
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
                   {/* En ámbar lo que ya no admite uno más este mes. */}
@@ -167,6 +173,8 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
 
 function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; hoy: string; onListo: () => void }) {
   const [plan, setPlan] = React.useState<PlanAgencia>(agencia.plan);
+  const [edicion, setEdicion] = React.useState<EdicionPlan>(agencia.edicion);
+  const definicion = definicionPlan(plan, edicion);
   const [ciclo, setCiclo] = React.useState<CicloFacturacion>(agencia.ciclo);
   const [cuota, setCuota] = React.useState(agencia.cuotaMensual === null ? "" : agencia.cuotaMensual.toFixed(2));
   const [pagadoHasta, setPagadoHasta] = React.useState(agencia.pagadoHasta ?? hoy);
@@ -182,6 +190,7 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
     startTransition(async () => {
       const r = await configurarCobranza(agencia.id, {
         plan,
+        edicion,
         ciclo,
         cuotaMensual: cuota,
         pagadoHasta: cuota.trim() ? pagadoHasta : "",
@@ -222,7 +231,25 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">{describirLimites(plan)}</p>
+          <p className="text-xs text-muted-foreground">{describirLimites(plan, edicion)}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="cobro-edicion">Edición</Label>
+          <Select value={edicion} onValueChange={(v) => esEdicion(v) && setEdicion(v)} disabled={!tieneEdiciones(plan)}>
+            <SelectTrigger id="cobro-edicion" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {EDICIONES.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {ETIQUETA_EDICION[e]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {tieneEdiciones(plan) ? "Básico: sin captura con IA. Pro: con IA." : "Promotoría no tiene ediciones."}
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="cobro-ciclo">Ciclo de cobro</Label>
@@ -238,12 +265,12 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
               ))}
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground">{describirPrecio(plan, ciclo)}</p>
+          <p className="text-xs text-muted-foreground">{describirPrecio(plan, edicion, ciclo)}</p>
         </div>
       </div>
-      {plan !== agencia.plan && PLANES[plan].usuarios !== null && agencia.usuarios.usados > PLANES[plan].usuarios && (
+      {plan !== agencia.plan && definicion.usuarios !== null && agencia.usuarios.usados > definicion.usuarios && (
         <p className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
-          Tiene {agencia.usuarios.usados} cuentas activas y el plan {PLANES[plan].nombre} incluye {PLANES[plan].usuarios}. No se
+          Tiene {agencia.usuarios.usados} cuentas activas y el plan {definicion.nombre} incluye {definicion.usuarios}. No se
           desactiva ninguna: solo no podrá agregar más hasta quedar dentro del límite.
         </p>
       )}

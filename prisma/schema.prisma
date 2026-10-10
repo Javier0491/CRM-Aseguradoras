@@ -108,6 +108,8 @@ model Agencia {
   // escaneos con IA al mes (lib/planes). El estado de la suscripción es el de la cobranza de
   // arriba: pagadoHasta, la tolerancia y `suspendida`.
   plan                  PlanAgencia      @default(AGENTE)
+  // Básico (sin captura con IA) o Pro; Promotoría no la usa.
+  edicion               EdicionPlan      @default(PRO) @map("edicion_plan")
   cicloFacturacion      CicloFacturacion @default(MENSUAL) @map("ciclo_facturacion")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -146,6 +148,11 @@ enum PlanAgencia {
   AGENTE
   BROKER
   PROMOTORIA
+}
+
+enum EdicionPlan {
+  BASICO
+  PRO
 }
 
 enum CicloFacturacion {

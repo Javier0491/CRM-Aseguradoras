@@ -1,28 +1,62 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { esCiclo, esPlan, hayCupo, mensajeLimiteOcr, mensajeLimiteUsuarios, periodoDe, PLANES, textoUso } from "@/lib/planes/planes";
+import {
+  definicionPlan,
+  esCiclo,
+  esEdicion,
+  esPlan,
+  hayCupo,
+  mensajeLimiteOcr,
+  mensajeLimiteUsuarios,
+  periodoDe,
+  textoUso,
+  tieneEdiciones,
+} from "@/lib/planes/planes";
 
 describe("planes de ZenSecure", () => {
-  it("Agente: 1 usuario y 50 escaneos; Broker: 5 usuarios y 500; Promotoría sin límites", () => {
-    assert.deepEqual([PLANES.AGENTE.usuarios, PLANES.AGENTE.ocrMensual], [1, 50]);
-    assert.deepEqual([PLANES.BROKER.usuarios, PLANES.BROKER.ocrMensual], [5, 500]);
-    assert.deepEqual([PLANES.PROMOTORIA.usuarios, PLANES.PROMOTORIA.ocrMensual], [null, null]);
+  it("Agente: 1 usuario; Broker: 5; Básico sin IA y Pro con 50 / 500 escaneos", () => {
+    const limites = (plan: "AGENTE" | "BROKER", edicion: "BASICO" | "PRO") => {
+      const d = definicionPlan(plan, edicion);
+      return [d.usuarios, d.ocrMensual];
+    };
+    assert.deepEqual(limites("AGENTE", "BASICO"), [1, 0]);
+    assert.deepEqual(limites("AGENTE", "PRO"), [1, 50]);
+    assert.deepEqual(limites("BROKER", "BASICO"), [5, 0]);
+    assert.deepEqual(limites("BROKER", "PRO"), [5, 500]);
   });
 
-  it("el precio anual equivale a 10 mensualidades (2 meses gratis); Promotoría se cotiza", () => {
-    for (const plan of [PLANES.AGENTE, PLANES.BROKER]) assert.equal(plan.precio.ANUAL, plan.precio.MENSUAL * 10);
-    assert.deepEqual(PLANES.AGENTE.precio, { MENSUAL: 900, ANUAL: 9_000 });
-    assert.deepEqual(PLANES.BROKER.precio, { MENSUAL: 3_500, ANUAL: 35_000 });
-    assert.equal(PLANES.PROMOTORIA.precio, null);
+  it("Promotoría no tiene ediciones: todo ilimitado y se cotiza", () => {
+    assert.equal(tieneEdiciones("PROMOTORIA"), false);
+    for (const edicion of ["BASICO", "PRO"] as const) {
+      assert.deepEqual(definicionPlan("PROMOTORIA", edicion), { nombre: "Promotoría", usuarios: null, ocrMensual: null, precio: null });
+    }
   });
 
-  it("hay cupo mientras lo usado no llegue al límite; sin límite siempre hay", () => {
+  it("precios: Agente $900 / $1,500 y Broker $2,500 / $4,500; el anual equivale a 10 mensualidades", () => {
+    assert.equal(definicionPlan("AGENTE", "BASICO").precio?.MENSUAL, 900);
+    assert.equal(definicionPlan("AGENTE", "PRO").precio?.MENSUAL, 1_500);
+    assert.equal(definicionPlan("BROKER", "BASICO").precio?.MENSUAL, 2_500);
+    assert.equal(definicionPlan("BROKER", "PRO").precio?.MENSUAL, 4_500);
+    for (const plan of ["AGENTE", "BROKER"] as const) {
+      for (const edicion of ["BASICO", "PRO"] as const) {
+        const { precio } = definicionPlan(plan, edicion);
+        assert.equal(precio?.ANUAL, (precio?.MENSUAL ?? 0) * 10);
+      }
+    }
+  });
+
+  it("el nombre lleva la edición", () => {
+    assert.equal(definicionPlan("AGENTE", "BASICO").nombre, "Agente Básico");
+    assert.equal(definicionPlan("BROKER", "PRO").nombre, "Broker Pro");
+  });
+
+  it("hay cupo mientras lo usado no llegue al límite; con límite 0 nunca, sin límite siempre", () => {
     assert.equal(hayCupo(0, 1), true);
     assert.equal(hayCupo(1, 1), false);
     assert.equal(hayCupo(4, 5), true);
     assert.equal(hayCupo(5, 5), false);
-    assert.equal(hayCupo(6, 5), false);
+    assert.equal(hayCupo(0, 0), false);
     assert.equal(hayCupo(10_000, null), true);
   });
 
@@ -31,20 +65,21 @@ describe("planes de ZenSecure", () => {
     assert.equal(periodoDe("2026-12-31"), "2026-12-01");
   });
 
-  it("valida plan y ciclo recibidos del cliente", () => {
+  it("valida plan, edición y ciclo recibidos del cliente", () => {
     assert.equal(esPlan("BROKER"), true);
     assert.equal(esPlan("broker"), false);
-    assert.equal(esPlan("ENTERPRISE"), false);
+    assert.equal(esEdicion("PRO"), true);
+    assert.equal(esEdicion("PREMIUM"), false);
     assert.equal(esCiclo("ANUAL"), true);
     assert.equal(esCiclo("SEMANAL"), false);
   });
 
   it("los mensajes dicen el plan y su límite", () => {
-    assert.match(mensajeLimiteUsuarios("AGENTE"), /plan Agente incluye 1 usuario activo\./);
-    assert.match(mensajeLimiteUsuarios("BROKER"), /plan Broker incluye 5 usuarios activos\./);
-    assert.match(mensajeLimiteOcr("BROKER"), /los 500 escaneos con IA de este mes del plan Broker/);
+    assert.match(mensajeLimiteUsuarios("AGENTE", "PRO"), /plan Agente Pro incluye 1 usuario activo\./);
+    assert.match(mensajeLimiteUsuarios("BROKER", "BASICO"), /plan Broker Básico incluye 5 usuarios activos\./);
+    assert.match(mensajeLimiteOcr("BROKER", "PRO"), /los 500 escaneos con IA de este mes del plan Broker Pro/);
+    assert.match(mensajeLimiteOcr("AGENTE", "BASICO"), /Agente Básico no incluye captura con IA/);
     assert.equal(textoUso(3, 5), "3 de 5");
-    assert.equal(textoUso(12, null), "12");
     assert.equal(textoUso(48_210, null), "48,210");
   });
 });

@@ -17,7 +17,7 @@ import type { DatosMensajesDev } from "@/components/dev/vista-mensajes-dev";
 import type { DatosTareas } from "@/components/tareas/vista-tareas";
 import { hoyISO } from "@/lib/format";
 import { Prisma, type EstadoRecibo, type FormaPago, type Ramo } from "@/lib/generated/prisma/client";
-import { PLANES } from "@/lib/planes/planes";
+import { definicionPlan } from "@/lib/planes/planes";
 import { estadoCobro } from "@/lib/plataforma/cobranza";
 import type { MensajeChat } from "@/lib/mensajes/reglas";
 import { COLUMNAS_EMBUDO, columnaDe, type ColumnaEmbudo } from "@/lib/renovaciones/reglas";
@@ -884,15 +884,19 @@ export function datosSuperadmin(c: Conjunto): DatosSuperadmin {
     cobranza: rango(n).map((i) => {
       const cobro = { cuotaMensual: cuota(i), pagadoHasta: cuota(i) === null ? null : pagadoHasta(i), diasTolerancia: ciclo([0, 15, 30], i) };
       const plan = f === "demo" ? "BROKER" : ciclo(["AGENTE", "BROKER", "PROMOTORIA"] as const, i);
+      const edicion = f === "demo" ? "PRO" : ciclo(["BASICO", "PRO"] as const, i);
+      const definicion = definicionPlan(plan, edicion);
       return {
         id: `agc${i}`,
         nombre: nombre(i),
         suspendida: f === "extremos" && i % 5 === 4,
         plan,
+        edicion,
+        nombrePlan: definicion.nombre,
         ciclo: ciclo(["MENSUAL", "ANUAL"] as const, i),
         // Extremos: el límite justo, rebasado tras bajar de plan y miles sin límite.
-        usuarios: { usados: f === "demo" ? 3 : ciclo([1, 8, 1_240], i), limite: PLANES[plan].usuarios },
-        ocr: { usados: f === "demo" ? 120 : ciclo([50, 0, 48_210], i), limite: PLANES[plan].ocrMensual },
+        usuarios: { usados: f === "demo" ? 3 : ciclo([1, 8, 1_240], i), limite: definicion.usuarios },
+        ocr: { usados: f === "demo" ? 120 : ciclo([50, 0, 48_210], i), limite: definicion.ocrMensual },
         suspensionAutomatica: i % 2 === 0,
         correoFacturacion: f === "demo" ? "pagos@example.com" : ciclo(["cuentas.por.pagar.proveedores.tecnologia@grupoaseguradordelbajioyoccidente.example.com", null], i),
         ...cobro,

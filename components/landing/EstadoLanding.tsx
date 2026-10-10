@@ -4,15 +4,24 @@ import { createContext, useContext, useState, useSyncExternalStore, type ReactNo
 import { useReducedMotion } from "framer-motion";
 
 import type { PlanDemo } from "@/lib/landing/demo";
+import type { EdicionPlan } from "@/lib/planes/planes";
 
-type PlanElegido = { plan: PlanDemo; elegirPlan: (plan: PlanDemo) => void };
+type PlanElegido = {
+  plan: PlanDemo;
+  /** Básico o Pro, si se eligió desde una tarjeta que la tiene (Agente o Broker). */
+  edicion: EdicionPlan | null;
+  elegirPlan: (plan: PlanDemo, edicion?: EdicionPlan | null) => void;
+};
 
 const PlanElegidoContext = createContext<PlanElegido | null>(null);
 
-/** El plan que el visitante eligió en la tabla de precios llega preseleccionado al formulario de demo. */
+/** El plan (y su edición) que el visitante eligió en la tabla de precios llega preseleccionado al formulario de demo. */
 export function EstadoLanding({ children }: { children: ReactNode }) {
-  const [plan, elegirPlan] = useState<PlanDemo>("indeciso");
-  return <PlanElegidoContext value={{ plan, elegirPlan }}>{children}</PlanElegidoContext>;
+  const [eleccion, setEleccion] = useState<{ plan: PlanDemo; edicion: EdicionPlan | null }>({ plan: "indeciso", edicion: null });
+  // Cambiar el plan en el formulario conserva la edición; solo Agente y Broker la usan.
+  const elegirPlan = (plan: PlanDemo, edicion?: EdicionPlan | null) =>
+    setEleccion((actual) => ({ plan, edicion: edicion === undefined ? actual.edicion : edicion }));
+  return <PlanElegidoContext value={{ ...eleccion, elegirPlan }}>{children}</PlanElegidoContext>;
 }
 
 export function usePlanElegido() {

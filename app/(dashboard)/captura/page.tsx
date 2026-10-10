@@ -51,10 +51,16 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
             "Extrae los datos de una póliza con IA o captúrala manualmente por ramo."
           )}
         </p>
-        {ocr.limite !== null && (
-          <p className={cn("mt-1 text-xs tabular-nums", hayCupo(ocr.usados, ocr.limite) ? "text-muted-foreground" : "font-medium text-warning")}>
-            Escaneos con IA este mes: {ocr.usados} de {ocr.limite} (plan {plan}).
+        {ocr.limite === 0 ? (
+          <p className="mt-1 text-xs font-medium text-warning">
+            Tu plan {plan} no incluye captura con IA: captura las pólizas a mano o cámbiate a la edición Pro.
           </p>
+        ) : (
+          ocr.limite !== null && (
+            <p className={cn("mt-1 text-xs tabular-nums", hayCupo(ocr.usados, ocr.limite) ? "text-muted-foreground" : "font-medium text-warning")}>
+              Escaneos con IA este mes: {ocr.usados} de {ocr.limite} (plan {plan}).
+            </p>
+          )
         )}
       </div>
       {renovacion?.cancelada ? (

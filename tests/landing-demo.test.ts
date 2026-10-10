@@ -51,5 +51,10 @@ describe("solicitud de Demo VIP", () => {
     assert.ok(lineas.includes("Plan de interés: Broker"));
     const agente = correoSolicitudDemo(leerSolicitudDemo(formulario({ ...valida, plan: "agente" })).datos);
     assert.ok(agente.lineas.includes("Plan de interés: Agente"));
+    // La edición elegida en la tabla de precios va con el plan; en Promotoría no aplica.
+    const pro = correoSolicitudDemo(leerSolicitudDemo(formulario({ ...valida, plan: "broker", edicion: "PRO" })).datos);
+    assert.ok(pro.lineas.includes("Plan de interés: Broker Pro"));
+    const promotoria = correoSolicitudDemo(leerSolicitudDemo(formulario({ ...valida, plan: "promotoria", edicion: "PRO" })).datos);
+    assert.ok(promotoria.lineas.includes("Plan de interés: Promotoría"));
   });
 });

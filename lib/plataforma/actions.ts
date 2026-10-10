@@ -9,7 +9,16 @@ import { CorreoNoConfiguradoError, emailValido, enviarCorreoPlataforma } from "@
 import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { formatFecha, formatMoneda, hoyISO } from "@/lib/format";
-import { esCiclo, esPlan, ETIQUETA_CICLO, PLANES, type CicloFacturacion, type PlanAgencia } from "@/lib/planes/planes";
+import {
+  definicionPlan,
+  esCiclo,
+  esEdicion,
+  esPlan,
+  ETIQUETA_CICLO,
+  type CicloFacturacion,
+  type EdicionPlan,
+  type PlanAgencia,
+} from "@/lib/planes/planes";
 import { MAX_DIAS_TOLERANCIA, MAX_MESES_PAGO, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
 import { logoPlataformaUrl, nombrePlataforma } from "@/lib/plataforma/marca";
 import { parseNumero } from "@/lib/polizas/validacion";
@@ -45,6 +54,7 @@ export async function configurarCobranza(
   agenciaId: string,
   datos: {
     plan: PlanAgencia;
+    edicion: EdicionPlan;
     ciclo: CicloFacturacion;
     cuotaMensual: string;
     pagadoHasta: string;
@@ -59,6 +69,7 @@ export async function configurarCobranza(
     return { ok: false, error: "Datos inválidos." };
   }
   if (!esPlan(datos.plan)) return { ok: false, error: "Elige el plan." };
+  if (!esEdicion(datos.edicion)) return { ok: false, error: "Elige la edición (Básico o Pro)." };
   if (!esCiclo(datos.ciclo)) return { ok: false, error: "Elige el ciclo de cobro." };
   const sinCuota = typeof datos.cuotaMensual === "string" && datos.cuotaMensual.trim() === "";
   const cuota = sinCuota ? null : monto(datos.cuotaMensual);
@@ -75,18 +86,18 @@ export async function configurarCobranza(
 
   const agencia = await db.agencia.findUnique({
     where: { id: agenciaId },
-    select: { nombre: true, pagadoHasta: true, plan: true, cicloFacturacion: true },
+    select: { nombre: true, pagadoHasta: true, plan: true, edicion: true, cicloFacturacion: true },
   });
   if (!agencia) return { ok: false, error: "La agencia ya no existe." };
-  const cambioPlan =
-    agencia.plan !== datos.plan || agencia.cicloFacturacion !== datos.ciclo
-      ? `plan ${PLANES[datos.plan].nombre} ${ETIQUETA_CICLO[datos.ciclo].toLowerCase()} (antes ${PLANES[agencia.plan].nombre} ${ETIQUETA_CICLO[agencia.cicloFacturacion].toLowerCase()})`
-      : "";
+  const nuevo = `${definicionPlan(datos.plan, datos.edicion).nombre} ${ETIQUETA_CICLO[datos.ciclo].toLowerCase()}`;
+  const anterior = `${definicionPlan(agencia.plan, agencia.edicion).nombre} ${ETIQUETA_CICLO[agencia.cicloFacturacion].toLowerCase()}`;
+  const cambioPlan = nuevo !== anterior ? `plan ${nuevo} (antes ${anterior})` : "";
   await db.$transaction(async (tx) => {
     await tx.agencia.update({
       where: { id: agenciaId },
       data: {
         plan: datos.plan,
+        edicion: datos.edicion,
         cicloFacturacion: datos.ciclo,
         cuotaMensual: cuota === null ? null : cuota.toFixed(2),
         pagadoHasta: pagadoHasta ? new Date(`${pagadoHasta}T00:00:00Z`) : null,

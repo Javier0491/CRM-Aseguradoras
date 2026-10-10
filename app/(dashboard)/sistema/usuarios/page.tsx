@@ -73,7 +73,7 @@ export default async function UsuariosPage() {
           <AlertTriangle />
           <AlertTitle>Llegaste al límite del plan {uso.nombre}</AlertTitle>
           <AlertDescription className="text-warning/90">
-            {mensajeLimiteUsuarios(uso.plan)}
+            {mensajeLimiteUsuarios(uso.plan, uso.edicion)}
             {yo.superadmin && " Cámbialo en Mis agencias → Cobranza de la plataforma → Configurar."}
           </AlertDescription>
         </Alert>
