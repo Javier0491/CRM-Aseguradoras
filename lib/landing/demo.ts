@@ -6,7 +6,6 @@ import { esEdicion, ETIQUETA_EDICION, PLANES } from "@/lib/planes/planes";
 export const PLANES_DEMO = [
   { valor: "agente", etiqueta: PLANES.AGENTE.nombre },
   { valor: "broker", etiqueta: PLANES.BROKER.nombre },
-  { valor: "promotoria", etiqueta: PLANES.PROMOTORIA.nombre },
   { valor: "indeciso", etiqueta: "Aún no lo sé" },
 ] as const;
 export type PlanDemo = (typeof PLANES_DEMO)[number]["valor"];
@@ -22,7 +21,7 @@ export type SolicitudDemo = {
   correduria: string;
   telefono: string;
   plan: string;
-  /** BASICO o PRO, o vacío: viene de la tarjeta de precios y solo aplica a Agente y Broker. */
+  /** BASICO o PRO, o vacío: viene de la tarjeta de precios. */
   edicion: string;
   mensaje: string;
 };
@@ -83,7 +82,7 @@ export function correoSolicitudDemo(datos: SolicitudDemo) {
       `Correo: ${datos.correo}`,
       `Teléfono: ${datos.telefono || "—"}`,
       `Plan de interés: ${etiqueta(PLANES_DEMO, datos.plan)}${
-        (datos.plan === "agente" || datos.plan === "broker") && esEdicion(datos.edicion) ? ` ${ETIQUETA_EDICION[datos.edicion]}` : ""
+        datos.plan !== "indeciso" && esEdicion(datos.edicion) ? ` ${ETIQUETA_EDICION[datos.edicion]}` : ""
       }`,
       ...(datos.mensaje ? [`Mensaje: ${datos.mensaje}`] : []),
       "Responde a este correo para escribirle directamente.",

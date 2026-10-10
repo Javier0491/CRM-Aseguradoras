@@ -155,11 +155,11 @@ function FormularioDemo({
       <fieldset>
         <legend className="mb-2 text-xs font-medium text-white/60">
           Plan de interés
-          {edicion && (plan === "agente" || plan === "broker") && (
+          {edicion && plan !== "indeciso" && (
             <span className="ml-1.5 font-normal text-white/40">· edición {ETIQUETA_EDICION[edicion]}</span>
           )}
         </legend>
-        {/* La edición (Básico o Pro) viene de la tarjeta de precios; solo aplica a Agente y Broker. */}
+        {/* La edición (Básico o Pro) viene de la tarjeta de precios. */}
         <input type="hidden" name="edicion" value={edicion ?? ""} />
         <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/10 bg-white/[0.03] p-1 sm:grid-cols-4">
           {PLANES_DEMO.map((opcion) => (

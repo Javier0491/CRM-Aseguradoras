@@ -34,7 +34,6 @@ import {
   PLANES,
   PLANES_ORDEN,
   textoUso,
-  tieneEdiciones,
   type CicloFacturacion,
   type EdicionPlan,
   type PlanAgencia,
@@ -72,7 +71,6 @@ function describirLimites(plan: PlanAgencia, edicion: EdicionPlan) {
 
 function describirPrecio(plan: PlanAgencia, edicion: EdicionPlan, ciclo: CicloFacturacion) {
   const { precio } = definicionPlan(plan, edicion);
-  if (!precio) return "Precio a la medida (ventas).";
   return `Lista: ${formatMoneda(precio[ciclo])} ${ciclo === "ANUAL" ? "al año" : "al mes"}.`;
 }
 
@@ -235,7 +233,7 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
         </div>
         <div className="space-y-2">
           <Label htmlFor="cobro-edicion">Edición</Label>
-          <Select value={edicion} onValueChange={(v) => esEdicion(v) && setEdicion(v)} disabled={!tieneEdiciones(plan)}>
+          <Select value={edicion} onValueChange={(v) => esEdicion(v) && setEdicion(v)}>
             <SelectTrigger id="cobro-edicion" className="w-full">
               <SelectValue />
             </SelectTrigger>
@@ -248,7 +246,7 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            {tieneEdiciones(plan) ? "Básico: sin captura con IA. Pro: con IA." : "Promotoría no tiene ediciones."}
+            Cada edición tiene sus límites y su precio.
           </p>
         </div>
         <div className="space-y-2">

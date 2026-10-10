@@ -11,37 +11,29 @@ import {
   mensajeLimiteUsuarios,
   periodoDe,
   textoUso,
-  tieneEdiciones,
 } from "@/lib/planes/planes";
 
 describe("planes de ZenSecure", () => {
-  it("Agente: 1 usuario; Broker: 5; Básico sin IA y Pro con 50 / 500 escaneos", () => {
+  it("Agente: 1 usuario, Básico sin IA y Pro con 50; Broker Básico 3 usuarios y 250, Broker Pro sin límites", () => {
     const limites = (plan: "AGENTE" | "BROKER", edicion: "BASICO" | "PRO") => {
       const d = definicionPlan(plan, edicion);
       return [d.usuarios, d.ocrMensual];
     };
     assert.deepEqual(limites("AGENTE", "BASICO"), [1, 0]);
     assert.deepEqual(limites("AGENTE", "PRO"), [1, 50]);
-    assert.deepEqual(limites("BROKER", "BASICO"), [5, 0]);
-    assert.deepEqual(limites("BROKER", "PRO"), [5, 500]);
-  });
-
-  it("Promotoría no tiene ediciones: todo ilimitado y se cotiza", () => {
-    assert.equal(tieneEdiciones("PROMOTORIA"), false);
-    for (const edicion of ["BASICO", "PRO"] as const) {
-      assert.deepEqual(definicionPlan("PROMOTORIA", edicion), { nombre: "Promotoría", usuarios: null, ocrMensual: null, precio: null });
-    }
+    assert.deepEqual(limites("BROKER", "BASICO"), [3, 250]);
+    assert.deepEqual(limites("BROKER", "PRO"), [null, null]);
   });
 
   it("precios: Agente $900 / $1,500 y Broker $2,500 / $4,500; el anual equivale a 10 mensualidades", () => {
-    assert.equal(definicionPlan("AGENTE", "BASICO").precio?.MENSUAL, 900);
-    assert.equal(definicionPlan("AGENTE", "PRO").precio?.MENSUAL, 1_500);
-    assert.equal(definicionPlan("BROKER", "BASICO").precio?.MENSUAL, 2_500);
-    assert.equal(definicionPlan("BROKER", "PRO").precio?.MENSUAL, 4_500);
+    assert.equal(definicionPlan("AGENTE", "BASICO").precio.MENSUAL, 900);
+    assert.equal(definicionPlan("AGENTE", "PRO").precio.MENSUAL, 1_500);
+    assert.equal(definicionPlan("BROKER", "BASICO").precio.MENSUAL, 2_500);
+    assert.equal(definicionPlan("BROKER", "PRO").precio.MENSUAL, 4_500);
     for (const plan of ["AGENTE", "BROKER"] as const) {
       for (const edicion of ["BASICO", "PRO"] as const) {
         const { precio } = definicionPlan(plan, edicion);
-        assert.equal(precio?.ANUAL, (precio?.MENSUAL ?? 0) * 10);
+        assert.equal(precio.ANUAL, precio.MENSUAL * 10);
       }
     }
   });
@@ -76,8 +68,8 @@ describe("planes de ZenSecure", () => {
 
   it("los mensajes dicen el plan y su límite", () => {
     assert.match(mensajeLimiteUsuarios("AGENTE", "PRO"), /plan Agente Pro incluye 1 usuario activo\./);
-    assert.match(mensajeLimiteUsuarios("BROKER", "BASICO"), /plan Broker Básico incluye 5 usuarios activos\./);
-    assert.match(mensajeLimiteOcr("BROKER", "PRO"), /los 500 escaneos con IA de este mes del plan Broker Pro/);
+    assert.match(mensajeLimiteUsuarios("BROKER", "BASICO"), /plan Broker Básico incluye 3 usuarios activos\./);
+    assert.match(mensajeLimiteOcr("BROKER", "BASICO"), /los 250 escaneos con IA de este mes del plan Broker Básico/);
     assert.match(mensajeLimiteOcr("AGENTE", "BASICO"), /Agente Básico no incluye captura con IA/);
     assert.equal(textoUso(3, 5), "3 de 5");
     assert.equal(textoUso(48_210, null), "48,210");

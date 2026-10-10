@@ -9,7 +9,7 @@ import { CLASE_CTA_CRISTAL } from "@/components/landing/estilos";
 import { useMovimientoReducido, usePlanElegido } from "@/components/landing/EstadoLanding";
 import { EASE_OUT, Revelar } from "@/components/landing/Revelar";
 import type { PlanDemo } from "@/lib/landing/demo";
-import { definicionPlan, PLANES, type CicloFacturacion, type EdicionPlan, type PlanAgencia } from "@/lib/planes/planes";
+import { definicionPlan, type CicloFacturacion, type EdicionPlan, type PlanAgencia } from "@/lib/planes/planes";
 import { cn } from "@/lib/utils";
 
 type Tarjeta = {
@@ -20,8 +20,8 @@ type Tarjeta = {
   previo: string;
   /** Lo que trae en ambas ediciones. */
   incluye: string[];
-  /** Lo que cambia entre Básico y Pro (Promotoría no tiene ediciones). */
-  porEdicion?: Record<EdicionPlan, string>;
+  /** Lo que cambia entre Básico y Pro. */
+  porEdicion: Record<EdicionPlan, string[]>;
   cta: string;
   destacado?: boolean;
 };
@@ -35,29 +35,26 @@ const TARJETAS: Tarjeta[] = [
     lema: "Para el agente independiente",
     descripcion: "Tu cartera en orden y tus pólizas al día, sin hojas de cálculo.",
     previo: "Incluye:",
-    incluye: ["1 usuario", "CRM: clientes, pólizas, recibos y renovaciones", "Conciliación de recibos"],
-    porEdicion: { BASICO: "Captura manual con validación por ramo", PRO: "50 escaneos OCR con IA al mes" },
+    incluye: ["CRM: clientes, pólizas, recibos y renovaciones", "Conciliación de recibos"],
+    porEdicion: {
+      BASICO: ["1 usuario", "Captura manual con validación por ramo"],
+      PRO: ["1 usuario", "50 escaneos OCR con IA al mes"],
+    },
     cta: "Elegir Agente",
   },
   {
     id: "broker",
     plan: "BROKER",
-    lema: "Para despachos con equipo",
+    lema: "Para despachos y promotorías",
     descripcion: "Tu equipo trabaja la misma cartera y tú controlas quién ve qué.",
     previo: "Todo lo de Agente, y además:",
-    incluye: ["5 usuarios", "Superadmin para el dueño de la agencia", "Conciliación financiera"],
-    porEdicion: { BASICO: "Captura manual con validación por ramo", PRO: "500 escaneos OCR con IA al mes" },
+    incluye: ["Administrador para el dueño: controla usuarios y permisos", "Conciliación financiera"],
+    porEdicion: {
+      BASICO: ["3 usuarios", "250 escaneos OCR con IA al mes"],
+      PRO: ["Usuarios ilimitados", "Escaneos con IA sin límite", "Marca blanca", "Base de datos aislada"],
+    },
     cta: "Agendar Demo VIP",
     destacado: true,
-  },
-  {
-    id: "promotoria",
-    plan: "PROMOTORIA",
-    lema: "Para promotorías y redes",
-    descripcion: "Opera a escala con tu propia marca y tus datos en una base aparte.",
-    previo: "Todo lo de Broker Pro, y además:",
-    incluye: ["Usuarios ilimitados", "Escaneos con IA sin límite", "Marca blanca", "Base de datos aislada"],
-    cta: "Hablar con Ventas",
   },
 ];
 
@@ -99,8 +96,8 @@ export function PricingTiers() {
             Un plan para cada etapa de tu agencia.
           </h2>
           <p className="mt-5 text-base leading-relaxed text-pretty text-white/55 sm:text-lg">
-            Básico para capturar a mano, Pro para que la IA lea tus carátulas. Empieza solo, crece con tu equipo y
-            escala a promotoría sin cambiar de sistema.
+            Empieza con Básico y pasa a Pro cuando lo necesites. Del agente independiente a la promotoría, sin
+            cambiar de sistema.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Segmentado
@@ -138,7 +135,7 @@ export function PricingTiers() {
         </Revelar>
 
         <div
-          className="mx-auto mt-14 grid max-w-lg gap-6 lg:max-w-none lg:grid-cols-3 lg:items-stretch"
+          className="mx-auto mt-14 grid max-w-lg gap-6 md:max-w-4xl md:grid-cols-2 md:items-stretch"
           onPointerLeave={() => setEnfocado(null)}
         >
           {TARJETAS.map((tarjeta, i) => (
@@ -264,7 +261,7 @@ function TarjetaPlan({
 
       <div className="relative flex items-center justify-between gap-3">
         <h3 id={`plan-${tarjeta.id}`} className="text-lg font-semibold tracking-tight text-white">
-          {porEdicion ? definicionPlan(tarjeta.plan, edicion).nombre : PLANES[tarjeta.plan].nombre}
+          {definicionPlan(tarjeta.plan, edicion).nombre}
         </h3>
         {destacado && (
           <span className="rounded-full border border-[#3d6bff]/50 bg-[#3d6bff]/15 px-2.5 py-0.5 text-[11px] font-medium tracking-wide text-[#c9d3ff]">
@@ -273,8 +270,8 @@ function TarjetaPlan({
         )}
       </div>
       <p className={cn("relative mt-1 text-sm font-medium", destacado ? "text-[#8ea8ff]" : "text-white/55")}>{tarjeta.lema}</p>
-      {/* Dos renglones fijos en escritorio: los precios de las tres tarjetas quedan a la misma altura. */}
-      <p className="relative mt-4 text-sm leading-relaxed text-white/50 lg:min-h-[2lh]">{tarjeta.descripcion}</p>
+      {/* Dos renglones fijos en escritorio: los precios de las dos tarjetas quedan a la misma altura. */}
+      <p className="relative mt-4 text-sm leading-relaxed text-white/50 md:min-h-[2lh]">{tarjeta.descripcion}</p>
 
       <div className="relative mt-8 border-y border-white/[0.07] py-6">
         <Precio plan={tarjeta.plan} ciclo={ciclo} edicion={edicion} />
@@ -288,31 +285,34 @@ function TarjetaPlan({
               {texto}
             </Rasgo>
           ))}
-          {porEdicion && (
-            <AnimatePresence mode="wait" initial={false}>
-              <motion.li
-                key={edicion}
-                initial={{ opacity: 0, transform: reducir ? "translateY(0px)" : "translateY(6px)" }}
-                animate={{ opacity: 1, transform: "translateY(0px)" }}
-                exit={{ opacity: 0, transition: { duration: 0.1, ease: "easeOut" } }}
-                transition={{ duration: 0.25, ease: EASE_OUT }}
-                className={cn(
-                  "flex items-start gap-3 text-sm leading-snug",
-                  edicion === "PRO" ? "font-medium text-white" : "text-white/75"
-                )}
+        </ul>
+        {/* Lo que cambia con la edición entra con un salto corto al cambiar Básico ↔ Pro. */}
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.ul
+            key={edicion}
+            initial={{ opacity: 0, transform: reducir ? "translateY(0px)" : "translateY(6px)" }}
+            animate={{ opacity: 1, transform: "translateY(0px)" }}
+            exit={{ opacity: 0, transition: { duration: 0.1, ease: "easeOut" } }}
+            transition={{ duration: 0.25, ease: EASE_OUT }}
+            className="mt-3.5 space-y-3.5"
+          >
+            {porEdicion[edicion].map((texto) => (
+              <li
+                key={texto}
+                className={cn("flex items-start gap-3 text-sm leading-snug", edicion === "PRO" ? "font-medium text-white" : "text-white/75")}
               >
                 <Marca destacado={destacado} ia={edicion === "PRO"} />
-                {porEdicion[edicion]}
-              </motion.li>
-            </AnimatePresence>
-          )}
-        </ul>
+                {texto}
+              </li>
+            ))}
+          </motion.ul>
+        </AnimatePresence>
       </div>
 
       <div className="relative mt-9">
         <a
           href="#demo"
-          onClick={() => elegirPlan(tarjeta.id, porEdicion ? edicion : null)}
+          onClick={() => elegirPlan(tarjeta.id, edicion)}
           className={
             destacado
               ? "inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-medium text-[#030303] [transition:scale_160ms_var(--ease-out),background-color_200ms_ease] hover:bg-[#dfe4ee] active:scale-[0.97]"
@@ -353,18 +353,6 @@ function Rasgo({ destacado, children }: { destacado?: boolean; children: ReactNo
 function Precio({ plan, ciclo, edicion }: { plan: PlanAgencia; ciclo: CicloFacturacion; edicion: EdicionPlan }) {
   const reducir = useMovimientoReducido();
   const precio = definicionPlan(plan, edicion).precio;
-
-  // Mismo alto que un precio: las tarjetas no se descuadran.
-  if (!precio) {
-    return (
-      <div className="flex min-h-[4.6rem] flex-col justify-end">
-        <p className="text-[clamp(1.6rem,2.4vw,1.9rem)] leading-tight font-semibold tracking-[-0.025em] text-white">
-          Contactar a Ventas
-        </p>
-        <p className="mt-2 text-sm text-white/45">Cotización según tu operación</p>
-      </div>
-    );
-  }
 
   return (
     <div aria-live="polite" className="flex min-h-[4.6rem] flex-col justify-end">

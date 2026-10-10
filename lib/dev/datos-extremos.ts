@@ -883,7 +883,7 @@ export function datosSuperadmin(c: Conjunto): DatosSuperadmin {
     })),
     cobranza: rango(n).map((i) => {
       const cobro = { cuotaMensual: cuota(i), pagadoHasta: cuota(i) === null ? null : pagadoHasta(i), diasTolerancia: ciclo([0, 15, 30], i) };
-      const plan = f === "demo" ? "BROKER" : ciclo(["AGENTE", "BROKER", "PROMOTORIA"] as const, i);
+      const plan = f === "demo" ? "BROKER" : ciclo(["AGENTE", "BROKER"] as const, i);
       const edicion = f === "demo" ? "PRO" : ciclo(["BASICO", "PRO"] as const, i);
       const definicion = definicionPlan(plan, edicion);
       return {
