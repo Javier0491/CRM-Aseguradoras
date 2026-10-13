@@ -1,6 +1,6 @@
 // Reglas del expediente del cliente (compartidas por cliente y servidor; funciones puras).
 import { fechaNacimientoDeRfc } from "@/lib/polizas/asegurados";
-import { normalizarRfc, normalizarTelefono, rfcValido } from "@/lib/polizas/validacion";
+import { normalizarRfc, normalizarTelefono, raizRfc, rfcValido } from "@/lib/polizas/validacion";
 
 /** Tipos de registro del seguimiento del cliente. */
 export const TIPOS_SEGUIMIENTO = [
@@ -65,10 +65,8 @@ export function posiblesDuplicados(
   const ra = normalizarRfc(a.rfc);
   const rb = normalizarRfc(b.rfc);
   const genericos = RFC_GENERICOS.has(ra) || RFC_GENERICOS.has(rb);
-  if (!genericos && ra.length >= 12 && rb.length >= 12) {
-    if (ra === rb) return true;
-    if (ra.length === rb.length && ra.slice(0, ra.length - 3) === rb.slice(0, rb.length - 3)) return true;
-  }
+  // Mismo RFC sin homoclave: incluye el capturado sin ella frente al completo.
+  if (!genericos && raizRfc(ra) !== null && raizRfc(ra) === raizRfc(rb)) return true;
   return claveNombre(a.nombre) !== "" && claveNombre(a.nombre) === claveNombre(b.nombre);
 }
 
@@ -83,9 +81,9 @@ export const esTipoPersona = (v: unknown): v is TipoPersonaCliente =>
 /** RFC genéricos del SAT: compartidos por muchas personas, no identifican al cliente. */
 export const RFC_GENERICOS: ReadonlySet<string> = new Set(["XAXX010101000", "XEXX010101000"]);
 
-/** El RFC de una persona moral tiene 12 caracteres; el de una física, 13. */
+/** El RFC de una persona moral empieza con 3 letras; el de una física, con 4. */
 export const tipoPersonaDeRfc = (rfc: string): TipoPersonaCliente =>
-  normalizarRfc(rfc).length === 12 ? "MORAL" : "FISICA";
+  raizRfc(rfc)?.length === 9 ? "MORAL" : "FISICA";
 
 /**
  * Fecha de nacimiento del cliente (YYYY-MM-DD): la capturada o, en una persona física con RFC

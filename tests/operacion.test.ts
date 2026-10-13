@@ -13,7 +13,7 @@ import {
 import { formatPorcentaje } from "@/lib/format";
 import { accionCobroDiaria, detalleCobro, estadoCobro, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
 import { primaEndoso, validarEndoso, validarFechaCancelacion } from "@/lib/polizas/estatus";
-import { normalizarTelefono, parseNumero } from "@/lib/polizas/validacion";
+import { normalizarTelefono, parseNumero, rfcValido } from "@/lib/polizas/validacion";
 import { columnaDe, notaDePerdida, urgenciaRenovacion } from "@/lib/renovaciones/reglas";
 import { grupoTarea, validarTarea } from "@/lib/tareas/reglas";
 
@@ -83,12 +83,16 @@ describe("expediente del cliente", () => {
   it("tipo de persona por el RFC", () => {
     assert.equal(tipoPersonaDeRfc("ABC010101AB1"), "MORAL");
     assert.equal(tipoPersonaDeRfc("GODE561231GR8"), "FISICA");
+    // Sin homoclave.
+    assert.equal(tipoPersonaDeRfc("ABC010101"), "MORAL");
+    assert.equal(tipoPersonaDeRfc("BAPM950815"), "FISICA");
   });
   it("fecha de nacimiento: la capturada o la del RFC (nunca de un genérico o una moral)", () => {
     assert.deepEqual(fechaNacimientoCliente({ fechaNacimiento: null, rfc: "GODE561231GR8", tipoPersona: "FISICA" }, "2026-10-05"), {
       fecha: "1956-12-31",
       origen: "rfc",
     });
+    assert.equal(fechaNacimientoCliente({ fechaNacimiento: null, rfc: "BAPM950815", tipoPersona: "FISICA" }, "2026-10-05")?.fecha, "1995-08-15");
     assert.equal(fechaNacimientoCliente({ fechaNacimiento: null, rfc: "XAXX010101000", tipoPersona: "FISICA" }, "2026-10-05"), null);
     assert.equal(fechaNacimientoCliente({ fechaNacimiento: null, rfc: "ABC010101AB1", tipoPersona: "MORAL" }, "2026-10-05"), null);
     assert.equal(
@@ -105,8 +109,17 @@ describe("expediente del cliente", () => {
   });
   it("posibles duplicados", () => {
     assert.ok(posiblesDuplicados({ nombre: "Juan Pérez", rfc: "PEJU800101AB1" }, { nombre: "J. Perez", rfc: "PEJU800101XY9" }));
+    assert.ok(posiblesDuplicados({ nombre: "Juan Pérez", rfc: "PEJU800101" }, { nombre: "Otro", rfc: "PEJU800101XY9" }));
+    assert.ok(!posiblesDuplicados({ nombre: "Juan Pérez", rfc: "PEJU800101" }, { nombre: "Otro", rfc: "PEJU800102" }));
     assert.ok(posiblesDuplicados({ nombre: "Héctor  Morales", rfc: "XAXX010101000" }, { nombre: "HECTOR MORALES", rfc: "XAXX010101000" }));
     assert.ok(!posiblesDuplicados({ nombre: "Ana", rfc: "XAXX010101000" }, { nombre: "Luis", rfc: "XAXX010101000" }));
+  });
+  it("RFC con o sin homoclave", () => {
+    assert.ok(rfcValido("BAPM950815"));
+    assert.ok(rfcValido("bapm-950815-xx0"));
+    assert.ok(rfcValido("ABC010101"));
+    assert.ok(!rfcValido("BAPM95081"));
+    assert.ok(!rfcValido("BAPM950815X"));
   });
   it("validación del formulario", () => {
     const ok: ClienteValores = {

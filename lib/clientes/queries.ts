@@ -7,7 +7,7 @@ import { requireUsuarioCrm } from "@/lib/auth/dal";
 import { posiblesDuplicados, RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
-import { normalizarRfc } from "@/lib/polizas/validacion";
+import { normalizarRfc, raizRfc } from "@/lib/polizas/validacion";
 
 export const LIMITE_CLIENTES = 200;
 
@@ -112,7 +112,7 @@ export async function getClienteExpediente(id: string) {
 export async function getPosiblesDuplicados(cliente: { id: string; nombre: string; rfc: string }) {
   const user = await requireUsuarioCrm();
   const rfc = normalizarRfc(cliente.rfc);
-  const prefijo = rfc.length >= 12 && !RFC_GENERICOS.has(rfc) ? rfc.slice(0, rfc.length - 3) : null;
+  const prefijo = RFC_GENERICOS.has(rfc) ? null : raizRfc(rfc);
   const palabra = cliente.nombre.trim().split(/\s+/)[0] ?? "";
   const candidatos = await db.cliente.findMany({
     where: {

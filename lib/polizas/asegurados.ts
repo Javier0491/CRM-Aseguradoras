@@ -77,7 +77,7 @@ const RFC_GENERICO = /^X[AE]XX010101000$/;
  */
 export function fechaNacimientoDeRfc(rfc: string, hoy: string): string | null {
   const limpio = rfc.replace(/[\s-]/g, "").toUpperCase();
-  const m = /^[A-ZÑ&]{4}(\d{2})(\d{2})(\d{2})[A-Z\d]{3}$/.exec(limpio);
+  const m = /^[A-ZÑ&]{4}(\d{2})(\d{2})(\d{2})(?:[A-Z\d]{3})?$/.exec(limpio);
   // Los genéricos (público en general, extranjeros) no son de una persona.
   if (!m || RFC_GENERICO.test(limpio)) return null;
   const [, aa, mm, dd] = m;

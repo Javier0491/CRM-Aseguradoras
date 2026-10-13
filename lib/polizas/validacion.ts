@@ -14,15 +14,19 @@ import {
 export type Valores = Record<string, string>;
 export type Errores = Record<string, string>;
 
-const RFC = /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/;
+// La homoclave (los 3 últimos) puede faltar: muchas pólizas traen el RFC sin ella.
+const RFC = /^[A-ZÑ&]{3,4}\d{6}(?:[A-Z\d]{3})?$/;
+const RAIZ_RFC = /^[A-ZÑ&]{3,4}\d{6}/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const POLIZA_VIGOR = /^[A-Z0-9]+$/;
 const MAX_ANIOS_VIGENCIA = 30;
 
 export const normalizarRfc = (v: string) => v.replace(/[\s-]/g, "").toUpperCase();
-/** RFC de persona física (13) o moral (12) con formato válido. */
+/** RFC de persona física (13, o 10 sin homoclave) o moral (12, o 9) con formato válido. */
 export const rfcValido = (v: string) => RFC.test(normalizarRfc(v));
+/** El RFC sin homoclave (letras y fecha); null si no tiene ese formato. */
+export const raizRfc = (v: string) => RAIZ_RFC.exec(normalizarRfc(v))?.[0] ?? null;
 /** Solo dígitos; quita la lada internacional de México (+52 y el antiguo +521 de celulares). */
 export function normalizarTelefono(v: string) {
   const d = v.replace(/\D/g, "");
