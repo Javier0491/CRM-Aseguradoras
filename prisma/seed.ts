@@ -24,6 +24,7 @@ const aseguradoras = [
   // Chubb es negro en su marca; se usa gris para que se distinga sobre el fondo oscuro.
   { nombre: "Chubb", color_hex: "#8C8C8C" },
   { nombre: "ABA Seguros", color_hex: "#003DA5" },
+  { nombre: "SURA", color_hex: "#0033A0" },
   // Gastos Médicos (catálogo de redes médicas, lib/polizas/redes-medicas.ts).
   // Colores aproximados de cada marca; ajústalos si no coinciden.
   { nombre: "Plan Seguro", color_hex: "#0B5CAB" },

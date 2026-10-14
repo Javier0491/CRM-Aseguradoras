@@ -1,5 +1,6 @@
 import "server-only";
 
+import { usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { polizasDe, alcanceDe } from "@/lib/auth/alcance";
 import type { UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
@@ -173,16 +174,16 @@ async function obtenerCliente(
 const soloAlfanumerico = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, "");
 
 /**
- * Aseguradoras sin póliza vigor (p. ej. Quálitas): el formulario no la pide y su cobranza usa el
+ * Aseguradoras sin póliza vigor (p. ej. Quálitas, o AXA en Autos): el formulario no la pide y su cobranza usa el
  * número impreso. La póliza vigor solo encadena renovaciones: la de la póliza que se renueva o
  * que se edita (`heredada`) o, si no hay, el número impreso de esta póliza.
  */
-async function aplicarReglaVigor(agenciaId: string, g: Valores, heredada: string | null): Promise<Valores> {
+async function aplicarReglaVigor(agenciaId: string, ramo: Ramo, g: Valores, heredada: string | null): Promise<Valores> {
   const aseguradora = await db.aseguradora.findUnique({
     where: { id: g.aseguradora, agenciaId },
-    select: { usaPolizaVigor: true },
+    select: { nombre: true, usaPolizaVigor: true },
   });
-  if (!aseguradora || aseguradora.usaPolizaVigor) return g;
+  if (!aseguradora || usaPolizaVigorEn(aseguradora, ramo)) return g;
   return { ...g, polizaVigor: heredada ?? soloAlfanumerico(g.numeroImpreso) };
 }
 
@@ -286,7 +287,7 @@ export async function registrarPoliza(
     // El número original se conserva; la póliza vigor (clave de cobranza) es la de la nueva vigencia.
     g = { ...g, numeroImpreso: original.numeroImpreso };
     if (
-      original.aseguradora.usaPolizaVigor &&
+      usaPolizaVigorEn(original.aseguradora, input.ramo) &&
       original.polizaVigor &&
       g.polizaVigor.trim().toUpperCase() === original.polizaVigor.toUpperCase()
     ) {
@@ -299,7 +300,7 @@ export async function registrarPoliza(
   }
 
   // Sin póliza vigor en la aseguradora, la renovación conserva la clave de la anterior.
-  g = await aplicarReglaVigor(agenciaId, g, anterior?.polizaVigor ?? null);
+  g = await aplicarReglaVigor(agenciaId, input.ramo, g, anterior?.polizaVigor ?? null);
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const datos = columnasPoliza(input, g);
@@ -452,7 +453,7 @@ export async function actualizarPoliza(
           actual.comision_personalizada_pct === null ? "" : Number(actual.comision_personalizada_pct).toFixed(2),
       };
   // Sin póliza vigor se conserva la clave con la que ya está encadenada.
-  const g = await aplicarReglaVigor(agenciaId, conComision, actual.polizaVigor);
+  const g = await aplicarReglaVigor(agenciaId, input.ramo, conComision, actual.polizaVigor);
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 

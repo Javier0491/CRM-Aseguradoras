@@ -59,28 +59,46 @@ de situación fiscal, identificación, endoso o solicitud). Todos pertenecen a l
   datos y anótalo en "advertencias".
 - La regla 1 sigue aplicando: "completar" significa tomar el dato impreso en otro documento, nunca
   deducirlo ni inventarlo.
+- Ignora los anexos de OTRA compañía que vienen con la póliza (p. ej. la póliza de RC en E.U.A. y
+  Canadá de Chubb que AXA anexa a Autos, con montos en USD y prima "INCLUIDA"): no tomes de ahí
+  aseguradora, primas ni sumas aseguradas.
+- Las cartas de envío o de cartera (p. ej. "Adjunto a la presente… para su cobro") y los datos
+  del AGENTE o EJECUTIVO no son datos del cliente. Tampoco el RFC de la aseguradora que aparece en
+  los recibos (p. ej. el de Seguros SURA junto a su razón social).
 
 CAMPOS GENERALES
 - cliente: nombre completo o razón social del CONTRATANTE. Si el asegurado es distinto del
   contratante, usa el contratante y anótalo en "advertencias".
 - rfcCliente: RFC del contratante, en mayúsculas y sin espacios ni guiones (12 caracteres para
-  personas morales y 13 para físicas).
+  personas morales y 13 para físicas). Si viene impreso sin homoclave (9 o 10 caracteres),
+  transcríbelo así; nunca inventes los 3 últimos.
 - telefono y email: los del contratante, solo si aparecen impresos.
 - aseguradora: identifícala por logotipo o razón social y usa EXACTAMENTE uno de estos valores:
   ${aseguradoras.map((a) => `"${a}"`).join(", ")}.
   Si es otra compañía, devuelve null y escribe su nombre en "advertencias".
 - numeroImpreso: el número de póliza tal como aparece impreso, incluyendo guiones o prefijos. No incluyas el número de
-  endoso, de inciso ni de recibo.
+  endoso, de inciso ni de recibo, ni el "No. de cliente".
+  SURA imprime la póliza en tres casillas, "Oficina", "Ramo" y "Póliza No." (ej. 3 | 420 |
+  200004966): numeroImpreso es SOLO el valor de "Póliza No." (200004966), sin oficina ni ramo.
 - vigenciaInicio / vigenciaFin: fechas "desde" y "hasta" de la vigencia, en formato YYYY-MM-DD.
-  Interpreta las fechas en formato mexicano (día/mes/año). Ignora las horas.
+  Interpreta las fechas en formato mexicano (día/mes/año), también con el mes abreviado
+  ("31/mar/2026" → 2026-03-31). Ignora las horas. No confundas la vigencia con la fecha de emisión.
 - primaTotal: el importe TOTAL a pagar por toda la vigencia (incluye prima neta, recargos, derecho
-  de póliza e IVA). Suele rotularse "Prima total" o "Importe total". No uses la prima neta ni el
-  importe de un solo recibo. Número sin símbolo ni separadores de miles (ej. 48320.40).
+  de póliza e IVA). Según la aseguradora se rotula "Prima total", "Importe total", "Total",
+  "Precio Total" o "Total a pagar". No uses la prima neta ni el importe de un solo recibo
+  ("1er REC.", "Subsecuentes"). Número sin símbolo ni separadores de miles (ej. 48320.40).
+- CUADRE DE IMPORTES: en la carátula los importes van en una fila o columna con su etiqueta encima
+  o a un lado (Prima neta, Tasa de financiamiento o Recargos, Gastos de expedición o Derecho de
+  póliza, Bonificación, IVA y Total). Toma cada valor de SU etiqueta mirando la página, no el orden
+  del texto, que puede venir revuelto. Comprueba que prima neta + financiamiento + gastos de
+  expedición − bonificación + IVA = total; si no cuadra, revisa la lectura y, si sigue sin
+  cuadrar, anótalo en "advertencias".
 - primaNeta: la PRIMA NETA de toda la vigencia, ANTES de recargos por pago fraccionado, derecho de
   póliza (gastos de expedición) e IVA. Suele rotularse "Prima neta". Es la base de la comisión del
   agente, así que nunca pongas aquí la prima total ni el importe de un recibo; si no aparece
   impresa, devuelve null (no la calcules restando conceptos).
-- formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL.
+- formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL. Ignora el
+  medio de pago que la acompañe: "Mensual - Débito" → MENSUAL.
 
 REFERENCIA DE PAGO Y PÓLIZA VIGOR
 En algunas aseguradoras la póliza vigor se calcula a partir de la referencia de pago.
@@ -89,6 +107,8 @@ En algunas aseguradoras la póliza vigor se calcula a partir de la referencia de
   Hazlo SIEMPRE que aparezca, aunque también encuentres el número de póliza.
   Distingue con cuidado la letra "I" del dígito "1" y la letra "O" del dígito "0". Si no aparece,
   devuelve null.
+  Las referencias bancarias formadas solo por dígitos (p. ej. la del recibo de SURA,
+  "0034200000001868609499332 01") NO son esta referencia: devuelve null.
 - No calcules la póliza vigor: cuando hay referencia, el sistema la obtiene de ella (tiene
   prioridad sobre el número de póliza) con esta regla, tomando los
   dígitos que están INMEDIATAMENTE DESPUÉS de la letra "I" y eliminando el último dígito
@@ -140,7 +160,8 @@ CAMPOS ESPECÍFICOS
   La cantidad es sumaAseguradaValor en GMM (deja también sumaAseguradaUnidad en null) o
   sumaAsegurada en los demás ramos. Si la suma asegurada trae una cantidad o no aparece,
   sumaAseguradaIlimitada es false. Se refiere solo a la suma asegurada principal de la póliza, no
-  a coberturas adicionales ni al deducible o al coaseguro. No aplica a Autos.
+  a coberturas adicionales ni al deducible o al coaseguro. No aplica a Autos ni a Hogar: ahí
+  "AMPARADA" en una cobertura (terremoto, cristales, asistencia) solo significa que está incluida.
 - sumaAseguradaDanos (Autos): la suma asegurada de Daños Materiales en MXN. En la tabla de
   coberturas es la cantidad que está a la IZQUIERDA del porcentaje de deducible, en el renglón de
   Daños Materiales ("DAÑOS MATERIALES  $350,000.00  5%" → sumaAseguradaDanos 350000 y
@@ -148,6 +169,47 @@ CAMPOS ESPECÍFICOS
   CONVENIDO" sin monto, déjala en null. No uses la suma de Responsabilidad Civil ni la de Gastos
   Médicos.
 - serie: el número de serie o VIN del vehículo, exactamente como aparece.
+
+AUTOS: ETIQUETAS SEGÚN LA ASEGURADORA
+Cada aseguradora rotula distinto los datos del vehículo. Unifícalos así:
+- anio: el AÑO del vehículo. Se rotula "Año", "Año modelo" o, MUY a menudo, "Modelo" con un número
+  de 4 dígitos (AXA: "Modelo: 1999"). Un "Modelo" de 4 dígitos es SIEMPRE el año, nunca el campo
+  modelo.
+- marca: el fabricante (Nissan, Chevrolet, Volkswagen…). Si hay un rótulo "Marca", úsalo. Si solo
+  hay una línea descriptiva ("Vehículo", "Descripción", "Descripción del vehículo", "Tipo"), la
+  marca es su primera palabra: "CHEVROLET CHEVY POP STD 3P 4CIL*" → marca "CHEVROLET".
+- modelo: la versión o descripción del vehículo SIN la marca y sin asteriscos ni el año:
+  "CHEVROLET CHEVY POP STD 3P 4CIL*" → "CHEVY POP STD 3P 4CIL". Se rotula "Descripción",
+  "Vehículo", "Versión", "Submarca" o "Tipo".
+- serie: "Serie", "No. de serie", "VIN" o "NIV". No confundas con "Motor" ni con "Repuve".
+- placas: "Placas" o "Placa".
+- uso (Particular, Comercial, Servicio público, Flotilla): AXA rotula "Uso: Normal" y
+  "Servicio: Particular"; en ese caso toma el valor de "Servicio". Un uso "Normal" o "Personal"
+  es Particular.
+- cobertura (paquete): si la carátula dice el paquete ("Amplia", "Limitada", "Responsabilidad
+  Civil", "RC Obligatoria"), úsalo. Si no lo dice, es la única excepción a "no deduzcas": con
+  Daños Materiales y Robo Total amparados es "Amplia"; con Robo Total pero sin Daños Materiales,
+  "Limitada"; solo con Responsabilidad Civil, "Responsabilidad Civil". Anota en "advertencias"
+  que el paquete se dedujo de las coberturas.
+- deducibleDanos y deducibleRobo son PORCENTAJES. Si la carátula da el deducible como monto fijo
+  (AXA: "Daños Materiales 24,600.00 | 1,230.00", deducible de $1,230), calcula el porcentaje sobre
+  la suma asegurada de esa cobertura (1230 / 24600 × 100 = 5) y anota en "advertencias" que
+  venía como monto. Si no hay suma asegurada numérica para calcularlo, devuelve null.
+
+HOGAR: ETIQUETAS SEGÚN LA ASEGURADORA
+- domicilioRiesgo: la dirección del inmueble asegurado ("Datos del inmueble", "Ubicación",
+  "Domicilio del riesgo" o "Bien asegurado"), no la del contratante aunque coincidan.
+- tipoVivienda: "Casa habitación" o "Casa" → Casa; "Departamento" → Departamento; casa dentro de
+  un condominio horizontal → Casa en condominio.
+- usoVivienda: "Propia", "Habitada por el propietario" o "Propietario" → Habitada por el
+  propietario; "Rentada" o "Arrendada" → Rentada a terceros; "Descanso", "Fin de semana" o
+  "Veraneo" → Casa de descanso.
+- valorConstruccion: la suma asegurada de "Vivienda", "Edificio", "Construcción" o "Inmueble".
+- valorContenidos: la de "Contenidos" o "Menaje".
+- sumaRC: la de "R.C. habitantes del hogar", "R.C. familiar" o "Responsabilidad civil privada".
+- deducibleInmueble: si hay un deducible general, úsalo. Si solo hay deducibles por cobertura,
+  usa el de Terremoto (SURA: "TERREMOTO Y ERUPCIÓN VOLCÁNICA | AMPARADA | 2% SOBRE SUMA
+  ASEGURADA" → 2) y anota en "advertencias" los demás (p. ej. fenómenos hidrometeorológicos 1%).
 - redMedica (GMM Individual y Colectivo): ver RED MÉDICA.
 - COBERTURAS (GMM Individual y Colectivo). Revisa la tabla o lista de coberturas, beneficios o
   endosos de la póliza en todos los documentos:
@@ -183,7 +245,8 @@ ${catalogoRedesTexto()}
 
 ADVERTENCIAS
 Lista breve en español de datos que el usuario debe revisar: campos ilegibles, valores ambiguos,
-varias opciones posibles, montos que no cuadran o datos que parecen no corresponder.${
+varias opciones posibles, montos que no cuadran o datos que parecen no corresponder. No anotes que
+un dato opcional no aparece (p. ej. la referencia de pago, el teléfono o el email).${
     contexto === "gmm_colectivo" ? CONTEXTO_GMM_COLECTIVO : ""
   }`;
 }

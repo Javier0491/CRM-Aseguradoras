@@ -63,6 +63,7 @@ import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
+import { usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { subirArchivo } from "@/lib/archivos/subir";
 import { hoyISO } from "@/lib/format";
 import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
@@ -375,9 +376,11 @@ export function PolizaForm({
   const aseguradoraId = useWatch({ control, name: "generales.aseguradora" });
   const aseguradoraElegida = aseguradoras.find((a) => a.value === aseguradoraId);
   const nombreAseguradora = aseguradoraElegida?.label;
-  // Su cobranza usa el número de póliza completo: el campo no se muestra (el servidor asigna la
-  // clave interna que encadena las renovaciones).
-  const sinPolizaVigor = aseguradoraElegida?.usaPolizaVigor === false;
+  // Su cobranza usa el número de póliza completo (p. ej. Quálitas, o AXA en Autos): el campo no se
+  // muestra (el servidor asigna la clave interna que encadena las renovaciones).
+  const sinPolizaVigor =
+    aseguradoraElegida !== undefined &&
+    !usaPolizaVigorEn({ nombre: aseguradoraElegida.label, usaPolizaVigor: aseguradoraElegida.usaPolizaVigor !== false }, ramo);
 
   React.useEffect(() => {
     onRamoChange?.(ramo);
