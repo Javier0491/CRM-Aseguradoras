@@ -69,25 +69,26 @@ type MetricCardProps = {
   href: string;
 };
 
-function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href }: MetricCardProps) {
+function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href, orden }: MetricCardProps & { orden: number }) {
   const positiva = (variacion ?? 0) >= 0;
   const Trend = positiva ? ArrowUpRight : ArrowDownRight;
 
   return (
     <Link
       href={href}
-      className="group block rounded-xl outline-none transition-[scale] duration-150 ease-out focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]"
+      className="group block animate-entrar rounded-xl outline-none transition-[scale,translate] duration-200 ease-out hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/50 active:translate-y-0 active:scale-[0.98] motion-reduce:hover:translate-y-0"
+      style={{ animationDelay: `${orden * 60}ms` }}
     >
       <Card
         className={cn(
           "h-full gap-3 py-5 transition-[border-color,background-color,box-shadow] duration-150 ease-out",
-          "group-hover:border-primary/50 group-hover:bg-primary/[0.03] group-hover:shadow-md"
+          "group-hover:border-primary/50 group-hover:bg-primary/[0.04] group-hover:shadow-lg group-hover:shadow-primary/10"
         )}
       >
         <CardHeader className="px-5">
           <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
           <CardAction>
-            <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary transition-colors group-hover:border-primary/40 group-hover:bg-primary/10">
+            <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary transition-[color,background-color,border-color,rotate,scale] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0">
               <Icon className="size-4" />
             </div>
           </CardAction>
@@ -109,7 +110,7 @@ function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href }: Me
             )}
             <span className="text-muted-foreground">{detalle}</span>
             <ArrowRight
-              className="ml-auto size-3.5 shrink-0 text-primary opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              className="ml-auto size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
               aria-hidden
             />
           </div>
@@ -414,7 +415,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
         aria-label="Métricas principales"
         className={cn("grid gap-4 sm:grid-cols-2", comisiones ? "xl:grid-cols-4" : "xl:grid-cols-3")}
       >
-        {tarjetas.map((t) => t && <MetricCard key={t.titulo} {...t} />)}
+        {tarjetas.map((t, i) => t && <MetricCard key={t.titulo} {...t} orden={i} />)}
       </section>
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

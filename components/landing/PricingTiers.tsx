@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowRight, Check, Sparkles } from "lucide-react";
 import { useState, type PointerEvent, type ReactNode } from "react";
 
-import { BordeBrillante } from "@/components/landing/Botones";
+import { BordeBrillante, Magnetico } from "@/components/landing/Botones";
 import { CLASE_CTA_CRISTAL } from "@/components/landing/estilos";
 import { useMovimientoReducido, usePlanElegido } from "@/components/landing/EstadoLanding";
 import { EASE_OUT, Revelar } from "@/components/landing/Revelar";
@@ -310,18 +310,33 @@ function TarjetaPlan({
       </div>
 
       <div className="relative mt-9">
-        <a
-          href="#demo"
-          onClick={() => elegirPlan(tarjeta.id, edicion)}
-          className={
-            destacado
-              ? "inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-medium text-[#030303] [transition:scale_160ms_var(--ease-out),background-color_200ms_ease] hover:bg-[#dfe4ee] active:scale-[0.97]"
-              : cn(CLASE_CTA_CRISTAL, "w-full")
-          }
-        >
-          {tarjeta.cta}
-          {destacado && <ArrowRight className="size-4" aria-hidden />}
-        </a>
+        <Magnetico fuerza={0.12} className="w-full">
+          <a
+            href="#demo"
+            onClick={() => elegirPlan(tarjeta.id, edicion)}
+            className={cn(
+              "group/cta relative overflow-hidden",
+              destacado
+                ? "inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-white px-6 text-sm font-semibold text-[#030303] shadow-[0_10px_30px_-10px_rgba(255,255,255,0.55)] [transition:scale_160ms_var(--ease-out),background-color_200ms_ease,box-shadow_200ms_ease] hover:bg-[#eef1f7] hover:shadow-[0_14px_40px_-10px_rgba(142,168,255,0.8)] active:scale-[0.97]"
+                : cn(CLASE_CTA_CRISTAL, "w-full")
+            )}
+          >
+            {/* Destello que cruza el botón al pasar el mouse. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/50 to-transparent opacity-0 [transition:translate_700ms_var(--ease-out),opacity_200ms_ease] group-hover/cta:translate-x-[400%] group-hover/cta:opacity-100 motion-reduce:hidden"
+            />
+            {tarjeta.cta}
+            <ArrowRight
+              className={cn(
+                "size-4 [transition:translate_200ms_var(--ease-out)] group-hover/cta:translate-x-1",
+                !destacado && "-ml-1 w-0 opacity-0 [transition:width_200ms_var(--ease-out),opacity_200ms_ease,margin_200ms_ease] group-hover/cta:ml-0 group-hover/cta:w-4 group-hover/cta:opacity-100"
+              )}
+              aria-hidden
+            />
+          </a>
+        </Magnetico>
+        <p className="mt-3 text-center text-xs text-white/45">30 días de prueba gratis · sin tarjeta</p>
       </div>
     </article>
   );

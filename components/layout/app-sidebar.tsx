@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
 import { ChevronsUpDown, LogOut } from "lucide-react";
 
 import { LogoAgencia } from "@/components/layout/logo-agencia";
@@ -31,6 +32,7 @@ import { cerrarSesion } from "@/lib/auth/actions";
 import { isActivePath, mainNav, navPara, systemNav, type NavItem, type PermisosNav } from "@/lib/navigation";
 
 function NavGroup({ label, items, pathname }: { label: string; items: NavItem[]; pathname: string }) {
+  const reducir = useReducedMotion();
   return (
     <SidebarGroup>
       <SidebarGroupLabel className="text-[11px] uppercase tracking-wider">
@@ -40,11 +42,20 @@ function NavGroup({ label, items, pathname }: { label: string; items: NavItem[];
         <SidebarMenu>
           {items.map((item) => (
             <SidebarMenuItem key={item.href}>
+              {/* La barra de la sección activa se desliza de una entrada a otra al navegar. */}
+              {isActivePath(pathname, item.href) && (
+                <motion.span
+                  layoutId="nav-activa"
+                  aria-hidden
+                  className="absolute top-1.5 bottom-1.5 left-0 z-10 w-[3px] rounded-full bg-primary shadow-[0_0_10px_var(--color-primary)] group-data-[collapsible=icon]:hidden"
+                  transition={reducir ? { duration: 0 } : { type: "spring", visualDuration: 0.3, bounce: 0.2 }}
+                />
+              )}
               <SidebarMenuButton
                 asChild
                 isActive={isActivePath(pathname, item.href)}
                 tooltip={item.title}
-                className="data-[active=true]:text-primary data-[active=true]:[&>svg]:text-primary"
+                className="transition-[color,background-color,padding] duration-150 hover:pl-3 data-[active=true]:bg-primary/10 data-[active=true]:text-primary data-[active=true]:[&>svg]:text-primary [&>svg]:transition-transform [&>svg]:duration-150 hover:[&>svg]:scale-110 group-data-[collapsible=icon]:hover:pl-2"
               >
                 <Link href={item.href}>
                   <item.icon />

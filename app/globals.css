@@ -58,6 +58,22 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Entrada escalonada de tarjetas (el retraso va en style={{ animationDelay }}). */
+  --animate-entrar: entrar 380ms var(--ease-out) both;
+
+  @keyframes entrar {
+    from {
+      opacity: 0;
+      transform: translateY(10px) scale(0.98);
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-entrar {
+    animation-name: aparecer;
+    animation-duration: 200ms;
+  }
 }
 
 :root,
