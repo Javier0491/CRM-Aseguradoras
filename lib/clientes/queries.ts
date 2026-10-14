@@ -2,10 +2,11 @@ import "server-only";
 
 import { connection } from "next/server";
 
-import { clientesDe, getAlcance } from "@/lib/auth/alcance";
+import { clientesDe, getAlcance, polizasDe } from "@/lib/auth/alcance";
 import { requireUsuarioCrm } from "@/lib/auth/dal";
 import { posiblesDuplicados, RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { db } from "@/lib/db";
+import { hoyISO } from "@/lib/format";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { normalizarRfc, raizRfc } from "@/lib/polizas/validacion";
 
@@ -29,6 +30,7 @@ export async function getClientesListado(q = "", ejecutivo?: string) {
     ],
   };
 
+  const hoy = new Date(`${hoyISO()}T00:00:00Z`);
   const [clientes, total, totalGeneral] = await Promise.all([
     db.cliente.findMany({
       where,
@@ -43,6 +45,16 @@ export async function getClientesListado(q = "", ejecutivo?: string) {
         tipoPersona: true,
         ejecutivo: { select: { nombre: true } },
         _count: { select: { polizas: true } },
+        // Para la tarjeta: sus pólizas en vigor (prima, aseguradoras y próximo vencimiento).
+        polizas: {
+          where: { ...polizasDe(alcance), canceladaAt: null, vigencia_fin: { gte: hoy } },
+          orderBy: { vigencia_fin: "asc" },
+          select: {
+            vigencia_fin: true,
+            prima_total: true,
+            aseguradora: { select: { nombre: true, color_hex: true } },
+          },
+        },
       },
     }),
     db.cliente.count({ where }),

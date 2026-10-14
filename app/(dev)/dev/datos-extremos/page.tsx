@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { VistaCliente } from "@/components/clientes/vista-cliente";
+import { VistaClientes } from "@/components/clientes/vista-clientes";
 import { VistaDashboard } from "@/components/dashboard/vista-dashboard";
 import { BarraDatosDev } from "@/components/dev/barra-datos-dev";
 import { AmbienteEspacio } from "@/components/layout/ambiente-espacio";
@@ -14,6 +16,7 @@ import { VistaTareasPagina } from "@/components/tareas/vista-tareas";
 import {
   CONJUNTOS,
   datosCliente,
+  datosClientes,
   datosDashboard,
   datosMensajes,
   datosPoliza,
@@ -25,6 +28,7 @@ import {
   type Conjunto,
 } from "@/lib/dev/datos-extremos";
 import { COLUMNAS_EMBUDO, type ColumnaEmbudo } from "@/lib/renovaciones/reglas";
+import { cookieVista, vistaDe } from "@/lib/vista-listado";
 
 const esColumna = (v: unknown): v is ColumnaEmbudo => COLUMNAS_EMBUDO.some((c) => c.clave === v);
 
@@ -33,6 +37,7 @@ export const metadata: Metadata = {
 };
 
 const PANTALLAS = [
+  { clave: "clientes", titulo: "Directorio de clientes" },
   { clave: "polizas", titulo: "Pólizas" },
   { clave: "poliza", titulo: "Expediente de póliza" },
   { clave: "cliente", titulo: "Expediente de cliente" },
@@ -59,6 +64,10 @@ export default async function DatosDePruebaPage({ searchParams }: PageProps<"/de
   // "pol0:cotizando": simula mover esa tarjeta del embudo a otra columna.
   const [moverId, moverColumna] = typeof params.mover === "string" ? params.mover.split(":") : [];
   const mover = moverId && esColumna(moverColumna) ? { id: moverId, columna: moverColumna } : undefined;
+  // Tarjetas o lista: la misma cookie que usan las páginas reales.
+  const galletas = await cookies();
+  const vistaClientes = vistaDe(galletas.get(cookieVista("clientes"))?.value);
+  const vistaPolizas = vistaDe(galletas.get(cookieVista("polizas"))?.value);
 
   const href = (cambio: Record<string, string>) => {
     const p = new URLSearchParams({ pantalla, datos: conjunto, tema: tema === "light" ? "claro" : "oscuro", tab: pestana, ...cambio });
@@ -67,7 +76,8 @@ export default async function DatosDePruebaPage({ searchParams }: PageProps<"/de
   };
 
   const vistas: Record<Pantalla, () => React.ReactNode> = {
-    polizas: () => <VistaPolizas {...datosPolizas(conjunto, pestana)} />,
+    clientes: () => <VistaClientes {...datosClientes(conjunto, vistaClientes)} />,
+    polizas: () => <VistaPolizas {...datosPolizas(conjunto, pestana, vistaPolizas)} />,
     poliza: () => <VistaPoliza {...datosPoliza(conjunto)} />,
     cliente: () => <VistaCliente {...datosCliente(conjunto)} />,
     renovaciones: () => <VistaRenovaciones {...datosRenovaciones(conjunto, mover)} />,

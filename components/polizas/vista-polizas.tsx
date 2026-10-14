@@ -6,6 +6,7 @@ import { AvatarIniciales } from "@/components/layout/avatar-iniciales";
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { EstadoVacio } from "@/components/layout/estado-vacio";
 import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
+import { SelectorVista } from "@/components/layout/selector-vista";
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
 import {
   AseguradoraTag,
@@ -19,6 +20,7 @@ import {
   RamoBadge,
   Vencimiento,
 } from "@/components/polizas/poliza-ui";
+import { TarjetaPolizaListado } from "@/components/polizas/tarjeta-poliza-listado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -43,6 +45,7 @@ import {
   type getRecibosListado,
 } from "@/lib/polizas/queries";
 import type { OpcionEjecutivo } from "@/lib/usuarios/queries";
+import type { VistaListado } from "@/lib/vista-listado";
 import { cn } from "@/lib/utils";
 
 function SinDatos() {
@@ -94,6 +97,8 @@ export type DatosPolizas = {
     estatus: "" | "vigor" | "canceladas";
     filtroRecibos: FiltroRecibos;
     pestana: PestanaPolizas;
+    /** Tarjetas o lista (cookie del usuario). */
+    vista: VistaListado;
   };
   usuario: { id: string; soloSuCartera: boolean; verComisiones: boolean };
   hoy: string;
@@ -103,7 +108,7 @@ export type DatosPolizas = {
 export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos, filtros, usuario, hoy }: DatosPolizas) {
   const { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto, canceladas } = listado;
   const { recibos, total: totalRecibos, pendientes } = listadoRecibos;
-  const { q, ramo, soloFaltaContacto, ejecutivo, estatus, filtroRecibos, pestana } = filtros;
+  const { q, ramo, soloFaltaContacto, ejecutivo, estatus, filtroRecibos, pestana, vista } = filtros;
   const filtrando = q.trim() !== "" || ramo !== undefined || soloFaltaContacto || ejecutivo !== "" || estatus !== "";
   const verEjecutivo = !usuario.soloSuCartera;
 
@@ -218,16 +223,21 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
                 </Button>
               </div>
             )}
-            <FiltrosPolizas
-              q={q}
-              ramo={ramo ?? ""}
-              ramos={opcionesRamo}
-              faltaContacto={soloFaltaContacto}
-              ejecutivo={ejecutivo}
-              ejecutivos={ejecutivos}
-              usuarioId={usuario.id}
-              estatus={estatus}
-            />
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+              <div className="min-w-0 flex-1">
+                <FiltrosPolizas
+                  q={q}
+                  ramo={ramo ?? ""}
+                  ramos={opcionesRamo}
+                  faltaContacto={soloFaltaContacto}
+                  ejecutivo={ejecutivo}
+                  ejecutivos={ejecutivos}
+                  usuarioId={usuario.id}
+                  estatus={estatus}
+                />
+              </div>
+              <SelectorVista listado="polizas" vista={vista} />
+            </div>
             {canceladas > 0 && estatus === "" && (
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <Ban className="size-3.5" /> {formatNumero(canceladas)}{" "}
@@ -235,111 +245,127 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
                 estatus para ocultarlas.
               </p>
             )}
-            <Card className="gap-0 py-0">
-              {polizas.length === 0 ? (
-                <EstadoVacio
-                  icono={SearchX}
-                  tono="muted"
-                  titulo="Ninguna póliza coincide con los filtros"
-                  descripcion="Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo o el estatus."
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-5">Póliza</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Ramo</TableHead>
-                      <TableHead>Asegurados</TableHead>
-                      <TableHead>Aseguradora</TableHead>
-                      {verEjecutivo && <TableHead>Ejecutivo</TableHead>}
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="text-right">Prima total</TableHead>
-                      <TableHead className="pr-5 text-right whitespace-normal">Recibos pagados</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {polizas.map((p) => {
-                      const cobrados = p.recibos.filter((r) => esCobrado(r.estado)).length;
-                      const cobrables = p.recibos.filter((r) => r.estado !== "CANCELADO").length;
-                      return (
-                        <TableRow key={p.id} className={cn(p.canceladaAt && "text-muted-foreground")}>
-                          <TableCell className="max-w-52 min-w-36 pl-5 whitespace-normal wrap-anywhere">
-                            <Link
-                              href={`/polizas/${p.id}`}
-                              className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary hover:underline"
-                            >
-                              {p.numeroImpreso}
-                              {(p.caratula_path || p.negociacion_path) && (
-                                <FileText className="size-3 text-primary" aria-label="Con documentos PDF" />
-                              )}
-                              {p.expediente_path && (
-                                <Paperclip className="size-3 text-primary" aria-label="Con expediente ZIP" />
-                              )}
-                            </Link>
-                            {p.polizaVigor && (
-                              <p className="font-mono text-[11px] text-muted-foreground">
-                                vigor: {p.polizaVigor}
-                              </p>
-                            )}
-                          </TableCell>
-                          <TableCell className="max-w-64">
-                            <div className="flex items-center gap-2.5">
-                              <AvatarIniciales nombre={p.cliente.nombre} className="size-7 text-[10px]" />
-                              <div className="min-w-0">
-                                <p className="truncate font-medium" title={p.cliente.nombre}>
-                                  {p.cliente.nombre}
+            {vista === "tarjetas" && polizas.length > 0 ? (
+              <>
+                <section aria-label="Pólizas" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  {polizas.map((p, i) => (
+                    <TarjetaPolizaListado key={p.id} p={p} hoy={hoy} orden={i} verEjecutivo={verEjecutivo} />
+                  ))}
+                </section>
+                {totalPolizas > polizas.length && (
+                  <p className="text-xs text-muted-foreground">
+                    Mostrando {formatNumero(polizas.length)} de {formatNumero(totalPolizas)} pólizas (límite {LIMITE_LISTADO}).
+                    Usa los filtros para acotar.
+                  </p>
+                )}
+              </>
+            ) : (
+              <Card className="gap-0 py-0">
+                {polizas.length === 0 ? (
+                  <EstadoVacio
+                    icono={SearchX}
+                    tono="muted"
+                    titulo="Ninguna póliza coincide con los filtros"
+                    descripcion="Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo o el estatus."
+                  />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <TableHead className="pl-5">Póliza</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Ramo</TableHead>
+                        <TableHead>Asegurados</TableHead>
+                        <TableHead>Aseguradora</TableHead>
+                        {verEjecutivo && <TableHead>Ejecutivo</TableHead>}
+                        <TableHead>Estado</TableHead>
+                        <TableHead className="text-right">Prima total</TableHead>
+                        <TableHead className="pr-5 text-right whitespace-normal">Recibos pagados</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {polizas.map((p) => {
+                        const cobrados = p.recibos.filter((r) => esCobrado(r.estado)).length;
+                        const cobrables = p.recibos.filter((r) => r.estado !== "CANCELADO").length;
+                        return (
+                          <TableRow key={p.id} className={cn(p.canceladaAt && "text-muted-foreground")}>
+                            <TableCell className="max-w-52 min-w-36 pl-5 whitespace-normal wrap-anywhere">
+                              <Link
+                                href={`/polizas/${p.id}`}
+                                className="inline-flex items-center gap-1.5 font-mono text-xs hover:text-primary hover:underline"
+                              >
+                                {p.numeroImpreso}
+                                {(p.caratula_path || p.negociacion_path) && (
+                                  <FileText className="size-3 text-primary" aria-label="Con documentos PDF" />
+                                )}
+                                {p.expediente_path && (
+                                  <Paperclip className="size-3 text-primary" aria-label="Con expediente ZIP" />
+                                )}
+                              </Link>
+                              {p.polizaVigor && (
+                                <p className="font-mono text-[11px] text-muted-foreground">
+                                  vigor: {p.polizaVigor}
                                 </p>
-                                <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
-                                <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} />
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <RamoBadge ramo={p.ramo} />
-                          </TableCell>
-                          <TableCell className="max-w-50">
-                            <AseguradosResumen
-                              ramo={p.ramo}
-                              contratante={p.cliente.nombre}
-                              titular={p.asegurados[0]?.nombre ?? null}
-                              total={p._count.asegurados}
-                            />
-                          </TableCell>
-                          <TableCell className="max-w-52">
-                            <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
-                          </TableCell>
-                          {verEjecutivo && (
-                            <TableCell className="max-w-40 truncate text-sm" title={p.ejecutivo?.nombre}>
-                              {p.ejecutivo?.nombre ?? <span className="text-xs text-muted-foreground">Sin asignar</span>}
+                              )}
                             </TableCell>
-                          )}
-                          <TableCell>
-                            <EstadoVigenciaIndicador
-                              fin={p.vigencia_fin}
-                              hoy={hoy}
-                              diasAviso={DIAS_POR_VENCER}
-                              cancelada={p.canceladaAt}
-                            />
-                            <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
-                              {formatFecha(p.vigencia_inicio)} – {formatFecha(p.vigencia_fin)}
-                            </p>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <p className="font-medium tabular-nums">{formatMoneda(Number(p.prima_total))}</p>
-                            <p className="text-[11px] text-muted-foreground">{formaPagoLabel[p.forma_pago]}</p>
-                          </TableCell>
-                          <TableCell className="pr-5 text-right tabular-nums">
-                            {cobrados}/{cobrables}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-              <NotaLimite mostrados={polizas.length} total={totalPolizas} />
-            </Card>
+                            <TableCell className="max-w-64">
+                              <div className="flex items-center gap-2.5">
+                                <AvatarIniciales nombre={p.cliente.nombre} className="size-7 text-[10px]" />
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium" title={p.cliente.nombre}>
+                                    {p.cliente.nombre}
+                                  </p>
+                                  <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
+                                  <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} />
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <RamoBadge ramo={p.ramo} />
+                            </TableCell>
+                            <TableCell className="max-w-50">
+                              <AseguradosResumen
+                                ramo={p.ramo}
+                                contratante={p.cliente.nombre}
+                                titular={p.asegurados[0]?.nombre ?? null}
+                                total={p._count.asegurados}
+                              />
+                            </TableCell>
+                            <TableCell className="max-w-52">
+                              <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+                            </TableCell>
+                            {verEjecutivo && (
+                              <TableCell className="max-w-40 truncate text-sm" title={p.ejecutivo?.nombre}>
+                                {p.ejecutivo?.nombre ?? <span className="text-xs text-muted-foreground">Sin asignar</span>}
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              <EstadoVigenciaIndicador
+                                fin={p.vigencia_fin}
+                                hoy={hoy}
+                                diasAviso={DIAS_POR_VENCER}
+                                cancelada={p.canceladaAt}
+                              />
+                              <p className="mt-0.5 text-[11px] text-muted-foreground tabular-nums">
+                                {formatFecha(p.vigencia_inicio)} – {formatFecha(p.vigencia_fin)}
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <p className="font-medium tabular-nums">{formatMoneda(Number(p.prima_total))}</p>
+                              <p className="text-[11px] text-muted-foreground">{formaPagoLabel[p.forma_pago]}</p>
+                            </TableCell>
+                            <TableCell className="pr-5 text-right tabular-nums">
+                              {cobrados}/{cobrables}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+                <NotaLimite mostrados={polizas.length} total={totalPolizas} />
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="conciliadas">

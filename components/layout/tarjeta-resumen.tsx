@@ -2,29 +2,23 @@ import Link from "next/link";
 import { ArrowUpRight, type LucideIcon } from "lucide-react";
 
 import { ValorAjustado } from "@/components/dashboard/valor-ajustado";
+import { COLOR_TONO, IconoRelieve, type Tono } from "@/components/layout/icono-relieve";
 import { Inclinable } from "@/components/layout/inclinable";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
-export type TonoResumen = "primary" | "warning" | "destructive" | "success" | "muted";
-
-const TONOS: Record<TonoResumen, string> = {
-  primary: "border-primary/25 bg-primary/10 text-primary",
-  warning: "border-warning/30 bg-warning/10 text-warning",
-  destructive: "border-destructive/30 bg-destructive/10 text-destructive",
-  success: "border-success/30 bg-success/10 text-success",
-  muted: "bg-background text-muted-foreground",
-};
+export type TonoResumen = Tono;
 
 /**
- * Indicador de un módulo (pólizas registradas, monto por cobrar…): entra escalonado según `orden`,
- * su número cuenta desde cero, se inclina en 3D hacia el cursor y, si lleva a otra pantalla, su
- * ícono reacciona y aparece una flecha.
+ * Indicador de un módulo (pólizas registradas, monto por cobrar…) con el estilo de las tarjetas
+ * de Aseguradoras: línea y halo de su tono, ícono con relieve, entrada escalonada según `orden`,
+ * número que cuenta desde cero e inclinación 3D hacia el cursor. Si lleva a otra pantalla,
+ * aparece una flecha.
  */
 export function TarjetaResumen({
   titulo,
   valor,
-  icono: Icono,
+  icono,
   detalle,
   href,
   tono = "primary",
@@ -40,24 +34,21 @@ export function TarjetaResumen({
   /** Posición en su fila, para escalonar la entrada. */
   orden?: number;
 }) {
+  const color = COLOR_TONO[tono];
   const contenido = (
     <Card
+      acento={color}
       className={cn(
         "@container h-full flex-row items-center gap-4 px-5 py-4 transition-[border-color,box-shadow] duration-200 ease-out",
-        href && "group-hover/resumen:border-primary/40 group-hover/resumen:shadow-lg group-hover/resumen:shadow-primary/10"
+        href && "group-hover/tarjeta:border-primary/40 group-hover/tarjeta:shadow-lg group-hover/tarjeta:shadow-primary/10"
       )}
     >
-      <span
-        className={cn(
-          "grid size-10 shrink-0 place-items-center rounded-xl border transition-[scale,rotate] duration-200 ease-out",
-          "group-hover/resumen:scale-110 group-hover/resumen:-rotate-6 motion-reduce:group-hover/resumen:scale-100 motion-reduce:group-hover/resumen:rotate-0",
-          // Con un monto largo en una tarjeta angosta, el ícono cede su lugar.
-          valor.length > 12 && "@max-[15rem]:hidden",
-          TONOS[tono]
-        )}
-      >
-        <Icono className="size-[18px]" />
-      </span>
+      <IconoRelieve
+        color={color}
+        icono={icono}
+        // Con un monto largo en una tarjeta angosta, el ícono cede su lugar.
+        className={cn(valor.length > 12 && "@max-[15rem]:hidden")}
+      />
       <div className="@container min-w-0 flex-1">
         <ValorAjustado valor={valor} animado />
         <p className="truncate text-xs text-muted-foreground">{titulo}</p>
@@ -66,7 +57,7 @@ export function TarjetaResumen({
       {href && (
         <ArrowUpRight
           aria-hidden
-          className="size-4 shrink-0 self-start text-primary opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover/resumen:translate-x-0.5 group-hover/resumen:-translate-y-0.5 group-hover/resumen:opacity-100 group-has-[:focus-visible]/resumen:opacity-100"
+          className="size-4 shrink-0 self-start text-primary opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover/tarjeta:translate-x-0.5 group-hover/tarjeta:-translate-y-0.5 group-hover/tarjeta:opacity-100 group-has-[:focus-visible]/tarjeta:opacity-100"
         />
       )}
     </Card>
@@ -75,7 +66,7 @@ export function TarjetaResumen({
   return (
     // La entrada (CSS) y la inclinación (resorte) van en elementos distintos: no se pisan el transform.
     <div className="h-full animate-entrar" style={{ animationDelay: `${orden * 60}ms` }}>
-      <Inclinable className="group/resumen h-full rounded-xl">
+      <Inclinable className="group/tarjeta h-full rounded-xl" grados={4}>
         {href ? (
           <Link href={href} className="block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             {contenido}

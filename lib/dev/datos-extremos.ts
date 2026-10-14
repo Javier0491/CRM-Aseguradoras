@@ -8,6 +8,7 @@
 import "server-only";
 
 import type { DatosCliente } from "@/components/clientes/vista-cliente";
+import type { DatosClientes } from "@/components/clientes/vista-clientes";
 import type { DatosDashboard } from "@/components/dashboard/vista-dashboard";
 import type { DatosPoliza } from "@/components/polizas/vista-poliza";
 import type { DatosPolizas } from "@/components/polizas/vista-polizas";
@@ -220,7 +221,11 @@ function reciboListado(f: Fila, i: number): DatosPolizas["listadoRecibos"]["reci
   };
 }
 
-export function datosPolizas(c: Conjunto, pestana: DatosPolizas["filtros"]["pestana"] = "polizas"): DatosPolizas {
+export function datosPolizas(
+  c: Conjunto,
+  pestana: DatosPolizas["filtros"]["pestana"] = "polizas",
+  vista: DatosPolizas["filtros"]["vista"] = "tarjetas"
+): DatosPolizas {
   const f: Fila = c === "demo" ? "demo" : "extremos";
   const n = { demo: 3, extremos: 8, vacio: 0, uno: 1, masivo: 200 }[c];
   const total = { demo: 3, extremos: 1_284, vacio: 0, uno: 1, masivo: 12_483 }[c];
@@ -288,7 +293,7 @@ export function datosPolizas(c: Conjunto, pestana: DatosPolizas["filtros"]["pest
       })),
     },
     ejecutivos: ejecutivosOpciones(c),
-    filtros: { q: "", soloFaltaContacto: false, ejecutivo: "", estatus: "", filtroRecibos: "todos", pestana },
+    filtros: { q: "", soloFaltaContacto: false, ejecutivo: "", estatus: "", filtroRecibos: "todos", pestana, vista },
     usuario: { id: "usr0", soloSuCartera: false, verComisiones: true },
     hoy: hoyISO(),
   };
@@ -414,6 +419,45 @@ export function datosPoliza(c: Conjunto): DatosPoliza {
     equipo: equipoOpciones(c),
     agencia: "Grupo Asegurador del Bajío y Occidente, Agente de Seguros y Fianzas, S.A. de C.V.",
     usuario: { id: "usr0", email: "laura.mendez@example.com", verComisiones: true, coordinaTareas: true },
+    hoy: hoyISO(),
+  };
+}
+
+// ── Directorio de clientes ────────────────────────────────────────────────────────────────────
+
+export function datosClientes(c: Conjunto, vista: DatosClientes["vista"]): DatosClientes {
+  const f: Fila = c === "demo" ? "demo" : "extremos";
+  const n = { demo: 6, extremos: 8, vacio: 0, uno: 1, masivo: 200 }[c];
+  const totalGeneral = { demo: 6, extremos: 12_483, vacio: 0, uno: 1, masivo: 12_483 }[c];
+  return {
+    listado: {
+      clientes: rango(n).map((i) => {
+        // Unos sin pólizas en vigor, otros con muchas y de varias aseguradoras.
+        const vigentes = f === "demo" ? ciclo([3, 1, 0, 2], i) : ciclo([0, 1, 48, 7], i);
+        return {
+          id: `cli${i}`,
+          nombre: f === "demo" ? ciclo([...CLIENTES_DEMO, "Mariana Ortiz Luna", "Transportes del Golfo"], i) : cliente(f, i),
+          rfc: ciclo(RFCS, i),
+          telefono: i % 4 === 3 ? "" : telefono(f, i),
+          email: i % 3 === 2 ? "" : correo(f, i),
+          tipoPersona: i % 2 === 0 ? ("FISICA" as const) : ("MORAL" as const),
+          ejecutivo: ejecutivo(f, i),
+          _count: { polizas: vigentes + ciclo([0, 2, 13], i) },
+          polizas: rango(vigentes).map((j) => ({
+            vigencia_fin: dia(ciclo([12, 0, 90, 200, 25], i + j)),
+            prima_total: dec(prima(f, i + j)),
+            aseguradora: { nombre: aseguradora(f, i + j).nombre, color_hex: aseguradora(f, i + j).color_hex },
+          })),
+        };
+      }),
+      total: { demo: 6, extremos: 12_483, vacio: 0, uno: 1, masivo: 12_483 }[c],
+      totalGeneral,
+    },
+    ejecutivos: ejecutivosOpciones(c),
+    filtros: { q: "", ejecutivo: "" },
+    usuarioId: "usr0",
+    vista,
+    limite: 200,
     hoy: hoyISO(),
   };
 }

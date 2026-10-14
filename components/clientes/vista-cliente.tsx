@@ -19,7 +19,7 @@ import { DuplicadosCliente } from "@/components/clientes/duplicados-cliente";
 import { EditarCliente } from "@/components/clientes/editar-cliente";
 import { SeguimientoCliente } from "@/components/clientes/seguimiento-cliente";
 import { NumeroAnimado } from "@/components/dashboard/numero-animado";
-import { AvatarIniciales } from "@/components/layout/avatar-iniciales";
+import { AvatarIniciales, colorDeNombre } from "@/components/layout/avatar-iniciales";
 import { BarraAccionesMovil, numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
 import {
   AseguradoraTag,
@@ -143,6 +143,8 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
     .filter((_, i) => estados[i] === "vigente" || estados[i] === "por_vencer")
     .reduce((s, p) => s + Number(p.prima_total), 0);
   const wa = cliente.telefono ? numeroWhatsApp(cliente.telefono) : null;
+  // Los paneles del expediente llevan el color propio del cliente (el de su avatar y su tarjeta).
+  const acento = colorDeNombre(cliente.nombre);
   const nacimiento = fechaNacimientoCliente(
     {
       fechaNacimiento: cliente.fechaNacimiento ? iso(cliente.fechaNacimiento) : null,
@@ -164,7 +166,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
         </Link>
       </Button>
 
-      <Card className="animate-entrar gap-0 overflow-hidden py-0">
+      <Card acento={acento} className="animate-entrar gap-0 py-0">
         <div className="relative flex flex-wrap items-center gap-5 border-b border-primary/15 bg-[radial-gradient(90%_140%_at_0%_0%,color-mix(in_srgb,var(--color-primary)_14%,transparent),transparent_60%)] px-5 py-6">
           {/* Avatar con aro de la marca y un halo suave detrás. */}
           <div className="relative shrink-0">
@@ -284,7 +286,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <FileText className="size-4 text-primary" /> Pólizas del cliente
@@ -370,7 +372,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
             )}
           </Card>
 
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <MessagesSquare className="size-4 text-primary" /> Seguimiento
@@ -388,7 +390,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
         </div>
 
         <div className="min-w-0 space-y-6 xl:sticky xl:top-20">
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ListTodo className="size-4 text-primary" /> Tareas
@@ -418,7 +420,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
           </Card>
 
           {usuario.admin && duplicados.length > 0 && (
-            <Card className="gap-0 border-warning/40 py-0">
+            <Card acento="var(--color-warning)" className="gap-0 border-warning/40 py-0">
               <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Combine className="size-4 text-warning" /> Posibles duplicados

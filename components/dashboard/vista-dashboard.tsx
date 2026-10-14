@@ -34,6 +34,7 @@ import { ValorAjustado } from "@/components/dashboard/valor-ajustado";
 import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { EstadoVacio } from "@/components/layout/estado-vacio";
+import { IconoRelieve } from "@/components/layout/icono-relieve";
 import { Inclinable } from "@/components/layout/inclinable";
 import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
 import { ListaTareas } from "@/components/tareas/lista-tareas";
@@ -81,23 +82,22 @@ function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href, orde
   return (
     // Entrada (CSS) e inclinación 3D (resorte) en elementos distintos: no se pisan el transform.
     <div className="h-full animate-entrar" style={{ animationDelay: `${orden * 60}ms` }}>
-      <Inclinable className="h-full rounded-xl">
+      <Inclinable className="group/tarjeta h-full rounded-xl" grados={4}>
         <Link
           href={href}
           className="group block h-full rounded-xl outline-none transition-[scale] duration-200 ease-out focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]"
         >
           <Card
+            acento="var(--color-primary)"
             className={cn(
-              "h-full gap-3 py-5 transition-[border-color,background-color,box-shadow] duration-150 ease-out",
-              "group-hover:border-primary/50 group-hover:bg-primary/[0.04] group-hover:shadow-lg group-hover:shadow-primary/10"
+              "h-full gap-3 py-5 transition-[border-color,box-shadow] duration-150 ease-out",
+              "group-hover:border-primary/50 group-hover:shadow-lg group-hover:shadow-primary/10"
             )}
           >
             <CardHeader className="px-5">
               <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
               <CardAction>
-                <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary transition-[color,background-color,border-color,rotate,scale] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0">
-                  <Icon className="size-4" />
-                </div>
+                <IconoRelieve color="var(--color-primary)" icono={Icon} className="size-10" />
               </CardAction>
             </CardHeader>
             <CardContent className="@container space-y-2 px-5">
@@ -177,55 +177,57 @@ function AccionesRapidas({ acciones }: { acciones: AccionRapida[] }) {
       // Una columna por acción en pantallas anchas (3 para ADMIN, 2 para ejecutivos): la fila queda completa.
       className={cn("grid grid-cols-1 gap-3", acciones.length >= 3 ? "lg:grid-cols-3" : "sm:grid-cols-2")}
     >
-      {acciones.map(({ href, label, descripcion, icono: Icon, destacada }, i) => (
-        <Link
-          key={label}
-          href={href}
-          style={{ animationDelay: `${120 + i * 60}ms` }}
-          className={cn(
-            "group relative flex animate-entrar items-center gap-3 overflow-hidden rounded-xl border px-4 py-3 transition-[border-color,background-color,box-shadow,scale,translate] duration-200 ease-out outline-none",
-            "hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 active:translate-y-0 active:scale-[0.98] motion-reduce:hover:translate-y-0",
-            destacada
-              ? "border-primary bg-primary text-primary-foreground shadow-[0_8px_24px_-10px_var(--color-primary)] hover:bg-primary/92 hover:shadow-[0_14px_32px_-10px_var(--color-primary)]"
-              : "bg-card hover:border-primary/50 hover:bg-primary/[0.04] hover:shadow-primary/10"
-          )}
-        >
-          {/* Destello que cruza la acción principal al pasar el mouse. */}
-          {destacada && (
-            <span
-              aria-hidden
-              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-0 transition-[translate,opacity] duration-700 ease-out group-hover:translate-x-[400%] group-hover:opacity-100 motion-reduce:hidden"
-            />
-          )}
-          <span
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg transition-[scale,rotate,background-color,color,border-color] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0",
-              destacada
-                ? "bg-primary-foreground/10"
-                : "border bg-background text-primary group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground"
-            )}
-          >
-            <Icon className="size-4" />
-          </span>
-          <span className="min-w-0">
-            <span className="block text-sm font-semibold">{label}</span>
-            <span
-              className={cn(
-                "line-clamp-2 block text-xs leading-snug",
-                destacada ? "text-primary-foreground/75" : "text-muted-foreground"
-              )}
+      {acciones.map(({ href, label, descripcion, icono, destacada }, i) => (
+        <div key={label} className="animate-entrar" style={{ animationDelay: `${120 + i * 60}ms` }}>
+          <Inclinable className="group/tarjeta h-full rounded-xl" grados={3}>
+            <Link
+              href={href}
+              className="group block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]"
             >
-              {descripcion}
-            </span>
-          </span>
-          <ArrowRight
-            aria-hidden
-            className={cn(
-              "ml-auto size-4 shrink-0 -translate-x-1 opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100",
-              destacada ? "text-primary-foreground" : "text-primary"
-            )}
-          />
-        </Link>
+              <Card
+                acento="var(--color-primary)"
+                className={cn(
+                  "h-full flex-row items-center gap-3 px-4 py-3 transition-[border-color,background-color,box-shadow] duration-200 ease-out",
+                  destacada
+                    ? "border-primary bg-primary text-primary-foreground shadow-[0_8px_24px_-10px_var(--color-primary)] group-hover:shadow-[0_14px_32px_-10px_var(--color-primary)]"
+                    : "group-hover:border-primary/50 group-hover:shadow-lg group-hover:shadow-primary/10"
+                )}
+              >
+                {/* Destello que cruza la acción principal al pasar el mouse. */}
+                {destacada && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-0 transition-[translate,opacity] duration-700 ease-out group-hover:translate-x-[400%] group-hover:opacity-100 motion-reduce:hidden"
+                  />
+                )}
+                <IconoRelieve
+                  // Sobre el fondo de la marca, el relieve va en un tono más oscuro para que se distinga.
+                  color={destacada ? "color-mix(in srgb, var(--color-primary) 55%, black)" : "var(--color-primary)"}
+                  icono={icono}
+                  className="size-10"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{label}</span>
+                  <span
+                    className={cn(
+                      "line-clamp-2 block text-xs leading-snug",
+                      destacada ? "text-primary-foreground/75" : "text-muted-foreground"
+                    )}
+                  >
+                    {descripcion}
+                  </span>
+                </span>
+                <ArrowRight
+                  aria-hidden
+                  className={cn(
+                    "ml-auto size-4 shrink-0 -translate-x-1 opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100",
+                    destacada ? "text-primary-foreground" : "text-primary"
+                  )}
+                />
+              </Card>
+            </Link>
+          </Inclinable>
+        </div>
       ))}
     </nav>
   );
@@ -241,7 +243,10 @@ type Pendiente = {
   urgente?: boolean;
 };
 
-/** Tarjetas "Para hoy": lo que requiere acción, con un clic a su pantalla. En cero se ven apagadas. */
+/**
+ * Tarjetas "Para hoy": lo que requiere acción, con un clic a su pantalla, con el estilo de
+ * Aseguradoras en el color de su urgencia (rojo, ámbar o, en cero, verde y apagadas).
+ */
 function ParaHoy({ pendientes }: { pendientes: Pendiente[] }) {
   return (
     <section aria-label="Para hoy" className="space-y-2">
@@ -249,52 +254,51 @@ function ParaHoy({ pendientes }: { pendientes: Pendiente[] }) {
       <div className={cn("grid gap-3 sm:grid-cols-2", pendientes.length >= 5 ? "lg:grid-cols-3 2xl:grid-cols-5" : "xl:grid-cols-4")}>
         {pendientes.map((p, i) => {
           const activo = p.cantidad > 0;
+          const color = activo ? (p.urgente ? "var(--color-destructive)" : "var(--color-warning)") : "var(--color-success)";
           return (
-            <Link
-              key={p.titulo}
-              href={p.href}
-              style={{ animationDelay: `${i * 50}ms` }}
-              className={cn(
-                "group flex animate-entrar items-start gap-3 rounded-xl border bg-card px-4 py-3 transition-[color,background-color,border-color,box-shadow,scale,translate] duration-200 ease-out outline-none hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 active:translate-y-0 active:scale-[0.98] motion-reduce:hover:translate-y-0",
-                activo
-                  ? p.urgente
-                    ? "border-destructive/40 hover:bg-destructive/5"
-                    : "border-warning/40 hover:bg-warning/5"
-                  : "hover:border-primary/40"
-              )}
-            >
-              <span
-                className={cn(
-                  "relative flex size-9 shrink-0 items-center justify-center rounded-lg border transition-[scale,rotate] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0",
-                  activo ? (p.urgente ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning") : "bg-background text-success"
-                )}
-              >
-                {activo ? <p.icono className="size-4" /> : <CheckCircle2 className="size-4" />}
-                {/* Lo urgente con pendientes llama la atención con un punto que late. */}
-                {activo && p.urgente && (
-                  <span className="absolute -top-1 -right-1 flex size-2.5">
-                    <span className="absolute inline-flex size-full rounded-full bg-destructive opacity-75 motion-safe:animate-ping" />
-                    <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
-                  </span>
-                )}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex flex-wrap items-baseline justify-between gap-x-2">
-                  <span className="min-w-0 text-sm font-medium">{p.titulo}</span>
-                  <span
+            <div key={p.titulo} className="animate-entrar" style={{ animationDelay: `${i * 50}ms` }}>
+              <Inclinable className="group/tarjeta h-full rounded-xl" grados={4}>
+                <Link
+                  href={p.href}
+                  className="group block h-full rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]"
+                >
+                  <Card
+                    acento={color}
                     className={cn(
-                      "text-lg font-semibold tabular-nums",
-                      activo ? (p.urgente ? "text-destructive" : "text-warning") : "text-muted-foreground"
+                      "h-full flex-row items-start gap-3 px-4 py-3 transition-[border-color,box-shadow,opacity] duration-200 ease-out group-hover:shadow-lg",
+                      !activo && "opacity-80 group-hover:opacity-100"
                     )}
                   >
-                    <NumeroAnimado valor={formatNumero(p.cantidad)} duracion={0.7} />
-                  </span>
-                </span>
-                <span className="line-clamp-2 block text-xs text-muted-foreground">
-                  {activo ? p.detalle : "Todo al día"}
-                </span>
-              </span>
-            </Link>
+                    <span className="relative shrink-0">
+                      <IconoRelieve color={color} icono={activo ? p.icono : CheckCircle2} className="size-10" />
+                      {/* Lo urgente con pendientes llama la atención con un punto que late. */}
+                      {activo && p.urgente && (
+                        <span className="absolute -top-1 -right-1 flex size-2.5">
+                          <span className="absolute inline-flex size-full rounded-full bg-destructive opacity-75 motion-safe:animate-ping" />
+                          <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
+                        </span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-baseline justify-between gap-x-2">
+                        <span className="min-w-0 text-sm font-medium">{p.titulo}</span>
+                        <span
+                          className={cn(
+                            "text-xl font-semibold tabular-nums",
+                            activo ? (p.urgente ? "text-destructive" : "text-warning") : "text-muted-foreground"
+                          )}
+                        >
+                          <NumeroAnimado valor={formatNumero(p.cantidad)} duracion={0.7} />
+                        </span>
+                      </span>
+                      <span className="line-clamp-2 block text-xs text-muted-foreground">
+                        {activo ? p.detalle : "Todo al día"}
+                      </span>
+                    </span>
+                  </Card>
+                </Link>
+              </Inclinable>
+            </div>
           );
         })}
       </div>
@@ -464,7 +468,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
         style={{ animationDelay: "320ms" }}
       >
         <div className="min-w-0 space-y-6">
-          <Card>
+          <Card acento="var(--color-primary)">
             <CardHeader>
               <CardTitle className="text-base">Producción por Aseguradora</CardTitle>
               <CardDescription>Prima emitida de las pólizas que inician vigencia {enPeriodo}.</CardDescription>
@@ -488,7 +492,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
           </Card>
 
           {porEjecutivo && porEjecutivo.length > 0 && (
-            <Card>
+            <Card acento="var(--color-primary)">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Users className="size-4 text-primary" /> Producción por Ejecutivo
@@ -503,7 +507,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
             </Card>
           )}
 
-          <Card className="gap-0 py-0">
+          <Card acento="var(--color-primary)" className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Últimos Recibos Conciliados</CardTitle>
               <CardDescription>Recibos conciliados en el periodo contra estados de cuenta.</CardDescription>
@@ -578,7 +582,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
         </div>
 
         <div className="min-w-0 space-y-6 xl:sticky xl:top-20">
-          <Card className="gap-0 py-0">
+          <Card acento="var(--color-primary)" className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ListTodo className="size-4 text-primary" /> Mis pendientes
@@ -605,7 +609,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
           </Card>
 
           {paraHoy.cumpleanos.length > 0 && (
-            <Card className="gap-0 py-0">
+            <Card acento="var(--color-primary)" className="gap-0 py-0">
               <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Cake className="size-4 text-primary" /> Cumpleaños
@@ -651,7 +655,7 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
             </Card>
           )}
 
-          <Card className="gap-0 py-0">
+          <Card acento="var(--color-warning)" className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <CalendarCheck className="size-4 text-warning" />

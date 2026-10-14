@@ -99,6 +99,8 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
   // La comisión solo la ve el SUPERADMIN.
   const { verComisiones } = usuario;
   const cancelada = poliza.canceladaAt !== null;
+  // Los paneles del expediente llevan el color de la aseguradora (como sus tarjetas en el catálogo).
+  const acento = normalizarHex(poliza.aseguradora.color_hex) ?? "var(--color-primary)";
   const estado = estadoVigencia(poliza.vigencia_fin, hoy, DIAS_POR_VENCER, poliza.canceladaAt);
   // "Renovar" se destaca cuando la póliza está por vencer o ya venció.
   const toca = estado === "por_vencer" || estado === "vencida";
@@ -288,7 +290,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
-          <Card>
+          <Card acento={acento}>
             <CardHeader>
               <CardTitle className="text-base">Datos de la póliza</CardTitle>
             </CardHeader>
@@ -306,9 +308,9 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             </CardContent>
           </Card>
 
-          <DatosRamo ramo={poliza.ramo} datos={poliza.datos_ramo} sumaIlimitada={poliza.sumaAseguradaIlimitada} />
+          <DatosRamo acento={acento} ramo={poliza.ramo} datos={poliza.datos_ramo} sumaIlimitada={poliza.sumaAseguradaIlimitada} />
 
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Asegurados · {poliza.asegurados.length}</CardTitle>
             </CardHeader>
@@ -346,7 +348,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             )}
           </Card>
 
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Recibos</CardTitle>
               <AvanceRecibos estados={poliza.recibos.map((r) => r.estado)} />
@@ -397,7 +399,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             </Table>
           </Card>
 
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <FilePenLine className="size-4 text-primary" /> Endosos · {poliza.endosos.length}
@@ -446,7 +448,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
         </div>
 
         <div className="min-w-0 space-y-6 xl:sticky xl:top-20">
-          <Card className="gap-0 py-0">
+          <Card acento={acento} className="gap-0 py-0">
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="flex items-center gap-2 text-base">
                 <ListTodo className="size-4 text-primary" /> Tareas
@@ -474,7 +476,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             />
           </Card>
 
-          <Card>
+          <Card acento={acento}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <FolderOpen className="size-4 text-primary" />
@@ -643,7 +645,18 @@ const humanizar = (clave: string) =>
  * formulario de captura. Lo que no corresponde a un campo actual (p. ej. datos de una
  * versión anterior del formulario) se muestra en "Otros datos" para no ocultarlo.
  */
-function DatosRamo({ ramo, datos, sumaIlimitada }: { ramo: string; datos: unknown; sumaIlimitada: boolean }) {
+function DatosRamo({
+  ramo,
+  datos,
+  sumaIlimitada,
+  acento,
+}: {
+  ramo: string;
+  datos: unknown;
+  sumaIlimitada: boolean;
+  /** Color de la aseguradora, para la línea y el halo del panel. */
+  acento: string;
+}) {
   const valores =
     typeof datos === "object" && datos !== null && !Array.isArray(datos)
       ? (datos as Record<string, unknown>)
@@ -680,7 +693,7 @@ function DatosRamo({ ramo, datos, sumaIlimitada }: { ramo: string; datos: unknow
   ].filter((b) => b.filas.length > 0);
 
   return (
-    <Card>
+    <Card acento={acento}>
       <CardHeader>
         <CardTitle className="text-base">Datos del ramo</CardTitle>
       </CardHeader>

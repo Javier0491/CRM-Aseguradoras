@@ -22,6 +22,14 @@ const VISTAS: { clave: VistaTareas; label: string; corta: string }[] = [
   { clave: "completadas", label: "Completadas", corta: "Hechas" },
 ];
 
+/** Color de cada grupo de tareas: la línea y el halo de su tarjeta. */
+const COLOR_GRUPO: Record<(typeof GRUPOS_TAREA)[number]["clave"], string> = {
+  vencida: "var(--color-destructive)",
+  hoy: "var(--color-warning)",
+  proxima: "var(--color-primary)",
+  completada: "var(--color-success)",
+};
+
 const fechaLarga = new Intl.DateTimeFormat("es-MX", {
   weekday: "long",
   day: "numeric",
@@ -150,6 +158,7 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
               {grupos.map((g, i) => (
                 <Card
                   key={g.clave}
+                  acento={COLOR_GRUPO[g.clave]}
                   className="animate-entrar gap-0 py-0"
                   style={{ animationDelay: `${250 + i * 80}ms` }}
                 >
@@ -216,7 +225,7 @@ function TuDia({ resumen }: { resumen: MiResumenTareas }) {
           : `${faltan} para cerrar el día.`;
 
   return (
-    <Card className="animate-entrar flex-row items-center gap-4 px-5 py-4">
+    <Card acento="var(--color-primary)" className="animate-entrar flex-row items-center gap-4 px-5 py-4">
       <AnilloDia porcentaje={porcentaje} completo={completo} libre={total === 0} />
       <div className="min-w-0 space-y-0.5">
         <p className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Tu día</p>
@@ -284,7 +293,7 @@ function AvanceEquipo({ personas, usuarioId }: { personas: AvancePersona[]; usua
   const general = hechas + pendientes === 0 ? 0 : Math.round((hechas / (hechas + pendientes)) * 100);
   return (
     // Fijo al hacer scroll en pantallas anchas; con un equipo grande la lista se recorre por dentro.
-    <Card className="gap-0 py-0 xl:sticky xl:top-20 xl:max-h-[calc(100svh-6rem)]">
+    <Card acento="var(--color-primary)" className="gap-0 py-0 xl:sticky xl:top-20 xl:max-h-[calc(100svh-6rem)]">
       <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <Users className="size-4 text-primary" /> Avance del equipo

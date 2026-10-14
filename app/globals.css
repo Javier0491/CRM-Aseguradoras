@@ -391,6 +391,33 @@ html.light,
   }
 }
 
+/* Acento de una tarjeta (Card con `acento`): línea de su color con brillo arriba y un halo en la
+   esquina superior derecha. Degradados, sin filtros: aguanta cientos de tarjetas en pantalla. */
+[data-slot="card-acento"] {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+[data-slot="card-acento"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--acento);
+  box-shadow: 0 0 18px 2px var(--luz);
+}
+[data-slot="card-acento"]::after {
+  content: "";
+  position: absolute;
+  top: -5rem;
+  right: -5rem;
+  width: 12rem;
+  height: 12rem;
+  border-radius: 9999px;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--acento) 32%, transparent), transparent);
+}
+
 /* Tablas: las filas entran en cascada (máx. 16 escalones) y la fila bajo el cursor se marca con
    una línea de la marca a la izquierda. */
 [data-slot="table-body"] > [data-slot="table-row"] {

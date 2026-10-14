@@ -7,6 +7,9 @@ function tonoDe(nombre: string) {
   return h;
 }
 
+/** Color propio de una persona o empresa (el de su avatar): para el acento de su tarjeta. */
+export const colorDeNombre = (nombre: string) => `hsl(${tonoDe(nombre)} 58% 52%)`;
+
 /** "Comercializadora del Centro, S.A. de C.V." → "CC"; "Ana Lucía Torres" → "AT". */
 export function iniciales(nombre: string) {
   const palabras = nombre

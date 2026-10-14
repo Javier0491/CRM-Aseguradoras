@@ -17,12 +17,15 @@ import {
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { EstadoVacio } from "@/components/layout/estado-vacio";
 import { FiltroEjecutivo } from "@/components/layout/filtro-ejecutivo";
+import { IconoRelieve } from "@/components/layout/icono-relieve";
 import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
 import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
-import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
+import { RamoBadge } from "@/components/polizas/poliza-ui";
 import { MoverEtapa } from "@/components/renovaciones/mover-etapa";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { monograma } from "@/lib/aseguradoras/monograma";
+import { normalizarHex } from "@/lib/color";
 import { formatFecha, formatMoneda, formatNumero, formatPorcentaje } from "@/lib/format";
 import type { getEmbudo, TarjetaEmbudo } from "@/lib/renovaciones/queries";
 import { DIAS_EMBUDO, DIAS_VENCIDAS_EMBUDO, urgenciaRenovacion, type ColumnaEmbudo } from "@/lib/renovaciones/reglas";
@@ -244,85 +247,93 @@ function TarjetaRenovacion({ p, agencia, retraso }: { p: TarjetaEmbudo; agencia:
     `Hola ${p.cliente.nombre}, le escribimos de ${agencia}: su póliza ${p.numeroImpreso} de ${p.aseguradora.nombre} ` +
     `vence el ${formatFecha(p.vigencia_fin)}. ¿Le ayudamos con la renovación?`;
 
+  const color = normalizarHex(p.aseguradora.color_hex) ?? "#71717a";
+
   return (
-    // data-slot="card" y su capa de luz (primero, por space-y): refleja el cursor como las demás tarjetas.
-    <li
-      data-slot="card"
-      style={{ animationDelay: `${retraso}ms` }}
-      className={cn(
-        "relative isolate animate-entrar space-y-2 rounded-lg border bg-card p-3 shadow-xs transition-[translate,box-shadow,border-color] duration-200 ease-out",
-        "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full",
-        "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md motion-reduce:hover:translate-y-0",
-        !cerrada && FRANJA_URGENCIA[urgencia]
-      )}
-    >
-      <span data-slot="card-luz" aria-hidden />
-      <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
-        <Link
-          href={`/polizas/${p.id}`}
-          title={p.cliente.nombre}
-          className="min-w-0 text-sm font-medium hover:text-primary hover:underline"
-        >
-          <span className="line-clamp-2 wrap-anywhere">{p.cliente.nombre}</span>
-        </Link>
-        {!cerrada && (
-          <span className={cn("shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium tabular-nums", ESTILO_URGENCIA[urgencia])}>
-            {p.dias < 0 ? `Venció hace ${-p.dias} d` : p.dias === 0 ? "Vence hoy" : `En ${p.dias} d`}
-          </span>
+    // Estilo de Aseguradoras en el color de la compañía; la franja izquierda marca la urgencia.
+    <li className="animate-entrar" style={{ animationDelay: `${retraso}ms` }}>
+      <Card
+        acento={color}
+        className={cn(
+          "group/tarjeta gap-2 rounded-lg px-3 py-3 shadow-xs transition-[translate,box-shadow,border-color] duration-200 ease-out",
+          "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full",
+          "hover:-translate-y-0.5 hover:shadow-md motion-reduce:hover:translate-y-0",
+          !cerrada && FRANJA_URGENCIA[urgencia]
         )}
-      </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-        <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
-        <RamoBadge ramo={p.ramo} />
-      </div>
-      <p className="flex flex-wrap items-baseline justify-between gap-x-2 text-xs text-muted-foreground">
-        <span className="min-w-0 font-mono wrap-anywhere">{p.numeroImpreso}</span>
-        <span className="ml-auto font-medium text-foreground tabular-nums">{formatMoneda(p.prima_total)}</span>
-      </p>
-      <p className="text-[11px] text-muted-foreground">
-        Vence el {formatFecha(p.vigencia_fin)}
-        {p.ejecutivo && ` · ${p.ejecutivo.nombre}`}
-      </p>
-      {p.renovacionNota && !p.renovacion && (
-        <p className={cn("rounded-md bg-muted px-2 py-1 text-[11px]", p.columna === "perdida" && "text-destructive")}>
-          {p.renovacionNota}
-        </p>
-      )}
-      {p.renovacion ? (
-        <Button asChild variant="ghost" size="sm" className="h-7 w-full justify-between px-2 text-xs text-success">
-          <Link href={`/polizas/${p.renovacion.id}`}>
-            Renovada con{" "}
-            <span className="min-w-0 truncate font-mono" title={p.renovacion.numeroImpreso}>
-              {p.renovacion.numeroImpreso}
-            </span>{" "}
-            <ArrowRight />
-          </Link>
-        </Button>
-      ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <MoverEtapa polizaId={p.id} numero={p.numeroImpreso} actual={p.columna} compacto />
-          {p.columna !== "perdida" && (
-            <Button asChild size="sm" className="h-7 px-2 text-xs">
-              <Link href={`/captura?renovar=${p.id}`}>
-                <RefreshCcw /> Renovar
-              </Link>
-            </Button>
-          )}
-          {wa && (
-            <Button asChild variant="ghost" size="icon" className="ml-auto size-7 hover:text-success">
-              <a
-                href={`https://wa.me/${wa}?text=${encodeURIComponent(mensaje)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`WhatsApp a ${p.cliente.nombre}`}
-                title="Contactar por WhatsApp"
-              >
-                <MessageCircle className="size-3.5" />
-              </a>
-            </Button>
+      >
+        <div className="flex items-start gap-2.5">
+          <IconoRelieve color={color} texto={monograma(p.aseguradora.nombre)} className="size-8 rounded-lg text-[10px]" />
+          <div className="min-w-0 flex-1">
+            <Link
+              href={`/polizas/${p.id}`}
+              title={p.cliente.nombre}
+              className="block min-w-0 text-sm font-medium hover:text-primary hover:underline"
+            >
+              <span className="line-clamp-2 wrap-anywhere">{p.cliente.nombre}</span>
+            </Link>
+            <p className="truncate text-[11px] text-muted-foreground" title={p.aseguradora.nombre}>
+              {p.aseguradora.nombre}
+            </p>
+          </div>
+        </div>
+        {/* Ramo y urgencia en su propia fila: en columnas angostas el nombre conserva su ancho. */}
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+          <RamoBadge ramo={p.ramo} />
+          {!cerrada && (
+            <span className={cn("ml-auto shrink-0 rounded-md border px-1.5 py-0.5 text-[11px] font-medium tabular-nums", ESTILO_URGENCIA[urgencia])}>
+              {p.dias < 0 ? `Venció hace ${-p.dias} d` : p.dias === 0 ? "Vence hoy" : `En ${p.dias} d`}
+            </span>
           )}
         </div>
-      )}
+        <p className="flex flex-wrap items-baseline justify-between gap-x-2 text-xs text-muted-foreground">
+          <span className="min-w-0 font-mono wrap-anywhere">{p.numeroImpreso}</span>
+          <span className="ml-auto font-medium text-foreground tabular-nums">{formatMoneda(p.prima_total)}</span>
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          Vence el {formatFecha(p.vigencia_fin)}
+          {p.ejecutivo && ` · ${p.ejecutivo.nombre}`}
+        </p>
+        {p.renovacionNota && !p.renovacion && (
+          <p className={cn("rounded-md bg-muted px-2 py-1 text-[11px]", p.columna === "perdida" && "text-destructive")}>
+            {p.renovacionNota}
+          </p>
+        )}
+        {p.renovacion ? (
+          <Button asChild variant="ghost" size="sm" className="h-7 w-full justify-between px-2 text-xs text-success">
+            <Link href={`/polizas/${p.renovacion.id}`}>
+              Renovada con{" "}
+              <span className="min-w-0 truncate font-mono" title={p.renovacion.numeroImpreso}>
+                {p.renovacion.numeroImpreso}
+              </span>{" "}
+              <ArrowRight />
+            </Link>
+          </Button>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <MoverEtapa polizaId={p.id} numero={p.numeroImpreso} actual={p.columna} compacto />
+            {p.columna !== "perdida" && (
+              <Button asChild size="sm" className="h-7 px-2 text-xs">
+                <Link href={`/captura?renovar=${p.id}`}>
+                  <RefreshCcw /> Renovar
+                </Link>
+              </Button>
+            )}
+            {wa && (
+              <Button asChild variant="ghost" size="icon" className="ml-auto size-7 hover:text-success">
+                <a
+                  href={`https://wa.me/${wa}?text=${encodeURIComponent(mensaje)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`WhatsApp a ${p.cliente.nombre}`}
+                  title="Contactar por WhatsApp"
+                >
+                  <MessageCircle className="size-3.5" />
+                </a>
+              </Button>
+            )}
+          </div>
+        )}
+      </Card>
     </li>
   );
 }

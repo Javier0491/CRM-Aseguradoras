@@ -3,21 +3,38 @@ import { cn } from "cn"
 
 /**
  * Tarjeta. Su borde y su interior reflejan la luz del cursor (data-slot="card-luz", ver
- * globals.css y components/layout/ambiente-espacio.tsx). La capa es absoluta: no ocupa lugar ni
- * entra en `gap`; va primero para no afectar a `space-y` (que mira al último hijo) y, con
- * `isolate`, queda detrás del contenido pero encima del fondo.
+ * globals.css y components/layout/ambiente-espacio.tsx). Las capas son absolutas: no ocupan lugar
+ * ni entran en `gap`; van primero para no afectar a `space-y` (que mira al último hijo) y, con
+ * `isolate`, quedan detrás del contenido pero encima del fondo.
+ *
+ * Con `acento` (un color CSS: el de una aseguradora, el tono de un cliente, var(--color-warning)…)
+ * la tarjeta lleva una línea de ese color con brillo arriba, un halo en la esquina y la luz del
+ * cursor de ese color: el estilo de las tarjetas de Aseguradoras.
  */
-function Card({ className, children, ...props }: React.ComponentProps<"div">) {
+function Card({
+  className,
+  children,
+  acento,
+  style,
+  ...props
+}: React.ComponentProps<"div"> & { acento?: string }) {
   return (
     <div
       data-slot="card"
       className={cn(
         "relative isolate flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        acento && "overflow-hidden",
         className
       )}
+      style={
+        acento
+          ? ({ "--acento": acento, "--luz": `color-mix(in srgb, ${acento} 75%, white)`, ...style } as React.CSSProperties)
+          : style
+      }
       {...props}
     >
       <span data-slot="card-luz" aria-hidden />
+      {acento && <span data-slot="card-acento" aria-hidden />}
       {children}
     </div>
   )
