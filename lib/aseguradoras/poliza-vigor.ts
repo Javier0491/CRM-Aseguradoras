@@ -25,3 +25,7 @@ const CON_FOLIO_INTERNO = new Set(["SURA"]);
 
 export const usaFolioInterno = (nombre: string | undefined) =>
   nombre !== undefined && CON_FOLIO_INTERNO.has(normalizar(nombre));
+
+/** Cómo se llama la clave de cobranza de la aseguradora en pantalla. */
+export const etiquetaPolizaVigor = (nombre: string | undefined) =>
+  usaFolioInterno(nombre) ? "Folio interno" : "Póliza vigor";

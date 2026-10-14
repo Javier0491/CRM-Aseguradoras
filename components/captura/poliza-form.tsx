@@ -63,7 +63,7 @@ import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
-import { usaFolioInterno, usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
+import { etiquetaPolizaVigor, usaFolioInterno, usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { subirArchivo } from "@/lib/archivos/subir";
 import { hoyISO } from "@/lib/format";
 import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
@@ -1009,7 +1009,7 @@ const CAMPOS_CLAVE = new Set(["numeroImpreso", "polizaVigor"]);
 
 /** La póliza vigor de SURA es el folio interno de su recibo. */
 const CAMPO_FOLIO_INTERNO = {
-  label: "Folio interno",
+  label: etiquetaPolizaVigor("SURA"),
   placeholder: "Ej. 1868609",
   hint: "Clave de cobranza de SURA; viene en la información del recibo.",
 };

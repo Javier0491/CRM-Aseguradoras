@@ -24,6 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { copiarTodosEnMemoria } from "@/lib/archivos/memoria";
+import { etiquetaPolizaVigor } from "@/lib/aseguradoras/poliza-vigor";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import {
   OCR_MAX_ARCHIVOS,
@@ -429,7 +430,7 @@ function ResultadoExtraccion({
     { campo: "ramo", label: "Ramo", valor: datos.ramo ? ramoLabels[datos.ramo] : undefined },
     ...camposGenerales.map((c) => ({
       campo: c.name,
-      label: c.label,
+      label: c.name === "polizaVigor" ? etiquetaPolizaVigor(datos.generales.aseguradora) : c.label,
       valor: datos.generales[c.name] ? mostrarValor(c.name, datos.generales[c.name]) : undefined,
     })),
     { campo: "referenciaPago", label: "Referencia de pago", valor: datos.referenciaPago ?? undefined },

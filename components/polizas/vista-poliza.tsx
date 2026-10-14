@@ -54,6 +54,7 @@ import {
   TIPOS_ARCHIVO,
   type TipoArchivo,
 } from "@/lib/archivos/config";
+import { etiquetaPolizaVigor } from "@/lib/aseguradoras/poliza-vigor";
 import { LIMITE_HISTORIAL, type getHistorialPoliza } from "@/lib/bitacora/historial-poliza";
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import type { EstadoRecibo } from "@/lib/generated/prisma/client";
@@ -186,7 +187,8 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
               </Link>
             </p>
             <p className="text-sm text-muted-foreground">
-              Póliza vigor <span className="font-mono text-primary">{poliza.polizaVigor ?? "—"}</span>
+              {etiquetaPolizaVigor(poliza.aseguradora.nombre)}{" "}
+              <span className="font-mono text-primary">{poliza.polizaVigor ?? "—"}</span>
               {anterior && (
                 <>
                   {" · "}renueva a{" "}
