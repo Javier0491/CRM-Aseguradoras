@@ -364,8 +364,9 @@ html.light,
   position: absolute;
   border-radius: inherit;
 }
+/* Justo dentro del borde (no encima): así también se ve en tarjetas con overflow-hidden. */
 [data-slot="card-luz"]::before {
-  inset: -1px;
+  inset: 0;
   padding: 1px;
   background: radial-gradient(
     260px circle at var(--lx, 50%) var(--ly, 50%),
