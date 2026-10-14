@@ -116,6 +116,10 @@ En algunas aseguradoras la póliza vigor se calcula a partir de la referencia de
   fundamental que la referencia se transcriba sin errores.
 - Si el número de póliza no aparece explícitamente, deja numeroImpreso en null; no lo inventes a
   partir de la referencia.
+- folioInterno: SOLO en SURA. Su clave de cobranza es el "Folio interno" que viene en la
+  información del recibo; transcríbelo exactamente. No lo confundas con el número de póliza, el
+  número de recibo, el "No. de cliente" ni la referencia bancaria. En otras aseguradoras, o si no
+  aparece, devuelve null.
 
 RAMO
 Analiza el tipo de póliza y determina el ramo del seguro. Debes clasificarlo ESTRICTAMENTE en una de

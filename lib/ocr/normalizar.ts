@@ -1,5 +1,6 @@
 // Convierte la salida del modelo en valores listos para el formulario.
 // La salida se trata como no confiable: se valida con las mismas reglas del formulario.
+import { usaFolioInterno } from "@/lib/aseguradoras/poliza-vigor";
 import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 import {
   camposGenerales,
@@ -170,7 +171,18 @@ export function normalizarExtraccion(
   if (generales.numeroImpreso) generales.numeroImpreso = generales.numeroImpreso.toUpperCase();
   const vigorReferencia = referenciaPago ? extraerPolizaVigorDeReferencia(referenciaPago) : null;
 
-  if (vigorReferencia) {
+  const folioInterno =
+    typeof obj.folioInterno === "string" ? obj.folioInterno.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 40) : "";
+
+  if (usaFolioInterno(generales.aseguradora)) {
+    // SURA cobra por el folio interno de su recibo, no por una clave derivada del número de póliza.
+    if (folioInterno) {
+      generales.polizaVigor = folioInterno;
+    } else {
+      delete generales.polizaVigor;
+      advertencias.push('No se encontró el "Folio interno" en el recibo de SURA; captúralo a mano.');
+    }
+  } else if (vigorReferencia) {
     generales.polizaVigor = vigorReferencia;
     advertencias.push(
       `Póliza vigor ${vigorReferencia} calculada de la referencia de pago ${referenciaPago}; verifícala.`

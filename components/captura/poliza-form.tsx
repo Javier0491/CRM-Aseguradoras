@@ -63,7 +63,7 @@ import { ArchivoInput } from "@/components/archivos/archivo-input";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
-import { usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
+import { usaFolioInterno, usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { subirArchivo } from "@/lib/archivos/subir";
 import { hoyISO } from "@/lib/format";
 import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
@@ -381,6 +381,8 @@ export function PolizaForm({
   const sinPolizaVigor =
     aseguradoraElegida !== undefined &&
     !usaPolizaVigorEn({ nombre: aseguradoraElegida.label, usaPolizaVigor: aseguradoraElegida.usaPolizaVigor !== false }, ramo);
+  // SURA: la clave de cobranza es el "Folio interno" del recibo; se captura, no se calcula.
+  const conFolioInterno = usaFolioInterno(aseguradoraElegida?.label);
 
   React.useEffect(() => {
     onRamoChange?.(ramo);
@@ -569,7 +571,7 @@ export function PolizaForm({
         control={control}
         render={({ field, fieldState }) => (
           <Campo
-            campo={campo}
+            campo={esVigor && conFolioInterno ? { ...campo, ...CAMPO_FOLIO_INTERNO } : campo}
             valor={field.value ?? ""}
             error={fieldState.error?.message}
             disabled={bloqueado || bloqueadoPorModo}
@@ -577,7 +579,7 @@ export function PolizaForm({
             onBlur={field.onBlur}
             destacado={esVigor}
             ayuda={
-              ayudaModo ?? (esVigor && vigorManual ? (
+              ayudaModo ?? (esVigor && vigorManual && !conFolioInterno ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -594,7 +596,7 @@ export function PolizaForm({
               field.onChange(v);
               limpiarAvisos();
               // En una renovación la póliza vigor es la de la cadena: no se recalcula.
-              if (esImpreso && !vigorManual && modo.tipo !== "renovacion") actualizarVigor(v);
+              if (esImpreso && !vigorManual && !conFolioInterno && modo.tipo !== "renovacion") actualizarVigor(v);
               if (esVigor) setVigorManual(true);
             }}
           />
@@ -1004,6 +1006,13 @@ const tipoInput: Partial<Record<CampoDef["type"], string>> = {
 };
 
 const CAMPOS_CLAVE = new Set(["numeroImpreso", "polizaVigor"]);
+
+/** La póliza vigor de SURA es el folio interno de su recibo. */
+const CAMPO_FOLIO_INTERNO = {
+  label: "Folio interno",
+  placeholder: "Ej. 1868609",
+  hint: "Clave de cobranza de SURA; viene en la información del recibo.",
+};
 
 function Campo({
   campo,

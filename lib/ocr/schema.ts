@@ -140,6 +140,12 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
           'Valor del campo "Referencia" o "Referencia de Pago Actual", transcrito carácter por carácter ' +
           "sin espacios (ej. MEDICA00000I12345670). null si no aparece.",
       },
+      folioInterno: {
+        type: ["string", "null"],
+        description:
+          'Solo SURA: el "Folio interno" impreso en la información del recibo, tal como aparece. ' +
+          "null en otras aseguradoras o si no aparece.",
+      },
       advertencias: {
         type: "array",
         items: { type: "string" },
@@ -153,6 +159,7 @@ export function construirEsquemaExtraccion(aseguradoras: readonly string[]): Jso
       "asegurados_lista",
       "sumaAseguradaIlimitada",
       "referenciaPago",
+      "folioInterno",
       "advertencias",
     ],
     additionalProperties: false,
