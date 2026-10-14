@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useReducedMotion } from "framer-motion";
 
 import type { EstadoPersonaje } from "@/components/asistente/conversacion";
+import { Limite3D } from "@/components/layout/limite-3d";
 import { cn } from "@/lib/utils";
 
 // three.js pesa: se descarga solo cuando se muestra el personaje en 3D.
@@ -22,44 +23,8 @@ function suscribirPuntero(avisar: () => void) {
 }
 
 /**
- * Si el navegador puede dibujar 3D (WebGL). Puede faltar en equipos con la aceleración por
- * hardware apagada, en modo de bloqueo o con controladores viejos. Se calcula una vez.
- */
-let webgl: boolean | undefined;
-function hayWebgl() {
-  if (webgl === undefined) {
-    try {
-      const lienzo = document.createElement("canvas");
-      webgl = Boolean(lienzo.getContext("webgl2") ?? lienzo.getContext("webgl"));
-    } catch {
-      webgl = false;
-    }
-  }
-  return webgl;
-}
-
-const sinSuscripcion = () => () => {};
-
-/**
- * Si el 3D falla al dibujarse (WebGL que se cae, un error de three.js), se muestra el personaje en
- * CSS en lugar de tumbar la pantalla entera: es decorativo.
- */
-class LimitePersonaje3D extends React.Component<{ respaldo: React.ReactNode; children: React.ReactNode }, { fallo: boolean }> {
-  state = { fallo: false };
-  static getDerivedStateFromError() {
-    return { fallo: true };
-  }
-  componentDidCatch(error: unknown) {
-    console.warn("[personaje] el 3D falló; se usa la versión CSS.", error);
-  }
-  render() {
-    return this.state.fallo ? this.props.respaldo : this.props.children;
-  }
-}
-
-/**
  * Personaje del asistente. En computadora con WebGL es 3D; en celular (sin mouse), con "reducir
- * movimiento" o sin WebGL es la versión ligera en CSS, que se ve igual de cerca.
+ * movimiento", sin WebGL o si el 3D falla en ese equipo (Limite3D) es la versión ligera en CSS.
  */
 export function Personaje({ estado, color, className }: { estado: EstadoPersonaje; color: string; className?: string }) {
   const reducir = useReducedMotion();
@@ -68,15 +33,15 @@ export function Personaje({ estado, color, className }: { estado: EstadoPersonaj
     () => window.matchMedia(PUNTERO_FINO).matches,
     () => false
   );
-  const con3d = React.useSyncExternalStore(sinSuscripcion, hayWebgl, () => false);
+  const css = <PersonajeCss estado={estado} />;
   return (
     <div className={cn("relative aspect-square", className)} aria-hidden>
-      {fino && !reducir && con3d ? (
-        <LimitePersonaje3D respaldo={<PersonajeCss estado={estado} />}>
+      {fino && !reducir ? (
+        <Limite3D respaldo={css}>
           <Personaje3D color={color} estado={estado} />
-        </LimitePersonaje3D>
+        </Limite3D>
       ) : (
-        <PersonajeCss estado={estado} />
+        css
       )}
     </div>
   );
