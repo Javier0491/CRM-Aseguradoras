@@ -29,6 +29,7 @@ import {
 import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
 import { ProduccionChart } from "@/components/dashboard/produccion-chart";
 import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
+import { NumeroAnimado } from "@/components/dashboard/numero-animado";
 import { ValorAjustado } from "@/components/dashboard/valor-ajustado";
 import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
 import { ListaTareas } from "@/components/tareas/lista-tareas";
@@ -94,7 +95,11 @@ function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href, orde
           </CardAction>
         </CardHeader>
         <CardContent className="@container space-y-2 px-5">
-          <ValorAjustado valor={valor ?? "Sin datos"} className={cn("tracking-tight", valor === null && "text-muted-foreground")} />
+          <ValorAjustado
+            valor={valor ?? "Sin datos"}
+            animado={valor !== null}
+            className={cn("tracking-tight", valor === null && "text-muted-foreground")}
+          />
           <div className="flex items-center gap-2 text-xs">
             {variacion !== null && (
               <span
@@ -162,22 +167,32 @@ function AccionesRapidas({ acciones }: { acciones: AccionRapida[] }) {
       // Una columna por acción en pantallas anchas (3 para ADMIN, 2 para ejecutivos): la fila queda completa.
       className={cn("grid grid-cols-1 gap-3", acciones.length >= 3 ? "lg:grid-cols-3" : "sm:grid-cols-2")}
     >
-      {acciones.map(({ href, label, descripcion, icono: Icon, destacada }) => (
+      {acciones.map(({ href, label, descripcion, icono: Icon, destacada }, i) => (
         <Link
           key={label}
           href={href}
+          style={{ animationDelay: `${120 + i * 60}ms` }}
           className={cn(
-            "group flex items-center gap-3 rounded-xl border px-4 py-3 transition-[border-color,background-color,box-shadow,scale] duration-150 ease-out outline-none",
-            "hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]",
+            "group relative flex animate-entrar items-center gap-3 overflow-hidden rounded-xl border px-4 py-3 transition-[border-color,background-color,box-shadow,scale,translate] duration-200 ease-out outline-none",
+            "hover:-translate-y-0.5 hover:shadow-lg focus-visible:ring-[3px] focus-visible:ring-ring/50 active:translate-y-0 active:scale-[0.98] motion-reduce:hover:translate-y-0",
             destacada
-              ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-card hover:border-primary/50 hover:bg-primary/[0.04]"
+              ? "border-primary bg-primary text-primary-foreground shadow-[0_8px_24px_-10px_var(--color-primary)] hover:bg-primary/92 hover:shadow-[0_14px_32px_-10px_var(--color-primary)]"
+              : "bg-card hover:border-primary/50 hover:bg-primary/[0.04] hover:shadow-primary/10"
           )}
         >
+          {/* Destello que cruza la acción principal al pasar el mouse. */}
+          {destacada && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -translate-x-full -skew-x-12 bg-gradient-to-r from-transparent via-white/35 to-transparent opacity-0 transition-[translate,opacity] duration-700 ease-out group-hover:translate-x-[400%] group-hover:opacity-100 motion-reduce:hidden"
+            />
+          )}
           <span
             className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg",
-              destacada ? "bg-primary-foreground/10" : "border bg-background text-primary"
+              "flex size-9 shrink-0 items-center justify-center rounded-lg transition-[scale,rotate,background-color,color,border-color] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0",
+              destacada
+                ? "bg-primary-foreground/10"
+                : "border bg-background text-primary group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground"
             )}
           >
             <Icon className="size-4" />
@@ -193,6 +208,13 @@ function AccionesRapidas({ acciones }: { acciones: AccionRapida[] }) {
               {descripcion}
             </span>
           </span>
+          <ArrowRight
+            aria-hidden
+            className={cn(
+              "ml-auto size-4 shrink-0 -translate-x-1 opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100",
+              destacada ? "text-primary-foreground" : "text-primary"
+            )}
+          />
         </Link>
       ))}
     </nav>
@@ -215,14 +237,15 @@ function ParaHoy({ pendientes }: { pendientes: Pendiente[] }) {
     <section aria-label="Para hoy" className="space-y-2">
       <h2 className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">Para hoy</h2>
       <div className={cn("grid gap-3 sm:grid-cols-2", pendientes.length >= 5 ? "lg:grid-cols-3 2xl:grid-cols-5" : "xl:grid-cols-4")}>
-        {pendientes.map((p) => {
+        {pendientes.map((p, i) => {
           const activo = p.cantidad > 0;
           return (
             <Link
               key={p.titulo}
               href={p.href}
+              style={{ animationDelay: `${i * 50}ms` }}
               className={cn(
-                "group flex items-start gap-3 rounded-xl border bg-card px-4 py-3 transition-[color,background-color,border-color,scale] duration-150 ease-out outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]",
+                "group flex animate-entrar items-start gap-3 rounded-xl border bg-card px-4 py-3 transition-[color,background-color,border-color,box-shadow,scale,translate] duration-200 ease-out outline-none hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-[3px] focus-visible:ring-ring/50 active:translate-y-0 active:scale-[0.98] motion-reduce:hover:translate-y-0",
                 activo
                   ? p.urgente
                     ? "border-destructive/40 hover:bg-destructive/5"
@@ -232,11 +255,18 @@ function ParaHoy({ pendientes }: { pendientes: Pendiente[] }) {
             >
               <span
                 className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-lg border",
+                  "relative flex size-9 shrink-0 items-center justify-center rounded-lg border transition-[scale,rotate] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0",
                   activo ? (p.urgente ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning") : "bg-background text-success"
                 )}
               >
                 {activo ? <p.icono className="size-4" /> : <CheckCircle2 className="size-4" />}
+                {/* Lo urgente con pendientes llama la atención con un punto que late. */}
+                {activo && p.urgente && (
+                  <span className="absolute -top-1 -right-1 flex size-2.5">
+                    <span className="absolute inline-flex size-full rounded-full bg-destructive opacity-75 motion-safe:animate-ping" />
+                    <span className="relative inline-flex size-2.5 rounded-full bg-destructive" />
+                  </span>
+                )}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-baseline justify-between gap-x-2">
@@ -247,7 +277,7 @@ function ParaHoy({ pendientes }: { pendientes: Pendiente[] }) {
                       activo ? (p.urgente ? "text-destructive" : "text-warning") : "text-muted-foreground"
                     )}
                   >
-                    {formatNumero(p.cantidad)}
+                    <NumeroAnimado valor={formatNumero(p.cantidad)} duracion={0.7} />
                   </span>
                 </span>
                 <span className="line-clamp-2 block text-xs text-muted-foreground">
@@ -418,7 +448,10 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
         {tarjetas.map((t, i) => t && <MetricCard key={t.titulo} {...t} orden={i} />)}
       </section>
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+      <div
+        className="grid animate-entrar items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+        style={{ animationDelay: "320ms" }}
+      >
         <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader>

@@ -39,14 +39,14 @@ export function Personaje({ estado, color, className }: { estado: EstadoPersonaj
   );
 }
 
-/** Orbe con ojos dibujado con CSS: flota, parpadea, late al hablar y su anillo gira al pensar. */
+/** Orbe con ojos dibujado con CSS: flota balanceándose, parpadea, late al hablar y su anillo brilla al pensar. */
 function PersonajeCss({ estado }: { estado: EstadoPersonaje }) {
   return (
     <div className="absolute inset-[12%] animate-personaje-flotar">
       <span
         className={cn(
-          "absolute -inset-[14%] rounded-full border-2 border-dashed border-primary/60",
-          estado === "pensando" ? "motion-safe:animate-[spin_1.2s_linear_infinite]" : "motion-safe:animate-[spin_9s_linear_infinite]"
+          "absolute -inset-[14%] rounded-full border-2 border-primary/40 transition-colors duration-300",
+          estado === "pensando" && "border-primary motion-safe:animate-pulse"
         )}
       />
       <div

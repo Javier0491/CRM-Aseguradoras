@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useReducedMotion } from "framer-motion";
 import { Bar, BarChart, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { formatMoneda, formatNumero } from "@/lib/format";
@@ -23,6 +24,7 @@ const ALTO_FILA = 36;
  * todas las barras usan el acento corporativo.
  */
 export function ProduccionChart({ datos }: { datos: ProduccionAseguradora[] }) {
+  const reducir = useReducedMotion();
   const total = datos.reduce((s, d) => s + d.prima, 0);
   const filas = datos.map((d) => ({ ...d, porcentaje: total > 0 ? (d.prima / total) * 100 : 0 }));
   const anchoEtiquetas = Math.min(
@@ -59,7 +61,11 @@ export function ProduccionChart({ datos }: { datos: ProduccionAseguradora[] }) {
               fill="var(--primary)"
               barSize={ALTO_BARRA}
               radius={[0, 4, 4, 0]}
-              isAnimationActive={false}
+              // Las barras crecen al aparecer (respeta "reducir movimiento").
+              isAnimationActive={!reducir}
+              animationBegin={350}
+              animationDuration={900}
+              animationEasing="ease-out"
             >
               <LabelList
                 dataKey="prima"

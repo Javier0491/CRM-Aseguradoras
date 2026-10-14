@@ -65,9 +65,16 @@
   --animate-personaje-latir: personaje-latir 0.35s ease-in-out infinite alternate;
   --animate-personaje-parpadeo: personaje-parpadeo 4.2s ease-in-out infinite;
 
+  /* Sube y baja balanceándose unos grados: nunca da una vuelta. */
   @keyframes personaje-flotar {
+    25% {
+      transform: translateY(-3%) rotate(-3deg);
+    }
     50% {
-      transform: translateY(-6%);
+      transform: translateY(-6%) rotate(0deg);
+    }
+    75% {
+      transform: translateY(-3%) rotate(3deg);
     }
   }
   @keyframes personaje-latir {
