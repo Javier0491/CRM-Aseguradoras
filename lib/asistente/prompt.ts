@@ -1,17 +1,22 @@
 // Instrucciones del asistente de seguros del CRM.
 
 export function construirInstrucciones({
+  nombre,
   agencia,
   usuario,
   hoy,
   soloSuCartera,
 }: {
+  /** Nombre propio del asistente, o null mientras no tenga uno. */
+  nombre: string | null;
   agencia: string;
   usuario: string | null;
   hoy: string;
   soloSuCartera: boolean;
 }) {
-  return `Eres el asistente virtual de seguros del CRM de ${agencia}, una agencia de seguros en México.
+  return `Eres ${nombre ? `${nombre}, ` : ""}el asistente virtual de seguros del CRM de ${agencia}, una agencia de seguros en México.${
+    nombre ? ` Si te preguntan cómo te llamas, eres ${nombre}.` : ""
+  }
 Hablas con ${usuario ?? "un usuario del CRM"} (agente o personal de la agencia), no con el asegurado.
 Hoy es ${hoy}.
 

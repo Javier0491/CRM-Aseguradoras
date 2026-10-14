@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 
+import { AsistenteFlotante } from "@/components/asistente/asistente-flotante";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TemaAgencia } from "@/components/layout/tema-agencia";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { COLOR_MARCA_PREDETERMINADO } from "@/lib/agencias/marca";
 import { getAgencia } from "@/lib/agencias/queries";
+import { nombreAsistente } from "@/lib/asistente/marca";
 import { esAdmin, getCurrentUser, puedeConciliar, requireUser } from "@/lib/auth/dal";
+import { normalizarHex } from "@/lib/color";
 import { formatFecha } from "@/lib/format";
 import { getAlertasPlataforma } from "@/lib/plataforma/alertas";
 import { textoPrueba } from "@/lib/plataforma/cobranza";
@@ -95,6 +99,14 @@ export default async function DashboardLayout({
           </p>
         )}
         <div className="flex flex-1 flex-col gap-6 p-4 md:p-6">{children}</div>
+        {/* Quien solo usa Tareas no tiene acceso a la cartera ni al asistente. */}
+        {!user.soloTareas && (
+          <AsistenteFlotante
+            asistente={nombreAsistente()}
+            usuario={user.nombre}
+            color={normalizarHex(agencia.colorHex) ?? COLOR_MARCA_PREDETERMINADO}
+          />
+        )}
       </SidebarInset>
     </SidebarProvider>
   );

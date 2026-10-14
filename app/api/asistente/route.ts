@@ -4,6 +4,7 @@ import type { ResponseInputItem } from "openai/resources/responses/responses";
 import { getAgencia } from "@/lib/agencias/queries";
 import { ETIQUETA_HERRAMIENTA, HERRAMIENTAS } from "@/lib/asistente/definiciones";
 import { ejecutarHerramienta } from "@/lib/asistente/herramientas";
+import { nombreAsistente, tieneNombrePropio } from "@/lib/asistente/marca";
 import { construirInstrucciones } from "@/lib/asistente/prompt";
 import {
   MAX_CARACTERES_MENSAJE,
@@ -65,7 +66,9 @@ export async function POST(req: Request) {
   const alcance = alcanceDe(user);
   const client = new OpenAI({ apiKey, timeout: 45_000, maxRetries: 1 });
   const modelo = process.env.ASISTENTE_MODEL?.trim() || process.env.OPENAI_MODEL?.trim() || MODELO_PREDETERMINADO;
+  const nombre = nombreAsistente();
   const instrucciones = construirInstrucciones({
+    nombre: tieneNombrePropio(nombre) ? nombre : null,
     agencia: agencia.nombre,
     usuario: user.nombre,
     hoy: hoyISO(),

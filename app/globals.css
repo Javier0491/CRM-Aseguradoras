@@ -60,6 +60,32 @@
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   /* Entrada escalonada de tarjetas (el retraso va en style={{ animationDelay }}). */
   --animate-entrar: entrar 380ms var(--ease-out) both;
+  /* Personaje del asistente en su versión CSS (components/asistente/personaje.tsx). */
+  --animate-personaje-flotar: personaje-flotar 3.6s ease-in-out infinite;
+  --animate-personaje-latir: personaje-latir 0.35s ease-in-out infinite alternate;
+  --animate-personaje-parpadeo: personaje-parpadeo 4.2s ease-in-out infinite;
+
+  @keyframes personaje-flotar {
+    50% {
+      transform: translateY(-6%);
+    }
+  }
+  @keyframes personaje-latir {
+    to {
+      transform: scale(1.05);
+    }
+  }
+  /* Parpadea una vez cada ciclo: casi todo el tiempo abierto. */
+  @keyframes personaje-parpadeo {
+    0%,
+    92%,
+    100% {
+      transform: scaleY(1);
+    }
+    95% {
+      transform: scaleY(0.1);
+    }
+  }
 
   @keyframes entrar {
     from {
@@ -73,6 +99,11 @@
   .animate-entrar {
     animation-name: aparecer;
     animation-duration: 200ms;
+  }
+  .animate-personaje-flotar,
+  .animate-personaje-latir,
+  .animate-personaje-parpadeo {
+    animation: none;
   }
 }
 

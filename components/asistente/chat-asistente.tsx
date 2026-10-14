@@ -3,14 +3,14 @@
 import * as React from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUp, CalendarClock, FileSearch, Loader2, MessageSquareText, RotateCcw, Sparkles, Wallet } from "lucide-react";
+import { ArrowUp, CalendarClock, FileSearch, Loader2, Maximize2, MessageSquareText, RotateCcw, Wallet } from "lucide-react";
 
+import { estadoPersonaje, nuevaConversacion, preguntar, useConversacion } from "@/components/asistente/conversacion";
+import { Personaje } from "@/components/asistente/personaje";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MAX_CARACTERES_MENSAJE, type EventoAsistente, type MensajeAsistente } from "@/lib/asistente/types";
+import { MAX_CARACTERES_MENSAJE } from "@/lib/asistente/types";
 import { cn } from "@/lib/utils";
-
-type Mensaje = MensajeAsistente & { id: number; error?: boolean };
 
 const SUGERENCIAS = [
   { icono: Wallet, texto: "¿Qué recibos están vencidos y a quién debo llamar primero?" },
@@ -19,151 +19,139 @@ const SUGERENCIAS = [
   { icono: MessageSquareText, texto: "Redáctame un WhatsApp para recordarle a un cliente su pago" },
 ];
 
-/**
- * La conversación sobrevive a la navegación dentro del CRM (el módulo sigue cargado) y se pierde
- * al recargar la página: no se guarda nada con datos de clientes en el navegador.
- */
-let conversacion: Mensaje[] = [];
+const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 
-/** Asistente de seguros: chat con respuestas en streaming y consultas a la cartera. */
-export function ChatAsistente({ nombre }: { nombre: string | null }) {
+/** "Soy Zen" con nombre propio; con el provisional, "Soy tu asistente". */
+const comoSeLlama = (asistente: string) => (asistente === "Asistente" ? "tu asistente" : asistente);
+
+/**
+ * Chat del asistente de seguros: respuestas en streaming y consultas a la cartera. Se usa en su
+ * página (`pagina`) y en el panel flotante que está en todo el CRM (`panel`); los dos muestran la
+ * misma conversación.
+ */
+export function ChatAsistente({
+  asistente,
+  usuario,
+  color,
+  variante = "pagina",
+  onNavegar,
+}: {
+  /** Nombre del asistente (ASISTENTE_NOMBRE). */
+  asistente: string;
+  usuario: string | null;
+  /** Color de marca de la agencia, para el personaje en 3D. */
+  color: string;
+  variante?: "pagina" | "panel";
+  /** Se llama al seguir un enlace de una respuesta (el panel se cierra). */
+  onNavegar?: () => void;
+}) {
   const reducir = useReducedMotion();
-  const [mensajes, setMensajes] = React.useState<Mensaje[]>(() => conversacion);
+  const conversacion = useConversacion();
+  const { mensajes, pensando, consulta } = conversacion;
+  const estado = estadoPersonaje(conversacion);
   const [borrador, setBorrador] = React.useState("");
-  const [pensando, setPensando] = React.useState(false);
-  const [consulta, setConsulta] = React.useState<string | null>(null);
   const finRef = React.useRef<HTMLDivElement>(null);
   const entradaRef = React.useRef<HTMLTextAreaElement>(null);
-  const siguienteId = React.useRef(conversacion.reduce((m, x) => Math.max(m, x.id), 0) + 1);
-
-  React.useEffect(() => {
-    conversacion = mensajes.slice(-40);
-  }, [mensajes]);
+  const panel = variante === "panel";
 
   React.useEffect(() => {
     finRef.current?.scrollIntoView({ behavior: reducir ? "auto" : "smooth", block: "end" });
   }, [mensajes, consulta, reducir]);
 
-  async function preguntar(texto: string) {
-    const pregunta = texto.trim().slice(0, MAX_CARACTERES_MENSAJE);
-    if (!pregunta || pensando) return;
-    const nueva: Mensaje = { id: siguienteId.current++, rol: "usuario", texto: pregunta };
-    const respuestaId = siguienteId.current++;
-    const historial = [...mensajes.filter((m) => !m.error), nueva];
-    setMensajes([...mensajes, nueva]);
+  // Al terminar una respuesta, el cursor vuelve a la caja de texto.
+  React.useEffect(() => {
+    if (!pensando) entradaRef.current?.focus();
+  }, [pensando]);
+
+  function enviar(texto: string) {
+    if (!texto.trim() || pensando) return;
     setBorrador("");
-    setPensando(true);
-    setConsulta(null);
-
-    const agregarTexto = (fragmento: string) =>
-      setMensajes((actuales) => {
-        const existe = actuales.some((m) => m.id === respuestaId);
-        return existe
-          ? actuales.map((m) => (m.id === respuestaId ? { ...m, texto: m.texto + fragmento } : m))
-          : [...actuales, { id: respuestaId, rol: "asistente", texto: fragmento }];
-      });
-    const fallar = (error: string) =>
-      setMensajes((actuales) => [
-        ...actuales.filter((m) => m.id !== respuestaId || m.texto),
-        { id: siguienteId.current++, rol: "asistente", texto: error, error: true },
-      ]);
-
-    try {
-      const res = await fetch("/api/asistente", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mensajes: historial.map(({ rol, texto }) => ({ rol, texto })) }),
-      });
-      if (!res.ok || !res.body) {
-        const cuerpo = (await res.json().catch(() => null)) as { error?: string } | null;
-        fallar(cuerpo?.error ?? "No pude responder en este momento. Intenta de nuevo.");
-        return;
-      }
-      const lector = res.body.getReader();
-      const decoder = new TextDecoder();
-      let pendiente = "";
-      for (;;) {
-        const { value, done } = await lector.read();
-        if (done) break;
-        pendiente += decoder.decode(value, { stream: true });
-        const lineas = pendiente.split("\n");
-        pendiente = lineas.pop() ?? "";
-        for (const linea of lineas) {
-          if (!linea.trim()) continue;
-          const evento = JSON.parse(linea) as EventoAsistente;
-          if (evento.tipo === "texto") {
-            setConsulta(null);
-            agregarTexto(evento.texto);
-          } else if (evento.tipo === "herramienta") setConsulta(evento.etiqueta);
-          else if (evento.tipo === "error") fallar(evento.error);
-        }
-      }
-    } catch {
-      fallar("Se perdió la conexión. Revisa tu internet e intenta de nuevo.");
-    } finally {
-      setPensando(false);
-      setConsulta(null);
-      entradaRef.current?.focus();
-    }
-  }
-
-  function nuevaConversacion() {
-    setMensajes([]);
-    entradaRef.current?.focus();
+    void preguntar(texto);
   }
 
   const vacio = mensajes.length === 0;
   const esperandoTexto = pensando && mensajes[mensajes.length - 1]?.rol === "usuario";
 
   return (
-    <div className="mx-auto flex h-[calc(100svh-8.5rem)] w-full max-w-3xl flex-col">
-      <div className="flex items-center justify-between gap-3 pb-4">
-        <div className="flex items-center gap-3">
-          <span className="relative grid size-10 place-items-center rounded-xl bg-gradient-to-br from-primary to-primary/60 text-primary-foreground shadow-lg shadow-primary/25">
-            <Sparkles className="size-5" />
-            {!reducir && (
-              <motion.span
-                aria-hidden
-                className="absolute inset-0 rounded-xl ring-2 ring-primary/40"
-                animate={{ scale: [1, 1.18, 1], opacity: [0.6, 0, 0.6] }}
-                transition={{ duration: 2.6, repeat: Infinity, ease: "easeInOut" }}
-              />
+    <div className={cn("flex w-full flex-col", panel ? "h-full" : "mx-auto h-[calc(100svh-8.5rem)] max-w-3xl")}>
+      <div className={cn("flex items-center justify-between gap-3", panel ? "border-b px-4 py-3 pr-12" : "pb-4")}>
+        <div className="flex min-w-0 items-center gap-3">
+          {/* Con la conversación vacía el personaje está grande al centro; aquí, cuando ya hay mensajes. */}
+          <div className="grid size-11 shrink-0 place-items-center rounded-xl border bg-card">
+            {vacio ? (
+              <span className="size-2 rounded-full bg-primary" />
+            ) : (
+              <Personaje estado={estado} color={color} className="size-11" />
             )}
-          </span>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Asistente de seguros</h1>
-            <p className="text-xs text-muted-foreground">Dudas de seguros y consultas a tu cartera, al instante.</p>
+          </div>
+          <div className="min-w-0">
+            {panel ? (
+              <p className="truncate font-semibold tracking-tight">{asistente}</p>
+            ) : (
+              <h1 className="truncate text-lg font-semibold tracking-tight">{asistente}</h1>
+            )}
+            <p className="truncate text-xs text-muted-foreground">
+              {estado === "pensando" ? "Pensando…" : estado === "hablando" ? "Escribiendo…" : "Tu asistente de seguros"}
+            </p>
           </div>
         </div>
-        {!vacio && (
-          <Button variant="outline" size="sm" onClick={nuevaConversacion} disabled={pensando}>
-            <RotateCcw /> Nueva conversación
-          </Button>
-        )}
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!vacio && (
+            <Button
+              variant="outline"
+              size={panel ? "icon-sm" : "sm"}
+              onClick={nuevaConversacion}
+              disabled={pensando}
+              aria-label="Nueva conversación"
+              title="Nueva conversación"
+            >
+              <RotateCcw /> {!panel && "Nueva conversación"}
+            </Button>
+          )}
+          {panel && (
+            <Button variant="ghost" size="icon-sm" asChild>
+              <Link href="/asistente" onClick={onNavegar} aria-label="Abrir en pantalla completa" title="Abrir en pantalla completa">
+                <Maximize2 />
+              </Link>
+            </Button>
+          )}
+        </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border bg-card/60 p-4 sm:p-6" aria-live="polite">
+      <div
+        className={cn("min-h-0 flex-1 overflow-y-auto", panel ? "px-4 py-4" : "rounded-2xl border bg-card/60 p-4 sm:p-6")}
+        aria-live="polite"
+      >
         {vacio ? (
-          <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+          <div className="flex min-h-full flex-col items-center justify-center gap-5 text-center">
+            <motion.div
+              initial={reducir ? false : { opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: "spring", visualDuration: 0.5, bounce: 0.3 }}
+            >
+              <Personaje estado={estado} color={color} className={panel ? "size-28" : "size-36"} />
+            </motion.div>
             <motion.div
               initial={reducir ? false : { opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.35, ease: EASE_OUT }}
             >
-              <p className="text-xl font-semibold tracking-tight">Hola{nombre ? `, ${nombre.split(" ")[0]}` : ""}. ¿En qué te ayudo?</p>
+              <p className="text-xl font-semibold tracking-tight">
+                Hola{usuario ? `, ${usuario.split(" ")[0]}` : ""}. Soy {comoSeLlama(asistente)}.
+              </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 Pregúntame de seguros o de tu cartera: pólizas, clientes, recibos y renovaciones.
               </p>
             </motion.div>
-            <div className="grid w-full gap-2.5 sm:grid-cols-2">
+            <div className={cn("grid w-full gap-2.5", !panel && "sm:grid-cols-2")}>
               {SUGERENCIAS.map((s, i) => (
                 <motion.button
                   key={s.texto}
                   type="button"
-                  onClick={() => preguntar(s.texto)}
+                  onClick={() => enviar(s.texto)}
                   initial={reducir ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.08 + i * 0.05, duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ delay: 0.08 + i * 0.05, duration: 0.3, ease: EASE_OUT }}
                   whileHover={reducir ? undefined : { y: -2 }}
                   whileTap={{ scale: 0.98 }}
                   className="group flex items-start gap-3 rounded-xl border bg-background p-3.5 text-left text-sm shadow-xs transition-[border-color,box-shadow] duration-150 hover:border-primary/50 hover:shadow-md hover:shadow-primary/10 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
@@ -184,7 +172,7 @@ export function ChatAsistente({ nombre }: { nombre: string | null }) {
                   key={m.id}
                   initial={reducir ? false : { opacity: 0, y: 8, scale: 0.98 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                  transition={{ duration: 0.25, ease: EASE_OUT }}
                   className={cn("flex", m.rol === "usuario" ? "justify-end" : "justify-start")}
                 >
                   <div
@@ -197,7 +185,11 @@ export function ChatAsistente({ nombre }: { nombre: string | null }) {
                           : "rounded-bl-md border bg-background"
                     )}
                   >
-                    {m.rol === "usuario" ? <p className="whitespace-pre-wrap">{m.texto}</p> : <TextoMarkdown texto={m.texto} />}
+                    {m.rol === "usuario" ? (
+                      <p className="whitespace-pre-wrap">{m.texto}</p>
+                    ) : (
+                      <TextoMarkdown texto={m.texto} onNavegar={onNavegar} />
+                    )}
                   </div>
                 </motion.div>
               ))}
@@ -226,42 +218,45 @@ export function ChatAsistente({ nombre }: { nombre: string | null }) {
         <div ref={finRef} />
       </div>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void preguntar(borrador);
-        }}
-        className="mt-3 flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm transition-[border-color,box-shadow] duration-150 focus-within:border-primary/50 focus-within:shadow-md focus-within:shadow-primary/10"
-      >
-        <Textarea
-          ref={entradaRef}
-          value={borrador}
-          onChange={(e) => setBorrador(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              void preguntar(borrador);
-            }
+      <div className={cn(panel && "border-t px-3 pt-3 pb-2")}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            enviar(borrador);
           }}
-          placeholder="Escribe tu pregunta… (Enter para enviar, Shift+Enter para otra línea)"
-          rows={1}
-          maxLength={MAX_CARACTERES_MENSAJE}
-          aria-label="Pregunta para el asistente"
-          className="max-h-40 min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={pensando || !borrador.trim()}
-          aria-label="Enviar"
-          className="rounded-xl shadow-md shadow-primary/25"
+          className={cn(
+            "flex items-end gap-2 rounded-2xl border bg-card p-2 shadow-sm transition-[border-color,box-shadow] duration-150 focus-within:border-primary/50 focus-within:shadow-md focus-within:shadow-primary/10",
+            !panel && "mt-3"
+          )}
         >
-          {pensando ? <Loader2 className="animate-spin" /> : <ArrowUp />}
-        </Button>
-      </form>
-      <p className="mt-2 text-center text-[11px] text-muted-foreground">
-        La IA puede equivocarse: confirma coberturas y montos en la póliza o con la aseguradora.
-      </p>
+          <Textarea
+            ref={entradaRef}
+            value={borrador}
+            onChange={(e) => setBorrador(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                enviar(borrador);
+              }
+            }}
+            placeholder={
+              panel
+                ? `Pregúntale a ${comoSeLlama(asistente)}…`
+                : "Escribe tu pregunta… (Enter para enviar, Shift+Enter para otra línea)"
+            }
+            rows={1}
+            maxLength={MAX_CARACTERES_MENSAJE}
+            aria-label={`Pregunta para ${comoSeLlama(asistente)}`}
+            className="max-h-40 min-h-10 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 dark:bg-transparent"
+          />
+          <Button type="submit" size="icon" disabled={pensando || !borrador.trim()} aria-label="Enviar" className="rounded-xl">
+            {pensando ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+          </Button>
+        </form>
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+          La IA puede equivocarse: confirma coberturas y montos en la póliza o con la aseguradora.
+        </p>
+      </div>
     </div>
   );
 }
@@ -289,7 +284,7 @@ function Escribiendo() {
  * internos [texto](/ruta). Los enlaces externos se muestran como texto: el asistente solo enlaza
  * pantallas del CRM.
  */
-function TextoMarkdown({ texto }: { texto: string }) {
+function TextoMarkdown({ texto, onNavegar }: { texto: string; onNavegar?: () => void }) {
   const bloques: React.ReactNode[] = [];
   let lista: { ordenada: boolean; items: { texto: string; anidado: boolean }[] } | null = null;
   const cerrarLista = () => {
@@ -299,7 +294,7 @@ function TextoMarkdown({ texto }: { texto: string }) {
       <Tag key={bloques.length} className={cn("space-y-1 pl-5", lista.ordenada ? "list-decimal" : "list-disc")}>
         {lista.items.map((item, i) => (
           <li key={i} className={cn(item.anidado && "ml-5 list-[circle] text-foreground/90")}>
-            {enLinea(item.texto)}
+            {enLinea(item.texto, onNavegar)}
           </li>
         ))}
       </Tag>
@@ -324,7 +319,7 @@ function TextoMarkdown({ texto }: { texto: string }) {
     const titulo = /^#{1,4}\s+(.*)$/.exec(linea);
     bloques.push(
       <p key={bloques.length} className={cn(titulo && "font-semibold")}>
-        {enLinea(titulo ? titulo[1] : linea)}
+        {enLinea(titulo ? titulo[1] : linea, onNavegar)}
       </p>
     );
   }
@@ -332,7 +327,7 @@ function TextoMarkdown({ texto }: { texto: string }) {
   return <div className="space-y-2 break-words">{bloques}</div>;
 }
 
-function enLinea(texto: string): React.ReactNode[] {
+function enLinea(texto: string, onNavegar?: () => void): React.ReactNode[] {
   const partes: React.ReactNode[] = [];
   const patron = /\*\*([^*]+)\*\*|\[([^\]]+)\]\(([^)\s]+)\)/g;
   let ultimo = 0;
@@ -341,7 +336,7 @@ function enLinea(texto: string): React.ReactNode[] {
     if (m[1] !== undefined) partes.push(<strong key={m.index}>{m[1]}</strong>);
     else if (m[3].startsWith("/") && !m[3].startsWith("//")) {
       partes.push(
-        <Link key={m.index} href={m[3]} className="font-medium text-primary underline-offset-4 hover:underline">
+        <Link key={m.index} href={m[3]} onClick={onNavegar} className="font-medium text-primary underline-offset-4 hover:underline">
           {m[2]}
         </Link>
       );
