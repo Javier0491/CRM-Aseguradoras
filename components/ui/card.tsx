@@ -1,16 +1,25 @@
 import * as React from "react"
 import { cn } from "cn"
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+/**
+ * Tarjeta. Su borde y su interior reflejan la luz del cursor (data-slot="card-luz", ver
+ * globals.css y components/layout/ambiente-espacio.tsx). La capa es absoluta: no ocupa lugar ni
+ * entra en `gap`; va primero para no afectar a `space-y` (que mira al último hijo) y, con
+ * `isolate`, queda detrás del contenido pero encima del fondo.
+ */
+function Card({ className, children, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card"
       className={cn(
-        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        "relative isolate flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
         className
       )}
       {...props}
-    />
+    >
+      <span data-slot="card-luz" aria-hidden />
+      {children}
+    </div>
   )
 }
 

@@ -1,11 +1,25 @@
 import { ViewTransition } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarClock, CheckCircle2, Download, MessageCircle, RefreshCcw, Send, TrendingUp, XCircle } from "lucide-react";
+import {
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  Download,
+  MessageCircle,
+  Percent,
+  RefreshCcw,
+  Send,
+  TrendingUp,
+  Wallet,
+  XCircle,
+} from "lucide-react";
 
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
+import { EstadoVacio } from "@/components/layout/estado-vacio";
 import { FiltroEjecutivo } from "@/components/layout/filtro-ejecutivo";
 import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
+import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
 import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
-import { ValorAjustado } from "@/components/dashboard/valor-ajustado";
 import { MoverEtapa } from "@/components/renovaciones/mover-etapa";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -31,6 +45,15 @@ const ACENTO_COLUMNA: Record<ColumnaEmbudo, string> = {
   perdida: "text-destructive",
 };
 
+/** Color de cada etapa: la línea de arriba de la columna y su parte de la prima. */
+const BARRA_COLUMNA: Record<ColumnaEmbudo, string> = {
+  por_renovar: "bg-warning",
+  cotizando: "bg-primary",
+  enviada: "bg-sky-500",
+  renovada: "bg-success",
+  perdida: "bg-destructive",
+};
+
 export type DatosRenovaciones = {
   embudo: Awaited<ReturnType<typeof getEmbudo>>;
   /** Nombre de la agencia, para el mensaje de WhatsApp. */
@@ -48,104 +71,138 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
   const porCerrar = col.por_renovar.polizas.length + col.cotizando.polizas.length + col.enviada.polizas.length;
   const polizas = (n: number) => `${formatNumero(n)} ${n === 1 ? "póliza" : "pólizas"}`;
 
-  const resumen = [
+  // Parte de la prima total del embudo que tiene cada columna (para su barra).
+  const primaTotal = columnas.reduce((s, c) => s + c.prima, 0);
+
+  const resumen: { label: string; valor: string; detalle: string; icono: typeof Wallet; tono: TonoResumen }[] = [
     {
       label: "Prima en juego",
       valor: formatMoneda(enJuego),
       detalle: `${polizas(porCerrar)} por cerrar`,
+      icono: Wallet,
+      tono: "primary",
     },
     {
       label: "Renovadas",
       valor: formatMoneda(col.renovada.prima),
       detalle: polizas(col.renovada.polizas.length),
+      icono: CheckCircle2,
+      tono: "success",
     },
     {
       label: "Perdidas",
       valor: formatMoneda(col.perdida.prima),
       detalle: polizas(col.perdida.polizas.length),
+      icono: XCircle,
+      tono: col.perdida.polizas.length > 0 ? "destructive" : "muted",
     },
     {
       label: "Tasa de renovación",
       valor: tasa === null ? "—" : formatPorcentaje(tasa),
       detalle: "de las renovaciones ya cerradas",
+      icono: Percent,
+      tono: "primary",
     },
   ];
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Renovaciones</h1>
-          <p className="text-sm text-muted-foreground">
+      <EncabezadoModulo
+        icono={RefreshCcw}
+        titulo="Renovaciones"
+        descripcion={
+          <>
             Pólizas que vencen en los próximos {DIAS_EMBUDO} días o que vencieron hace menos de {DIAS_VENCIDAS_EMBUDO}, y
             las que están en seguimiento.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {filtro && <FiltroEjecutivo ejecutivos={filtro.ejecutivos} usuarioId={filtro.usuarioId} valor={filtro.valor} />}
-          <Button asChild variant="outline">
-            {/* Descarga: no es una página, así que va con <a> y no con Link. */}
-            <a
-              href={filtro?.valor ? `/renovaciones/reporte?ejecutivo=${encodeURIComponent(filtro.valor)}` : "/renovaciones/reporte"}
-              download
-            >
-              <Download /> Renovadas en Excel
-            </a>
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+        acciones={
+          <>
+            {filtro && <FiltroEjecutivo ejecutivos={filtro.ejecutivos} usuarioId={filtro.usuarioId} valor={filtro.valor} />}
+            <Button asChild variant="outline">
+              {/* Descarga: no es una página, así que va con <a> y no con Link. */}
+              <a
+                href={filtro?.valor ? `/renovaciones/reporte?ejecutivo=${encodeURIComponent(filtro.valor)}` : "/renovaciones/reporte"}
+                download
+              >
+                <Download /> Renovadas en Excel
+              </a>
+            </Button>
+          </>
+        }
+      />
 
       <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {resumen.map((r) => (
-          <Card key={r.label} className="@container gap-1 px-5 py-4">
-            <p className="text-xs text-muted-foreground">{r.label}</p>
-            <ValorAjustado valor={r.valor} />
-            <p className="text-xs text-muted-foreground">{r.detalle}</p>
-          </Card>
+        {resumen.map((r, i) => (
+          <TarjetaResumen key={r.label} titulo={r.label} valor={r.valor} detalle={r.detalle} icono={r.icono} tono={r.tono} orden={i} />
         ))}
       </section>
 
       {total === 0 ? (
-        <Card className="items-center gap-2 border-dashed py-14 text-center">
-          <RefreshCcw className="size-7 text-primary" />
-          <p className="font-medium">No hay renovaciones en la ventana</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Aquí aparecerán las pólizas conforme se acerque su fin de vigencia.
-          </p>
+        <Card className="border-dashed py-0">
+          <EstadoVacio
+            icono={RefreshCcw}
+            titulo="No hay renovaciones en la ventana"
+            descripcion="Aquí aparecerán las pólizas conforme se acerque su fin de vigencia."
+          />
         </Card>
       ) : (
         // En pantallas angostas las columnas se recorren de lado.
         <div className="-mx-4 snap-x snap-mandatory overflow-x-auto px-4 pb-2 md:-mx-6 md:px-6 xl:mx-0 xl:snap-none xl:px-0">
           <div className="grid w-max grid-flow-col gap-4 xl:w-full xl:grid-flow-row xl:grid-cols-5">
-            {columnas.map((c) => {
+            {columnas.map((c, i) => {
               const Icono = ICONO_COLUMNA[c.clave];
+              const parte = primaTotal > 0 ? c.prima / primaTotal : 0;
               return (
                 <section
                   key={c.clave}
                   aria-label={c.titulo}
-                  className="flex w-[80vw] max-w-[300px] snap-start flex-col rounded-xl border bg-muted/30 xl:w-auto xl:max-w-none"
+                  style={{ animationDelay: `${200 + i * 70}ms` }}
+                  className="relative flex w-[80vw] max-w-[300px] animate-entrar snap-start flex-col overflow-hidden rounded-xl border bg-muted/30 backdrop-blur-sm xl:w-auto xl:max-w-none"
                 >
-                  <header className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1 border-b px-3 py-3">
-                    <div>
-                      <h2 className="flex items-center gap-1.5 text-sm font-semibold">
-                        <Icono className={cn("size-4", ACENTO_COLUMNA[c.clave])} /> {c.titulo}
-                        <span className="rounded-full bg-background px-1.5 text-xs font-medium text-muted-foreground tabular-nums">
-                          {c.polizas.length}
-                        </span>
-                      </h2>
-                      <p className="text-[11px] text-muted-foreground">{c.descripcion}</p>
+                  {/* Color de la etapa: una línea con brillo arriba de la columna. */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute inset-x-0 top-0 h-0.5 shadow-[0_0_14px_1px_currentColor]",
+                      BARRA_COLUMNA[c.clave],
+                      ACENTO_COLUMNA[c.clave]
+                    )}
+                  />
+                  <header className="space-y-2 border-b px-3 pt-3.5 pb-3">
+                    <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                      <div>
+                        <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+                          <Icono className={cn("size-4", ACENTO_COLUMNA[c.clave])} /> {c.titulo}
+                          <span className="rounded-full bg-background px-1.5 text-xs font-medium text-muted-foreground tabular-nums">
+                            {c.polizas.length}
+                          </span>
+                        </h2>
+                        <p className="text-[11px] text-muted-foreground">{c.descripcion}</p>
+                      </div>
+                      <p className="ml-auto text-right text-xs font-medium tabular-nums">{formatMoneda(c.prima)}</p>
                     </div>
-                    <p className="ml-auto text-right text-xs font-medium tabular-nums">{formatMoneda(c.prima)}</p>
+                    {/* Qué parte de la prima del embudo está en esta etapa. */}
+                    <div
+                      role="img"
+                      aria-label={`${formatPorcentaje(parte * 100)} de la prima del embudo`}
+                      className="h-1 overflow-hidden rounded-full bg-background"
+                    >
+                      <div
+                        className={cn("animate-barra h-full rounded-full", BARRA_COLUMNA[c.clave])}
+                        style={{ width: `${c.prima > 0 ? Math.max(parte * 100, 2) : 0}%`, animationDelay: `${400 + i * 70}ms` }}
+                      />
+                    </div>
                   </header>
                   <ul className="flex flex-col gap-2 p-2">
                     {c.polizas.length === 0 ? (
                       <li className="px-2 py-6 text-center text-xs text-muted-foreground">Sin pólizas</li>
                     ) : (
-                      c.polizas.map((p) => (
+                      c.polizas.map((p, j) => (
                         // Al cambiar de etapa, la tarjeta viaja de su columna a la nueva (misma
                         // identidad en ambas); en cualquier otro cambio no se anima.
                         <ViewTransition key={p.id} name={`renovacion-${p.id}`} share="mover-tarjeta" default="none">
-                          <TarjetaRenovacion p={p} agencia={agencia} />
+                          <TarjetaRenovacion p={p} agencia={agencia} retraso={300 + i * 70 + Math.min(j, 8) * 40} />
                         </ViewTransition>
                       ))
                     )}
@@ -171,7 +228,15 @@ const ESTILO_URGENCIA = {
   a_tiempo: "border-border bg-background text-muted-foreground",
 } as const;
 
-function TarjetaRenovacion({ p, agencia }: { p: TarjetaEmbudo; agencia: string }) {
+/** Franja izquierda según la urgencia: se ve de un vistazo qué atender primero. */
+const FRANJA_URGENCIA = {
+  vencida: "before:bg-destructive",
+  critica: "before:bg-destructive/70",
+  pronto: "before:bg-warning",
+  a_tiempo: "before:bg-transparent",
+} as const;
+
+function TarjetaRenovacion({ p, agencia, retraso }: { p: TarjetaEmbudo; agencia: string; retraso: number }) {
   const urgencia = urgenciaRenovacion(p.dias);
   const cerrada = p.columna === "renovada" || p.columna === "perdida";
   const wa = p.cliente.telefono ? numeroWhatsApp(p.cliente.telefono) : null;
@@ -180,7 +245,18 @@ function TarjetaRenovacion({ p, agencia }: { p: TarjetaEmbudo; agencia: string }
     `vence el ${formatFecha(p.vigencia_fin)}. ¿Le ayudamos con la renovación?`;
 
   return (
-    <li className="space-y-2 rounded-lg border bg-card p-3 shadow-xs">
+    // data-slot="card" y su capa de luz (primero, por space-y): refleja el cursor como las demás tarjetas.
+    <li
+      data-slot="card"
+      style={{ animationDelay: `${retraso}ms` }}
+      className={cn(
+        "relative isolate animate-entrar space-y-2 rounded-lg border bg-card p-3 shadow-xs transition-[translate,box-shadow,border-color] duration-200 ease-out",
+        "before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full",
+        "hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md motion-reduce:hover:translate-y-0",
+        !cerrada && FRANJA_URGENCIA[urgencia]
+      )}
+    >
+      <span data-slot="card-luz" aria-hidden />
       <div className="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
         <Link
           href={`/polizas/${p.id}`}

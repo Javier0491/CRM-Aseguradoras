@@ -14,6 +14,7 @@ import {
   FileText,
   HandCoins,
   Landmark,
+  LayoutDashboard,
   ListTodo,
   Mail,
   MessageCircle,
@@ -26,11 +27,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { NumeroAnimado } from "@/components/dashboard/numero-animado";
 import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
 import { ProduccionChart } from "@/components/dashboard/produccion-chart";
-import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
-import { NumeroAnimado } from "@/components/dashboard/numero-animado";
 import { ValorAjustado } from "@/components/dashboard/valor-ajustado";
+import { numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
+import { EstadoVacio } from "@/components/layout/estado-vacio";
+import { Inclinable } from "@/components/layout/inclinable";
 import { AseguradoraTag, RamoBadge } from "@/components/polizas/poliza-ui";
 import { ListaTareas } from "@/components/tareas/lista-tareas";
 import { NuevaTarea } from "@/components/tareas/nueva-tarea";
@@ -75,60 +79,64 @@ function MetricCard({ titulo, icono: Icon, valor, variacion, detalle, href, orde
   const Trend = positiva ? ArrowUpRight : ArrowDownRight;
 
   return (
-    <Link
-      href={href}
-      className="group block animate-entrar rounded-xl outline-none transition-[scale,translate] duration-200 ease-out hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/50 active:translate-y-0 active:scale-[0.98] motion-reduce:hover:translate-y-0"
-      style={{ animationDelay: `${orden * 60}ms` }}
-    >
-      <Card
-        className={cn(
-          "h-full gap-3 py-5 transition-[border-color,background-color,box-shadow] duration-150 ease-out",
-          "group-hover:border-primary/50 group-hover:bg-primary/[0.04] group-hover:shadow-lg group-hover:shadow-primary/10"
-        )}
-      >
-        <CardHeader className="px-5">
-          <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
-          <CardAction>
-            <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary transition-[color,background-color,border-color,rotate,scale] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0">
-              <Icon className="size-4" />
-            </div>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="@container space-y-2 px-5">
-          <ValorAjustado
-            valor={valor ?? "Sin datos"}
-            animado={valor !== null}
-            className={cn("tracking-tight", valor === null && "text-muted-foreground")}
-          />
-          <div className="flex items-center gap-2 text-xs">
-            {variacion !== null && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-0.5 font-medium tabular-nums",
-                  positiva ? "text-success" : "text-destructive"
-                )}
-              >
-                <Trend className="size-3.5" />
-                {positiva ? "+" : ""}
-                {formatPorcentaje(variacion)}
-              </span>
+    // Entrada (CSS) e inclinación 3D (resorte) en elementos distintos: no se pisan el transform.
+    <div className="h-full animate-entrar" style={{ animationDelay: `${orden * 60}ms` }}>
+      <Inclinable className="h-full rounded-xl">
+        <Link
+          href={href}
+          className="group block h-full rounded-xl outline-none transition-[scale] duration-200 ease-out focus-visible:ring-[3px] focus-visible:ring-ring/50 active:scale-[0.98]"
+        >
+          <Card
+            className={cn(
+              "h-full gap-3 py-5 transition-[border-color,background-color,box-shadow] duration-150 ease-out",
+              "group-hover:border-primary/50 group-hover:bg-primary/[0.04] group-hover:shadow-lg group-hover:shadow-primary/10"
             )}
-            <span className="text-muted-foreground">{detalle}</span>
-            <ArrowRight
-              className="ml-auto size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
-              aria-hidden
-            />
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
+          >
+            <CardHeader className="px-5">
+              <CardDescription className="text-xs font-medium tracking-wide uppercase">{titulo}</CardDescription>
+              <CardAction>
+                <div className="flex size-8 items-center justify-center rounded-md border bg-background text-primary transition-[color,background-color,border-color,rotate,scale] duration-200 ease-out group-hover:scale-110 group-hover:-rotate-6 group-hover:border-primary group-hover:bg-primary group-hover:text-primary-foreground motion-reduce:group-hover:scale-100 motion-reduce:group-hover:rotate-0">
+                  <Icon className="size-4" />
+                </div>
+              </CardAction>
+            </CardHeader>
+            <CardContent className="@container space-y-2 px-5">
+              <ValorAjustado
+                valor={valor ?? "Sin datos"}
+                animado={valor !== null}
+                className={cn("tracking-tight", valor === null && "text-muted-foreground")}
+              />
+              <div className="flex items-center gap-2 text-xs">
+                {variacion !== null && (
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-0.5 font-medium tabular-nums",
+                      positiva ? "text-success" : "text-destructive"
+                    )}
+                  >
+                    <Trend className="size-3.5" />
+                    {positiva ? "+" : ""}
+                    {formatPorcentaje(variacion)}
+                  </span>
+                )}
+                <span className="text-muted-foreground">{detalle}</span>
+                <ArrowRight
+                  className="ml-auto size-3.5 shrink-0 -translate-x-1 text-primary opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100"
+                  aria-hidden
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </Link>
+      </Inclinable>
+    </div>
   );
 }
 
 type Accion = { href: string; label: string; icono: LucideIcon };
 
 function Vacio({
-  icono: Icon,
+  icono,
   titulo,
   detalle,
   accion,
@@ -140,20 +148,22 @@ function Vacio({
   accion?: Accion;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
-      <div className="flex size-10 items-center justify-center rounded-full border bg-background text-muted-foreground">
-        <Icon className="size-4" />
-      </div>
-      <p className="text-sm font-medium">{titulo}</p>
-      <p className="max-w-xs text-xs text-muted-foreground">{detalle}</p>
-      {accion && (
-        <Button variant="outline" size="sm" className="mt-2 border-primary/30 hover:border-primary/60" asChild>
-          <Link href={accion.href}>
-            <accion.icono /> {accion.label}
-          </Link>
-        </Button>
-      )}
-    </div>
+    <EstadoVacio
+      icono={icono}
+      tono="muted"
+      titulo={titulo}
+      descripcion={detalle}
+      className="py-10"
+      accion={
+        accion && (
+          <Button variant="outline" size="sm" className="border-primary/30 hover:border-primary/60" asChild>
+            <Link href={accion.href}>
+              <accion.icono /> {accion.label}
+            </Link>
+          </Button>
+        )
+      }
+    />
   );
 }
 
@@ -426,16 +436,17 @@ export function VistaDashboard({ dashboard, paraHoy, agencia, equipo, periodo, u
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Resumen Directivo</h1>
-          <p className="text-sm text-muted-foreground">
+      <EncabezadoModulo
+        icono={LayoutDashboard}
+        titulo="Resumen Directivo"
+        descripcion={
+          <>
             {formatFecha(rango.desde)} – {formatFecha(rango.hasta)} · cartera, producción y cobranza
             {usuario.soloSuCartera && " de tu cartera"}.
-          </p>
-        </div>
-        <PeriodoSelector periodo={periodo} />
-      </div>
+          </>
+        }
+        acciones={<PeriodoSelector periodo={periodo} />}
+      />
 
       <ParaHoy pendientes={pendientes} />
 

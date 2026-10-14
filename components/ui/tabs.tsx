@@ -39,19 +39,68 @@ const tabsListVariants = cva(
   }
 )
 
+/**
+ * Lista de pestañas. En la variante normal, el fondo de la pestaña activa es una sola pieza que se
+ * desliza de una a otra (globals.css le quita a cada pestaña su propio fondo). Se coloca sin
+ * animación la primera vez y sigue a la activa aunque cambie el ancho de la lista.
+ */
 function TabsList({
   className,
   variant = "default",
+  children,
   ...props
 }: React.ComponentProps<typeof TabsPrimitive.List> &
   VariantProps<typeof tabsListVariants>) {
+  const lista = React.useRef<HTMLDivElement>(null)
+  const indicador = React.useRef<HTMLSpanElement>(null)
+
+  React.useLayoutEffect(() => {
+    const el = lista.current
+    const ind = indicador.current
+    if (!el || !ind) return
+    let primera = true
+    const colocar = () => {
+      const activa = el.querySelector<HTMLElement>('[data-slot="tabs-trigger"][data-state="active"]')
+      if (!activa) {
+        ind.style.opacity = "0"
+        return
+      }
+      ind.style.transitionDuration = primera ? "0ms" : ""
+      ind.style.opacity = "1"
+      ind.style.transform = `translate(${activa.offsetLeft}px, ${activa.offsetTop}px)`
+      ind.style.width = `${activa.offsetWidth}px`
+      ind.style.height = `${activa.offsetHeight}px`
+      primera = false
+    }
+    colocar()
+    const cambios = new MutationObserver(colocar)
+    cambios.observe(el, { subtree: true, attributes: true, attributeFilter: ["data-state"] })
+    const tamano = new ResizeObserver(colocar)
+    tamano.observe(el)
+    return () => {
+      cambios.disconnect()
+      tamano.disconnect()
+    }
+  }, [])
+
   return (
     <TabsPrimitive.List
+      ref={lista}
       data-slot="tabs-list"
       data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
+      className={cn("relative", tabsListVariants({ variant }), className)}
       {...props}
-    />
+    >
+      {variant === "default" && (
+        <span
+          ref={indicador}
+          data-slot="tabs-indicador"
+          aria-hidden
+          className="pointer-events-none absolute top-0 left-0 rounded-md border border-primary/30 bg-background opacity-0 shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_18px_-8px_var(--color-primary)] transition-[transform,width,height,opacity] duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none dark:border-primary/40 dark:bg-primary/15"
+        />
+      )}
+      {children}
+    </TabsPrimitive.List>
   )
 }
 

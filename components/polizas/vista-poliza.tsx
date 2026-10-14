@@ -23,6 +23,7 @@ import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
 import { GestionPoliza } from "@/components/polizas/gestion-poliza";
 import { HistorialPoliza } from "@/components/polizas/historial-poliza";
 import { PrimaNeta } from "@/components/polizas/prima-neta";
+import { TarjetaPoliza3D } from "@/components/polizas/tarjeta-poliza-3d";
 import {
   AseguradoraTag,
   EstadoVigenciaBadge,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/archivos/config";
 import { etiquetaPolizaVigor } from "@/lib/aseguradoras/poliza-vigor";
 import { LIMITE_HISTORIAL, type getHistorialPoliza } from "@/lib/bitacora/historial-poliza";
+import { normalizarHex } from "@/lib/color";
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import type { EstadoRecibo } from "@/lib/generated/prisma/client";
 import { parentescoLabels, type Parentesco } from "@/lib/polizas/asegurados";
@@ -162,87 +164,105 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             <ArrowLeft /> Pólizas
           </Link>
         </Button>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="min-w-0 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-mono text-xl font-semibold tracking-tight">{poliza.numeroImpreso}</h1>
-              <EstadoVigenciaBadge
-                fin={poliza.vigencia_fin}
-                hoy={hoy}
-                diasAviso={DIAS_POR_VENCER}
-                cancelada={poliza.canceladaAt}
-              />
-              {!cancelada && etapa && etapa.clave !== "por_renovar" && etapa.clave !== "renovada" && (
-                <Badge
-                  variant="outline"
-                  className={cn(etapa.clave === "perdida" && "border-destructive/40 text-destructive")}
-                >
-                  Renovación: {etapa.titulo}
-                </Badge>
-              )}
+        {/* A la izquierda los datos y las acciones; a la derecha, la póliza como credencial 3D. */}
+        <div className="grid items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+          <div className="min-w-0 animate-entrar space-y-4">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="encabezado-titulo font-mono text-2xl font-semibold tracking-tight wrap-anywhere">
+                  {poliza.numeroImpreso}
+                </h1>
+                <EstadoVigenciaBadge
+                  fin={poliza.vigencia_fin}
+                  hoy={hoy}
+                  diasAviso={DIAS_POR_VENCER}
+                  cancelada={poliza.canceladaAt}
+                />
+                {!cancelada && etapa && etapa.clave !== "por_renovar" && etapa.clave !== "renovada" && (
+                  <Badge
+                    variant="outline"
+                    className={cn(etapa.clave === "perdida" && "border-destructive/40 text-destructive")}
+                  >
+                    Renovación: {etapa.titulo}
+                  </Badge>
+                )}
+              </div>
+              <p className="truncate text-sm" title={poliza.cliente.nombre}>
+                <Link href={`/clientes/${poliza.cliente.id}`} className="font-medium hover:text-primary hover:underline">
+                  {poliza.cliente.nombre}
+                </Link>
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {etiquetaPolizaVigor(poliza.aseguradora.nombre)}{" "}
+                <span className="font-mono text-primary">{poliza.polizaVigor ?? "—"}</span>
+                {anterior && (
+                  <>
+                    {" · "}renueva a{" "}
+                    <Link href={`/polizas/${anterior.id}`} className="font-mono text-primary hover:underline">
+                      {anterior.numeroImpreso}
+                    </Link>
+                  </>
+                )}
+              </p>
             </div>
-            <p className="truncate text-sm" title={poliza.cliente.nombre}>
-              <Link href={`/clientes/${poliza.cliente.id}`} className="font-medium hover:text-primary hover:underline">
-                {poliza.cliente.nombre}
-              </Link>
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {etiquetaPolizaVigor(poliza.aseguradora.nombre)}{" "}
-              <span className="font-mono text-primary">{poliza.polizaVigor ?? "—"}</span>
-              {anterior && (
-                <>
-                  {" · "}renueva a{" "}
-                  <Link href={`/polizas/${anterior.id}`} className="font-mono text-primary hover:underline">
-                    {anterior.numeroImpreso}
-                  </Link>
-                </>
-              )}
-            </p>
-          </div>
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
-            <AseguradoraTag nombre={poliza.aseguradora.nombre} color={poliza.aseguradora.color_hex} />
-            <Badge variant="outline">{ramoLabel[poliza.ramo]}</Badge>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/polizas/${poliza.id}/editar`}>
-                <Pencil /> Editar
-              </Link>
-            </Button>
-            {renovada ? (
-              <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-                <Link href={`/polizas/${renovada.id}`} title="Esta póliza ya se renovó">
-                  Renovada: <span className="font-mono">{renovada.numeroImpreso}</span> <ArrowRight />
+            <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+              <AseguradoraTag nombre={poliza.aseguradora.nombre} color={poliza.aseguradora.color_hex} />
+              <Badge variant="outline">{ramoLabel[poliza.ramo]}</Badge>
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/polizas/${poliza.id}/editar`}>
+                  <Pencil /> Editar
                 </Link>
               </Button>
-            ) : (
-              !cancelada && (
-                <>
-                  <Button asChild variant={toca ? "default" : "outline"} size="sm">
-                    <Link href={`/captura?renovar=${poliza.id}`}>
-                      <RefreshCcw /> Renovar
-                    </Link>
-                  </Button>
-                  {etapa && <MoverEtapa polizaId={poliza.id} numero={poliza.numeroImpreso} actual={etapa.clave} />}
-                </>
-              )
-            )}
-            <GestionPoliza
-              polizaId={poliza.id}
-              numero={poliza.numeroImpreso}
-              cancelada={cancelada}
-              vigencia={{ inicio: iso(poliza.vigencia_inicio), fin: iso(poliza.vigencia_fin) }}
-              hoy={hoy}
-              recibosPendientes={poliza.recibos.filter((r) => r.estado === "PENDIENTE").length}
-              recibosCancelados={poliza.recibos.filter((r) => r.estado === "CANCELADO").length}
-            />
-            <EliminarPoliza
-              polizaId={poliza.id}
-              numero={poliza.numeroImpreso}
-              recibos={poliza.recibos.length}
-              conciliados={poliza.recibos.filter((r) => r.estado === "CONCILIADO").length}
-              asegurados={poliza.asegurados.length}
-              archivos={[poliza.caratula_nombre, poliza.negociacion_nombre, poliza.expediente_nombre].filter(
-                (n): n is string => Boolean(n)
+              {renovada ? (
+                <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+                  <Link href={`/polizas/${renovada.id}`} title="Esta póliza ya se renovó">
+                    Renovada: <span className="font-mono">{renovada.numeroImpreso}</span> <ArrowRight />
+                  </Link>
+                </Button>
+              ) : (
+                !cancelada && (
+                  <>
+                    <Button asChild variant={toca ? "default" : "outline"} size="sm">
+                      <Link href={`/captura?renovar=${poliza.id}`}>
+                        <RefreshCcw /> Renovar
+                      </Link>
+                    </Button>
+                    {etapa && <MoverEtapa polizaId={poliza.id} numero={poliza.numeroImpreso} actual={etapa.clave} />}
+                  </>
+                )
               )}
+              <GestionPoliza
+                polizaId={poliza.id}
+                numero={poliza.numeroImpreso}
+                cancelada={cancelada}
+                vigencia={{ inicio: iso(poliza.vigencia_inicio), fin: iso(poliza.vigencia_fin) }}
+                hoy={hoy}
+                recibosPendientes={poliza.recibos.filter((r) => r.estado === "PENDIENTE").length}
+                recibosCancelados={poliza.recibos.filter((r) => r.estado === "CANCELADO").length}
+              />
+              <EliminarPoliza
+                polizaId={poliza.id}
+                numero={poliza.numeroImpreso}
+                recibos={poliza.recibos.length}
+                conciliados={poliza.recibos.filter((r) => r.estado === "CONCILIADO").length}
+                asegurados={poliza.asegurados.length}
+                archivos={[poliza.caratula_nombre, poliza.negociacion_nombre, poliza.expediente_nombre].filter(
+                  (n): n is string => Boolean(n)
+                )}
+              />
+            </div>
+          </div>
+          <div className="w-full animate-entrar lg:justify-self-end" style={{ animationDelay: "150ms" }}>
+            <TarjetaPoliza3D
+              numero={poliza.numeroImpreso}
+              aseguradora={poliza.aseguradora.nombre}
+              color={normalizarHex(poliza.aseguradora.color_hex)}
+              ramo={ramoLabel[poliza.ramo]}
+              cliente={poliza.cliente.nombre}
+              inicio={iso(poliza.vigencia_inicio)}
+              fin={iso(poliza.vigencia_fin)}
+              hoy={hoy}
+              estado={estado}
             />
           </div>
         </div>

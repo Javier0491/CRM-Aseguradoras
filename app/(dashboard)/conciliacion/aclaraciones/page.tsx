@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, CheckCircle2, MessageSquareWarning } from "lucide-react";
 
 import { GestionAclaracion } from "@/components/conciliacion/gestion-aclaracion";
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { AseguradoraTag } from "@/components/polizas/poliza-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -38,21 +39,19 @@ export default async function AclaracionesPage() {
             <ArrowLeft /> Conciliación
           </Link>
         </Button>
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Aclaraciones de comisión</h1>
-            <p className="text-sm text-muted-foreground">
-              Recibos cobrados cuya comisión no coincidió con la esperada. Reclama a la aseguradora, registra
-              pagos adicionales o acepta la diferencia.
-            </p>
-          </div>
-          {porCobrar > 0 && (
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Comisión faltante</p>
-              <p className="text-lg font-semibold text-warning tabular-nums">{formatMoneda(porCobrar)}</p>
-            </div>
-          )}
-        </div>
+        <EncabezadoModulo
+          icono={MessageSquareWarning}
+          titulo="Aclaraciones de comisión"
+          descripcion="Recibos cobrados cuya comisión no coincidió con la esperada. Reclama a la aseguradora, registra pagos adicionales o acepta la diferencia."
+          acciones={
+            porCobrar > 0 && (
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Comisión faltante</p>
+                <p className="text-lg font-semibold text-warning tabular-nums">{formatMoneda(porCobrar)}</p>
+              </div>
+            )
+          }
+        />
       </div>
 
       <Card className="gap-0 py-0">

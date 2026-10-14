@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AsistenteFlotante } from "@/components/asistente/asistente-flotante";
+import { AmbienteEspacio } from "@/components/layout/ambiente-espacio";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TemaAgencia } from "@/components/layout/tema-agencia";
@@ -59,7 +60,9 @@ export default async function DashboardLayout({
         agencia={{ nombre: agencia.nombre, logoUrl: agencia.logoUrl }}
       />
       {/* min-w-0: sin él, el contenido ancho (tablas) estira toda la página en vez de hacer scroll. */}
-      <SidebarInset className="min-w-0 bg-background">
+      {/* isolate: el ambiente (z-index negativo) queda detrás del contenido y encima del fondo. */}
+      <SidebarInset className="isolate min-w-0 bg-background">
+        <AmbienteEspacio />
         <AppHeader
           soloTareas={user.soloTareas}
           // El chat es del equipo de su propia agencia; modera el canal quien la administra.

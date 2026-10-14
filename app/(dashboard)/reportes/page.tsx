@@ -1,9 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Building2, CalendarClock, Download, FileText, Landmark, PieChart, Users, type LucideIcon } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  CalendarClock,
+  Download,
+  FileText,
+  Landmark,
+  PieChart,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 
 import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
+import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
 import {
   AseguradoraTag,
   EstadoVigenciaIndicador,
@@ -29,7 +41,6 @@ import {
   type PeriodoReporte,
 } from "@/lib/reportes/periodos";
 import { DIAS_POR_VENCER_REPORTE, getReportes } from "@/lib/reportes/queries";
-import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Reportes",
@@ -59,7 +70,7 @@ function DistribucionCard({
   const maxPrima = Math.max(1, ...segmentos.map((d) => d.prima));
 
   return (
-    <Card className="gap-4">
+    <Card className="animate-entrar gap-4" style={{ animationDelay: "250ms" }}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Icono className="size-4 text-primary" /> {titulo}
@@ -80,7 +91,7 @@ function DistribucionCard({
               </tr>
             </thead>
             <tbody>
-              {segmentos.map((d) => {
+              {segmentos.map((d, i) => {
                 const pct = primaTotal > 0 ? (d.prima / primaTotal) * 100 : 0;
                 return (
                   <tr key={d.clave} className="align-middle">
@@ -90,10 +101,14 @@ function DistribucionCard({
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         <div className="h-5 flex-1">
+                          {/* Barra con relieve que crece al aparecer, una tras otra. */}
                           <div
                             aria-hidden
-                            className="h-full rounded-r bg-primary"
-                            style={{ width: `${Math.max(2, (d.prima / maxPrima) * 100)}%` }}
+                            className="animate-barra h-full rounded-r bg-[linear-gradient(90deg,color-mix(in_srgb,var(--color-primary)_55%,transparent),var(--color-primary))] shadow-[0_0_12px_-4px_var(--color-primary)]"
+                            style={{
+                              width: `${Math.max(2, (d.prima / maxPrima) * 100)}%`,
+                              animationDelay: `${400 + Math.min(i, 12) * 60}ms`,
+                            }}
                           />
                         </div>
                         <span className="w-28 text-right text-xs font-medium tabular-nums">
@@ -144,27 +159,27 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
   const exportarHref =
     periodo === PERIODO_REPORTE_PREDETERMINADO ? "/reportes/exportar" : `/reportes/exportar?periodo=${periodo}`;
 
-  const kpis = [
+  const kpis: { label: string; valor: string; detalle: string; icon: LucideIcon; tono: TonoResumen }[] = [
     {
       label: `Prima emitida · ${nombrePeriodo}`,
       valor: formatMoneda(emision.prima),
       detalle: `${polizasTexto(emision.polizas)} ${emision.polizas === 1 ? "iniciada" : "iniciadas"} ${enPeriodo}`,
       icon: Landmark,
-      clase: "text-primary",
+      tono: "primary",
     },
     {
       label: `Prima promedio · ${nombrePeriodo}`,
       valor: emision.polizas > 0 ? formatMoneda(emision.prima / emision.polizas) : "—",
       detalle: `por póliza iniciada ${enPeriodo}`,
       icon: FileText,
-      clase: "text-primary",
+      tono: "primary",
     },
     {
       label: `Por vencer · ${DIAS_POR_VENCER_REPORTE} días`,
       valor: formatNumero(totalPorVencer),
       detalle: `Prima a renovar: ${formatMoneda(primaPorVencer)}`,
       icon: CalendarClock,
-      clase: totalPorVencer > 0 ? "text-warning" : "text-primary",
+      tono: totalPorVencer > 0 ? "warning" : "primary",
     },
   ];
 
@@ -172,39 +187,43 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Reportes</h1>
-          <p className="text-sm text-muted-foreground">
+      <EncabezadoModulo
+        icono={BarChart3}
+        titulo="Reportes"
+        descripcion={
+          <>
             {rango ? `${formatFecha(rango.desde)} – ${formatFecha(rango.hasta)}` : "Sin pólizas emitidas"} · emisión,
             renovaciones próximas y composición de la cartera.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <PeriodoSelector
-            periodo={periodo}
-            opciones={PERIODOS_REPORTE}
-            predeterminado={PERIODO_REPORTE_PREDETERMINADO}
-            etiqueta="Periodo del reporte"
-          />
-          <Button asChild variant="outline" size="sm" className="h-9 text-muted-foreground">
-            <a href={exportarHref} download>
-              <Download /> Exportar
-            </a>
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+        acciones={
+          <>
+            <PeriodoSelector
+              periodo={periodo}
+              opciones={PERIODOS_REPORTE}
+              predeterminado={PERIODO_REPORTE_PREDETERMINADO}
+              etiqueta="Periodo del reporte"
+            />
+            <Button asChild variant="outline" size="sm" className="h-9 text-muted-foreground">
+              <a href={exportarHref} download>
+                <Download /> Exportar
+              </a>
+            </Button>
+          </>
+        }
+      />
 
       <section aria-label="Indicadores" className="grid gap-4 md:grid-cols-3">
-        {kpis.map((k) => (
-          <Card key={k.label} className="gap-2 px-5 py-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <k.icon className={cn("size-4", k.clase)} />
-              <span className="first-letter:uppercase">{k.label}</span>
-            </div>
-            <p className="text-2xl font-semibold tabular-nums">{k.valor}</p>
-            <p className="text-xs text-muted-foreground">{k.detalle}</p>
-          </Card>
+        {kpis.map((k, i) => (
+          <TarjetaResumen
+            key={k.label}
+            titulo={k.label.charAt(0).toUpperCase() + k.label.slice(1)}
+            valor={k.valor}
+            detalle={k.detalle}
+            icono={k.icon}
+            tono={k.tono}
+            orden={i}
+          />
         ))}
       </section>
       <p className="-mt-3 text-[11px] text-muted-foreground">

@@ -240,18 +240,21 @@ export function OcrDropzone({
           }}
           onDrop={onDrop}
           className={cn(
-            "group relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 py-10 text-center transition-colors outline-none",
+            "group relative flex cursor-pointer flex-col items-center justify-center gap-3 overflow-hidden rounded-lg border border-dashed px-6 py-10 text-center transition-[border-color,background-color,box-shadow] duration-200 outline-none",
             "bg-background/60 hover:border-primary/60 hover:bg-primary/[0.03] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40",
-            arrastrando && "border-primary bg-primary/[0.06]"
+            // Al arrastrar encima, la zona se "enciende": borde sólido, halo y fondo de la marca.
+            arrastrando && "border-solid border-primary bg-primary/[0.07] shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-primary)_14%,transparent),0_0_40px_-10px_var(--color-primary)]"
           )}
         >
           <div
             className={cn(
-              "flex size-12 items-center justify-center rounded-full border bg-card text-muted-foreground transition-colors group-hover:text-primary",
-              arrastrando && "border-primary/60 text-primary"
+              "flex size-14 items-center justify-center rounded-2xl border bg-card text-muted-foreground transition-[color,background-color,border-color,translate,box-shadow] duration-300 ease-out",
+              "group-hover:-translate-y-1 group-hover:border-primary/50 group-hover:text-primary group-hover:shadow-[0_12px_28px_-12px_var(--color-primary)] motion-reduce:group-hover:translate-y-0",
+              arrastrando &&
+                "-translate-y-2 border-primary bg-primary text-primary-foreground shadow-[0_16px_36px_-12px_var(--color-primary)] motion-reduce:translate-y-0"
             )}
           >
-            <UploadCloud className="size-5" />
+            <UploadCloud className="size-6" />
           </div>
           <div className="space-y-1">
             <p className="text-sm font-medium">
@@ -363,7 +366,7 @@ export function OcrDropzone({
           </p>
         )}
 
-        {estado.status === "procesando" && <ResultadoSkeleton />}
+        {estado.status === "procesando" && <EscanerIa preview={previews.get(estado.archivos[0])} />}
 
         {estado.status === "listo" && (
           <ResultadoExtraccion
@@ -454,10 +457,24 @@ function ResultadoExtraccion({
         </p>
         <span className="font-mono text-[11px] text-muted-foreground">{modelo}</span>
       </div>
+      {/* Los datos aparecen uno tras otro, como si la IA los fuera dictando; un punto marca los detectados. */}
       <dl className="divide-y rounded-lg border">
-        {filas.map((f) => (
-          <div key={f.campo} className="flex items-start gap-3 px-3 py-2">
-            <dt className="w-28 shrink-0 pt-px text-xs text-muted-foreground">{f.label}</dt>
+        {filas.map((f, i) => (
+          <div
+            key={f.campo}
+            className="flex animate-entrar items-start gap-3 px-3 py-2"
+            style={{ animationDelay: `${Math.min(i, 16) * 35}ms` }}
+          >
+            <dt className="flex w-28 shrink-0 items-center gap-1.5 pt-px text-xs text-muted-foreground">
+              <span
+                aria-hidden
+                className={cn(
+                  "size-1.5 shrink-0 rounded-full",
+                  f.valor ? "bg-primary shadow-[0_0_6px_var(--color-primary)]" : "bg-muted-foreground/30"
+                )}
+              />
+              {f.label}
+            </dt>
             <dd
               className={cn(
                 "min-w-0 flex-1 text-sm break-words tabular-nums",
@@ -501,16 +518,73 @@ function ResultadoExtraccion({
   );
 }
 
-function ResultadoSkeleton() {
+/** Lo que la IA busca en una carátula: se va mostrando mientras lee (no es un avance medido). */
+const PISTAS_LECTURA = [
+  "Buscando el número de póliza…",
+  "Identificando la aseguradora…",
+  "Leyendo la vigencia…",
+  "Revisando primas y forma de pago…",
+  "Ubicando al contratante y su RFC…",
+  "Cruzando los datos de los documentos…",
+];
+
+/**
+ * Mientras la IA lee: el documento (su imagen o, si es PDF, una carátula esquemática) con un rayo
+ * de luz que lo recorre, esquinas de encuadre y, abajo, qué está buscando. Sustituye al esqueleto
+ * gris: la espera se ve como lo que es, una lectura.
+ */
+function EscanerIa({ preview }: { preview?: string }) {
+  const [pista, setPista] = React.useState(0);
+  React.useEffect(() => {
+    const t = window.setInterval(() => setPista((n) => (n + 1) % PISTAS_LECTURA.length), 1800);
+    return () => window.clearInterval(t);
+  }, []);
+
   return (
-    <div className="space-y-2" aria-live="polite" aria-busy="true">
-      <p className="text-xs text-muted-foreground">Leyendo los documentos con IA; puede tardar hasta un minuto…</p>
-      <div className="divide-y rounded-lg border">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 px-3 py-3">
-            <div className="h-3 w-24 animate-pulse rounded bg-muted" />
-            <div className="h-3 flex-1 animate-pulse rounded bg-muted" />
-          </div>
+    <div className="space-y-4 py-2" aria-live="polite" aria-busy="true">
+      <div className="relative mx-auto aspect-[3/4] w-44 animate-entrar">
+        {/* Esquinas de encuadre, como en una cámara que enfoca el documento. */}
+        {(["top-0 left-0 border-t-2 border-l-2", "top-0 right-0 border-t-2 border-r-2", "bottom-0 left-0 border-b-2 border-l-2", "bottom-0 right-0 border-r-2 border-b-2"] as const).map(
+          (pos) => (
+            <span key={pos} aria-hidden className={cn("absolute z-20 size-5 rounded-[3px] border-primary", pos)} />
+          )
+        )}
+        <div className="absolute inset-2 overflow-hidden rounded-md border bg-background shadow-[0_24px_60px_-28px_var(--color-primary)]">
+          {preview ? (
+            // eslint-disable-next-line @next/next/no-img-element -- blob URL local
+            <img src={preview} alt="" className="size-full object-cover object-top opacity-85" />
+          ) : (
+            <CaratulaEsquematica />
+          )}
+          <span aria-hidden className="escaner-rayo absolute inset-x-0 top-0 z-10 h-1/3" />
+        </div>
+      </div>
+      <div className="space-y-1 text-center">
+        <p key={pista} className="flex animate-entrar items-center justify-center gap-2 text-sm font-medium">
+          <Sparkles className="size-4 text-primary" /> {PISTAS_LECTURA[pista]}
+        </p>
+        <p className="text-xs text-muted-foreground">Leyendo los documentos con IA; puede tardar hasta un minuto.</p>
+      </div>
+    </div>
+  );
+}
+
+/** Carátula dibujada (para PDF, que no tiene vista previa): encabezado, renglones y una tabla. */
+function CaratulaEsquematica() {
+  const renglones = [72, 48, 86, 60, 78, 40, 66];
+  return (
+    <div aria-hidden className="flex size-full flex-col gap-2 p-3">
+      <div className="flex items-center gap-1.5">
+        <span className="size-4 rounded bg-primary/50" />
+        <span className="h-2 w-1/2 rounded bg-muted-foreground/30" />
+      </div>
+      <span className="h-1.5 w-1/3 rounded bg-primary/40" />
+      {renglones.map((w, i) => (
+        <span key={i} className="h-1 rounded bg-muted-foreground/20" style={{ width: `${w}%` }} />
+      ))}
+      <div className="mt-auto grid grid-cols-3 gap-1">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className={cn("h-3 rounded-sm", i === 4 ? "bg-primary/35" : "bg-muted-foreground/15")} />
         ))}
       </div>
     </div>

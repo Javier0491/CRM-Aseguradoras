@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { VistaCliente } from "@/components/clientes/vista-cliente";
 import { VistaDashboard } from "@/components/dashboard/vista-dashboard";
 import { BarraDatosDev } from "@/components/dev/barra-datos-dev";
+import { AmbienteEspacio } from "@/components/layout/ambiente-espacio";
 import { VistaMensajesDev } from "@/components/dev/vista-mensajes-dev";
 import { VistaPoliza } from "@/components/polizas/vista-poliza";
 import { esPestana, VistaPolizas } from "@/components/polizas/vista-polizas";
@@ -84,7 +85,8 @@ export default async function DatosDePruebaPage({ searchParams }: PageProps<"/de
           {vistas[pantalla]()}
         </main>
       ) : (
-        <div className="flex min-h-svh">
+        <div className="relative isolate flex min-h-svh bg-background">
+          <AmbienteEspacio />
           {/* El lugar de la barra lateral del CRM (16rem desde md), para que el contenido tenga su ancho real. */}
           <div aria-hidden className="hidden w-64 shrink-0 border-r bg-sidebar md:block" />
           <main className="flex min-w-0 flex-1 flex-col gap-6 p-4 pt-16 pb-24 md:p-6 md:pb-24">{vistas[pantalla]()}</main>

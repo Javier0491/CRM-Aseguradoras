@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Ban, RefreshCcw } from "lucide-react";
+import { Ban, RefreshCcw, ScanText } from "lucide-react";
 
 import { CapturaWorkspace } from "@/components/captura/captura-workspace";
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
@@ -33,14 +34,12 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
 
   return (
     <>
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">
-          {renovacion ? `Renovar póliza ${renovacion.numero}` : "Captura Inteligente"}
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {renovacion ? (
+      <EncabezadoModulo
+        icono={renovacion ? RefreshCcw : ScanText}
+        titulo={renovacion ? `Renovar póliza ${renovacion.numero}` : "Captura Inteligente"}
+        descripcion={
+          renovacion ? (
             <>
-              <RefreshCcw className="mr-1 inline size-3.5 text-primary" />
               Se conserva el número de póliza {renovacion.numero}; captura la póliza vigor de la nueva vigencia (la
               que se usa para la cobranza).{" "}
               <Link href={`/polizas/${renovacion.id}`} className="text-primary hover:underline">
@@ -49,20 +48,45 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
             </>
           ) : (
             "Extrae los datos de una póliza con IA o captúrala manualmente por ramo."
-          )}
-        </p>
+          )
+        }
+      >
         {ocr.limite === 0 ? (
           <p className="mt-1 text-xs font-medium text-warning">
             Tu plan {plan} no incluye captura con IA: captura las pólizas a mano o cámbiate a la edición Pro.
           </p>
         ) : (
           ocr.limite !== null && (
-            <p className={cn("mt-1 text-xs tabular-nums", hayCupo(ocr.usados, ocr.limite) ? "text-muted-foreground" : "font-medium text-warning")}>
-              Escaneos con IA este mes: {ocr.usados} de {ocr.limite} (plan {plan}).
-            </p>
+            // Cuánto queda del mes: una barra que se llena y se pone ámbar al agotarse.
+            <div className="mt-2 flex max-w-xs items-center gap-2.5">
+              <div
+                className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-label="Escaneos con IA usados este mes"
+                aria-valuemin={0}
+                aria-valuemax={ocr.limite}
+                aria-valuenow={ocr.usados}
+              >
+                <div
+                  className={cn(
+                    "animate-barra h-full rounded-full",
+                    hayCupo(ocr.usados, ocr.limite) ? "bg-primary shadow-[0_0_8px_var(--color-primary)]" : "bg-warning"
+                  )}
+                  style={{ width: `${Math.min(100, (ocr.usados / Math.max(ocr.limite, 1)) * 100)}%`, animationDelay: "400ms" }}
+                />
+              </div>
+              <p
+                className={cn(
+                  "shrink-0 text-xs tabular-nums",
+                  hayCupo(ocr.usados, ocr.limite) ? "text-muted-foreground" : "font-medium text-warning"
+                )}
+              >
+                {ocr.usados} de {ocr.limite} escaneos con IA (plan {plan})
+              </p>
+            </div>
           )
         )}
-      </div>
+      </EncabezadoModulo>
       {renovacion?.cancelada ? (
         <Card className="border-destructive/40">
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">

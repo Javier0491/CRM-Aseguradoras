@@ -2,7 +2,10 @@ import Link from "next/link";
 import { Ban, CalendarClock, Download, FilePlus2, FileText, Paperclip, PhoneOff, Receipt, SearchX, Wallet } from "lucide-react";
 
 import { PolizasConciliadas, PolizasSinConciliar } from "@/components/polizas/conciliacion-polizas";
-import { ValorAjustado } from "@/components/dashboard/valor-ajustado";
+import { AvatarIniciales } from "@/components/layout/avatar-iniciales";
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
+import { EstadoVacio } from "@/components/layout/estado-vacio";
+import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
 import {
   AseguradoraTag,
@@ -18,7 +21,7 @@ import {
 } from "@/components/polizas/poliza-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -44,20 +47,19 @@ import { cn } from "@/lib/utils";
 
 function SinDatos() {
   return (
-    <Card className="border-dashed">
-      <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-        <FileText className="size-8 text-primary" />
-        <p className="font-medium">Aún no hay pólizas registradas</p>
-        <p className="max-w-sm text-sm text-muted-foreground">
-          Captura la primera desde el módulo de Captura Inteligente; sus recibos se generan
-          automáticamente.
-        </p>
-        <Button asChild>
-          <Link href="/captura">
-            <FilePlus2 /> Capturar póliza
-          </Link>
-        </Button>
-      </CardContent>
+    <Card className="border-dashed py-0">
+      <EstadoVacio
+        icono={FileText}
+        titulo="Aún no hay pólizas registradas"
+        descripcion="Captura la primera desde el módulo de Captura Inteligente; sus recibos se generan automáticamente."
+        accion={
+          <Button asChild>
+            <Link href="/captura">
+              <FilePlus2 /> Capturar póliza
+            </Link>
+          </Button>
+        }
+      />
     </Card>
   );
 }
@@ -122,84 +124,56 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
   const paramsReporte = filtrosUrl({ contacto: soloFaltaContacto ? "falta" : undefined });
   const hrefReporte = paramsReporte.size ? `/polizas/reporte-cartera?${paramsReporte}` : "/polizas/reporte-cartera";
 
-  const resumen = [
-    { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, clase: "text-primary" },
+  const resumen: { label: string; valor: string; icon: typeof FileText; tono: TonoResumen; href?: string }[] = [
+    { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, tono: "primary" },
     {
       label: `Por vencer · ${DIAS_POR_VENCER} días`,
       valor: formatNumero(porVencer),
       icon: CalendarClock,
-      clase: porVencer > 0 ? "text-warning" : "text-primary",
+      tono: porVencer > 0 ? "warning" : "primary",
       href: "/renovaciones",
     },
     {
       label: "Recibos pendientes",
       valor: formatNumero(pendientes.cantidad),
       icon: Receipt,
-      clase: "text-primary",
+      tono: "primary",
       href: "/polizas?tab=recibos&recibos=pendientes",
     },
-    { label: "Monto por cobrar", valor: formatMoneda(pendientes.monto), icon: Wallet, clase: "text-primary" },
+    { label: "Monto por cobrar", valor: formatMoneda(pendientes.monto), icon: Wallet, tono: "primary" },
   ];
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Pólizas y Recibos</h1>
-          <p className="text-sm text-muted-foreground">
-            {usuario.soloSuCartera ? "Tu cartera de pólizas y su calendario de cobranza." : "Cartera registrada y calendario de cobranza."}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {totalGeneral > 0 && (
-            <Button asChild variant="outline">
-              {/* Enlace normal: la ruta responde con el archivo. */}
-              <a href={hrefReporte} download title={filtrando ? "Exporta solo las pólizas que coinciden con los filtros" : undefined}>
-                <Download /> Exportar reporte
-              </a>
+      <EncabezadoModulo
+        icono={FileText}
+        titulo="Pólizas y Recibos"
+        descripcion={
+          usuario.soloSuCartera ? "Tu cartera de pólizas y su calendario de cobranza." : "Cartera registrada y calendario de cobranza."
+        }
+        acciones={
+          <>
+            {totalGeneral > 0 && (
+              <Button asChild variant="outline">
+                {/* Enlace normal: la ruta responde con el archivo. */}
+                <a href={hrefReporte} download title={filtrando ? "Exporta solo las pólizas que coinciden con los filtros" : undefined}>
+                  <Download /> Exportar reporte
+                </a>
+              </Button>
+            )}
+            <Button asChild>
+              <Link href="/captura">
+                <FilePlus2 /> Nueva póliza
+              </Link>
             </Button>
-          )}
-          <Button asChild>
-            <Link href="/captura">
-              <FilePlus2 /> Nueva póliza
-            </Link>
-          </Button>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {resumen.map((r) => {
-          const contenido = (
-            <Card
-              className={cn(
-                "@container h-full flex-row items-center gap-4 px-5 py-4",
-                r.href && "transition-colors hover:border-primary/50 hover:bg-primary/[0.03]"
-              )}
-            >
-              <div
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-md border bg-background",
-                  // Con un monto largo en una tarjeta angosta, el ícono cede su lugar.
-                  r.valor.length > 12 && "@max-[15rem]:hidden",
-                  r.clase
-                )}
-              >
-                <r.icon className="size-4" />
-              </div>
-              <div className="@container min-w-0 flex-1">
-                <ValorAjustado valor={r.valor} />
-                <p className="text-xs text-muted-foreground">{r.label}</p>
-              </div>
-            </Card>
-          );
-          return r.href ? (
-            <Link key={r.label} href={r.href} className="rounded-xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
-              {contenido}
-            </Link>
-          ) : (
-            <div key={r.label}>{contenido}</div>
-          );
-        })}
+        {resumen.map((r, i) => (
+          <TarjetaResumen key={r.label} titulo={r.label} valor={r.valor} icono={r.icon} tono={r.tono} href={r.href} orden={i} />
+        ))}
       </section>
 
       {totalGeneral === 0 ? (
@@ -263,13 +237,12 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
             )}
             <Card className="gap-0 py-0">
               {polizas.length === 0 ? (
-                <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
-                  <SearchX className="size-7 text-muted-foreground" />
-                  <p className="font-medium">Ninguna póliza coincide con los filtros</p>
-                  <p className="text-sm text-muted-foreground">
-                    Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo o el estatus.
-                  </p>
-                </div>
+                <EstadoVacio
+                  icono={SearchX}
+                  tono="muted"
+                  titulo="Ninguna póliza coincide con los filtros"
+                  descripcion="Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo o el estatus."
+                />
               ) : (
                 <Table>
                   <TableHeader>
@@ -310,12 +283,17 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
                               </p>
                             )}
                           </TableCell>
-                          <TableCell className="max-w-56">
-                            <p className="truncate font-medium" title={p.cliente.nombre}>
-                              {p.cliente.nombre}
-                            </p>
-                            <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
-                            <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} />
+                          <TableCell className="max-w-64">
+                            <div className="flex items-center gap-2.5">
+                              <AvatarIniciales nombre={p.cliente.nombre} className="size-7 text-[10px]" />
+                              <div className="min-w-0">
+                                <p className="truncate font-medium" title={p.cliente.nombre}>
+                                  {p.cliente.nombre}
+                                </p>
+                                <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
+                                <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} />
+                              </div>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <RamoBadge ramo={p.ramo} />

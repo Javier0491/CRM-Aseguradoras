@@ -18,6 +18,8 @@ import {
 import { DuplicadosCliente } from "@/components/clientes/duplicados-cliente";
 import { EditarCliente } from "@/components/clientes/editar-cliente";
 import { SeguimientoCliente } from "@/components/clientes/seguimiento-cliente";
+import { NumeroAnimado } from "@/components/dashboard/numero-animado";
+import { AvatarIniciales } from "@/components/layout/avatar-iniciales";
 import { BarraAccionesMovil, numeroWhatsApp } from "@/components/layout/barra-acciones-movil";
 import {
   AseguradoraTag,
@@ -49,31 +51,61 @@ import type { getTareasDe } from "@/lib/tareas/queries";
 import type { OpcionEjecutivo, OpcionEquipo } from "@/lib/usuarios/queries";
 import { cn } from "@/lib/utils";
 
-const iniciales = (nombre: string) =>
-  nombre
-    .split(/\s+/)
-    .filter((p) => p.length > 2)
-    .slice(0, 2)
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase() || nombre.slice(0, 2).toUpperCase();
-
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+type ConteoEstados = { vigente: number; por_vencer: number; vencida: number; cancelada: number };
+
+const SEGMENTOS_SALUD: { clave: keyof ConteoEstados; etiqueta: string; color: string }[] = [
+  { clave: "vigente", etiqueta: "vigentes", color: "bg-success" },
+  { clave: "por_vencer", etiqueta: "por vencer", color: "bg-warning" },
+  { clave: "vencida", etiqueta: "vencidas", color: "bg-destructive" },
+  { clave: "cancelada", etiqueta: "canceladas", color: "bg-muted-foreground/50" },
+];
+
+/** La cartera del cliente de un vistazo: una barra con la proporción de pólizas en cada estado. */
+function SaludCartera({ conteo }: { conteo: ConteoEstados }) {
+  const total = conteo.vigente + conteo.por_vencer + conteo.vencida + conteo.cancelada;
+  const segmentos = SEGMENTOS_SALUD.filter((s) => conteo[s.clave] > 0);
+  return (
+    <div
+      role="img"
+      aria-label={segmentos.map((s) => `${conteo[s.clave]} ${s.etiqueta}`).join(", ")}
+      className="mt-3 flex h-1.5 max-w-sm animate-barra gap-0.5 overflow-hidden rounded-full"
+      style={{ animationDelay: "350ms" }}
+    >
+      {segmentos.map((s) => (
+        <span key={s.clave} className={cn("h-full first:rounded-l-full last:rounded-r-full", s.color)} style={{ flexGrow: conteo[s.clave] / total }} />
+      ))}
+    </div>
+  );
+}
 
 function DatoContacto({
   icono: Icon,
   etiqueta,
   children,
   className,
+  orden = 0,
 }: {
   icono: typeof Phone;
   etiqueta: string;
   children: React.ReactNode;
   className?: string;
+  /** Posición, para escalonar la entrada. */
+  orden?: number;
 }) {
   return (
-    <div className={cn("flex min-w-0 items-start gap-3 rounded-lg border bg-background/60 px-3 py-2.5", className)}>
-      <Icon className="mt-0.5 size-4 shrink-0 text-primary" />
+    <div
+      style={{ animationDelay: `${150 + orden * 50}ms` }}
+      className={cn(
+        "group/dato flex min-w-0 animate-entrar items-start gap-3 rounded-lg border bg-background/60 px-3 py-2.5 transition-[border-color,translate,box-shadow] duration-200 ease-out",
+        "hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md motion-reduce:hover:translate-y-0",
+        className
+      )}
+    >
+      <span className="grid size-7 shrink-0 place-items-center rounded-md border border-primary/25 bg-primary/10 text-primary transition-[scale,rotate] duration-200 ease-out group-hover/dato:scale-110 group-hover/dato:-rotate-6 motion-reduce:group-hover/dato:scale-100 motion-reduce:group-hover/dato:rotate-0">
+        <Icon className="size-3.5" />
+      </span>
       <div className="min-w-0">
         <p className="text-xs text-muted-foreground">{etiqueta}</p>
         <div className="text-sm font-medium wrap-anywhere">{children}</div>
@@ -132,13 +164,18 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
         </Link>
       </Button>
 
-      <Card className="gap-0 overflow-hidden py-0">
-        <div className="flex flex-wrap items-center gap-4 border-b border-primary/15 bg-primary/[0.04] px-5 py-5">
-          <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-primary text-base font-semibold text-primary-foreground">
-            {iniciales(cliente.nombre)}
+      <Card className="animate-entrar gap-0 overflow-hidden py-0">
+        <div className="relative flex flex-wrap items-center gap-5 border-b border-primary/15 bg-[radial-gradient(90%_140%_at_0%_0%,color-mix(in_srgb,var(--color-primary)_14%,transparent),transparent_60%)] px-5 py-6">
+          {/* Avatar con aro de la marca y un halo suave detrás. */}
+          <div className="relative shrink-0">
+            <span aria-hidden className="absolute -inset-3 rounded-full bg-primary/20 blur-xl" />
+            <span aria-hidden className="absolute -inset-1 rounded-full bg-[conic-gradient(from_200deg,var(--color-primary),transparent_40%,var(--color-primary)_75%,transparent)] opacity-80" />
+            <AvatarIniciales nombre={cliente.nombre} className="relative size-16 text-lg ring-4 ring-card" />
           </div>
           <div className="min-w-0 flex-1 basis-64">
-            <h1 className="text-xl font-semibold tracking-tight text-balance wrap-anywhere">{cliente.nombre}</h1>
+            <h1 className="encabezado-titulo text-2xl font-semibold tracking-tight text-balance wrap-anywhere">
+              {cliente.nombre}
+            </h1>
             <p className="text-sm text-muted-foreground">
               {formatNumero(cliente.polizas.length)} {cliente.polizas.length === 1 ? "póliza" : "pólizas"} ·{" "}
               {conteo.vigente} {conteo.vigente === 1 ? "vigente" : "vigentes"}
@@ -158,11 +195,14 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
                 </Badge>
               )}
             </div>
+            {cliente.polizas.length > 0 && <SaludCartera conteo={conteo} />}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-2 text-right">
               <p className="text-xs text-muted-foreground">Prima en vigor</p>
-              <p className="text-lg font-semibold text-primary tabular-nums">{formatMoneda(primaVigente)}</p>
+              <p className="text-2xl font-semibold text-primary tabular-nums drop-shadow-[0_0_14px_color-mix(in_srgb,var(--color-primary)_45%,transparent)]">
+                <NumeroAnimado valor={formatMoneda(primaVigente)} />
+              </p>
             </div>
             <EditarCliente
               ejecutivos={ejecutivos}
@@ -184,7 +224,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
           </div>
         </div>
         <CardContent className="grid gap-3 px-5 py-4 sm:grid-cols-2 xl:grid-cols-3">
-          <DatoContacto icono={Phone} etiqueta="Teléfono">
+          <DatoContacto icono={Phone} etiqueta="Teléfono" orden={0}>
             {cliente.telefono ? (
               <span className="flex items-center gap-2">
                 <a href={`tel:${cliente.telefono}`} className="tabular-nums hover:text-primary hover:underline">
@@ -207,7 +247,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
               <span className="text-muted-foreground">Sin teléfono</span>
             )}
           </DatoContacto>
-          <DatoContacto icono={Mail} etiqueta="Correo">
+          <DatoContacto icono={Mail} etiqueta="Correo" orden={1}>
             {cliente.email ? (
               <a href={`mailto:${cliente.email}`} className="hover:text-primary hover:underline">
                 {cliente.email}
@@ -216,10 +256,10 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
               <span className="text-muted-foreground">Sin correo</span>
             )}
           </DatoContacto>
-          <DatoContacto icono={Fingerprint} etiqueta="RFC">
+          <DatoContacto icono={Fingerprint} etiqueta="RFC" orden={2}>
             <span className="font-mono">{cliente.rfc || "—"}</span>
           </DatoContacto>
-          <DatoContacto icono={Cake} etiqueta={cliente.tipoPersona === "MORAL" ? "Constitución" : "Nacimiento"}>
+          <DatoContacto icono={Cake} etiqueta={cliente.tipoPersona === "MORAL" ? "Constitución" : "Nacimiento"} orden={3}>
             {nacimiento ? (
               <span>
                 {formatFecha(`${nacimiento.fecha}T00:00:00Z`)}
@@ -232,7 +272,7 @@ export function VistaCliente({ cliente, tareas, ejecutivos, equipo, duplicados, 
               <span className="text-muted-foreground">Sin capturar</span>
             )}
           </DatoContacto>
-          <DatoContacto icono={MapPin} etiqueta="Dirección" className="sm:col-span-2">
+          <DatoContacto icono={MapPin} etiqueta="Dirección" orden={4} className="sm:col-span-2">
             {direccion ? (
               <span className="whitespace-normal">{direccion}</span>
             ) : (

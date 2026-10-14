@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { AlarmClock, CalendarCheck, CheckCircle2, Coffee, ListTodo, PartyPopper, Users } from "lucide-react";
 
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
+import { EstadoVacio } from "@/components/layout/estado-vacio";
+import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
 import { ListaTareas, type TareaVista } from "@/components/tareas/lista-tareas";
 import { ActivarNotificaciones } from "@/components/notificaciones/activar-notificaciones";
 import { NuevaTarea } from "@/components/tareas/nueva-tarea";
@@ -56,50 +59,38 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
   })).filter((g) => g.tareas.length > 0);
   const nombre = usuario.nombre?.trim().split(/\s+/)[0];
 
-  const tarjetas = [
-    { label: "Mis pendientes", valor: resumen.pendientes, icono: ListTodo, clase: "text-primary" },
-    { label: "Para hoy", valor: resumen.deHoy, icono: CalendarCheck, clase: resumen.deHoy > 0 ? "text-warning" : "text-muted-foreground" },
-    {
-      label: "Vencidas",
-      valor: resumen.vencidas,
-      icono: AlarmClock,
-      clase: resumen.vencidas > 0 ? "text-destructive" : "text-muted-foreground",
-    },
-    { label: "Hechas en 7 días", valor: resumen.hechas, icono: CheckCircle2, clase: "text-success" },
+  const tarjetas: { label: string; valor: number; icono: typeof ListTodo; tono: TonoResumen }[] = [
+    { label: "Mis pendientes", valor: resumen.pendientes, icono: ListTodo, tono: "primary" },
+    { label: "Para hoy", valor: resumen.deHoy, icono: CalendarCheck, tono: resumen.deHoy > 0 ? "warning" : "muted" },
+    { label: "Vencidas", valor: resumen.vencidas, icono: AlarmClock, tono: resumen.vencidas > 0 ? "destructive" : "muted" },
+    { label: "Hechas en 7 días", valor: resumen.hechas, icono: CheckCircle2, tono: "success" },
   ];
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight wrap-anywhere">
-            {usuario.soloTareas && nombre ? `Hola, ${nombre}` : "Tareas"}
-          </h1>
-          <p className="text-sm text-muted-foreground first-letter:uppercase">
+      <EncabezadoModulo
+        icono={ListTodo}
+        titulo={usuario.soloTareas && nombre ? `Hola, ${nombre}` : "Tareas"}
+        descripcion={
+          <span className="block first-letter:uppercase">
             {usuario.soloTareas
               ? `${fechaLarga.format(new Date())} · tus pendientes y los del equipo que te tocan.`
               : "Pendientes y recordatorios del equipo; los de un cliente o una póliza también aparecen en su expediente."}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ActivarNotificaciones />
-          <NuevaTarea hoy={hoy} equipo={equipo} usuarioId={usuario.id} variante="default" />
-        </div>
-      </div>
+          </span>
+        }
+        acciones={
+          <>
+            <ActivarNotificaciones />
+            <NuevaTarea hoy={hoy} equipo={equipo} usuarioId={usuario.id} variante="default" />
+          </>
+        }
+      />
 
       <section aria-label="Mi resumen" className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <TuDia resumen={resumen} />
         <div className="grid grid-cols-2 gap-3">
-          {tarjetas.map((t) => (
-            <Card key={t.label} className="flex-row items-center gap-3 px-4 py-3">
-              <span className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg border bg-background", t.clase)}>
-                <t.icono className="size-4" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-xl leading-tight font-semibold tabular-nums">{formatNumero(t.valor)}</span>
-                <span className="block text-xs leading-tight text-muted-foreground">{t.label}</span>
-              </span>
-            </Card>
+          {tarjetas.map((t, i) => (
+            <TarjetaResumen key={t.label} titulo={t.label} valor={formatNumero(t.valor)} icono={t.icono} tono={t.tono} orden={i + 1} />
           ))}
         </div>
       </section>
@@ -137,25 +128,31 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
           </nav>
 
           {tareas.length === 0 ? (
-            <Card className="items-center gap-2 border-dashed py-14 text-center">
-              {vista === "mias" ? <PartyPopper className="size-7 text-primary" /> : <ListTodo className="size-7 text-primary" />}
-              <p className="font-medium">
-                {vista === "completadas"
-                  ? "Aún no hay tareas completadas"
-                  : vista === "mias"
-                    ? "¡Todo al día!"
-                    : "El equipo no tiene pendientes"}
-              </p>
-              <p className="max-w-sm px-4 text-sm text-muted-foreground">
-                {vista === "mias"
-                  ? "No tienes pendientes. Cuando alguien te encargue una tarea aparecerá aquí."
-                  : "Crea una tarea para no olvidar una llamada, un pago o una renovación."}
-              </p>
+            <Card className="border-dashed py-0">
+              <EstadoVacio
+                icono={vista === "mias" ? PartyPopper : ListTodo}
+                titulo={
+                  vista === "completadas"
+                    ? "Aún no hay tareas completadas"
+                    : vista === "mias"
+                      ? "¡Todo al día!"
+                      : "El equipo no tiene pendientes"
+                }
+                descripcion={
+                  vista === "mias"
+                    ? "No tienes pendientes. Cuando alguien te encargue una tarea aparecerá aquí."
+                    : "Crea una tarea para no olvidar una llamada, un pago o una renovación."
+                }
+              />
             </Card>
           ) : (
             <div className="space-y-6">
-              {grupos.map((g) => (
-                <Card key={g.clave} className="gap-0 py-0">
+              {grupos.map((g, i) => (
+                <Card
+                  key={g.clave}
+                  className="animate-entrar gap-0 py-0"
+                  style={{ animationDelay: `${250 + i * 80}ms` }}
+                >
                   <CardHeader className="border-b px-5 py-3 [.border-b]:pb-3">
                     <CardTitle
                       className={cn(
@@ -219,7 +216,7 @@ function TuDia({ resumen }: { resumen: MiResumenTareas }) {
           : `${faltan} para cerrar el día.`;
 
   return (
-    <Card className="flex-row items-center gap-4 px-5 py-4">
+    <Card className="animate-entrar flex-row items-center gap-4 px-5 py-4">
       <AnilloDia porcentaje={porcentaje} completo={completo} libre={total === 0} />
       <div className="min-w-0 space-y-0.5">
         <p className="text-[11px] font-medium tracking-wider text-muted-foreground uppercase">Tu día</p>
@@ -232,7 +229,10 @@ function TuDia({ resumen }: { resumen: MiResumenTareas }) {
   );
 }
 
-/** Anillo del avance del día; al cambiar, el trazo avanza (300 ms) en vez de saltar. */
+/**
+ * Anillo del avance del día: se dibuja desde cero al entrar y, al cambiar, el trazo avanza (300 ms)
+ * en vez de saltar. Brilla con su color.
+ */
 function AnilloDia({ porcentaje, completo, libre }: { porcentaje: number; completo: boolean; libre: boolean }) {
   const r = 24;
   const largo = 2 * Math.PI * r;
@@ -242,7 +242,7 @@ function AnilloDia({ porcentaje, completo, libre }: { porcentaje: number; comple
       role="img"
       aria-label={libre ? "Sin pendientes para hoy" : `Avance del día: ${porcentaje}%`}
     >
-      <svg viewBox="0 0 56 56" className="absolute inset-0 size-16 -rotate-90" aria-hidden>
+      <svg viewBox="0 0 56 56" className="absolute inset-0 size-16 -rotate-90 overflow-visible" aria-hidden>
         <circle cx="28" cy="28" r={r} fill="none" strokeWidth="5" className="stroke-muted" />
         <circle
           cx="28"
@@ -253,9 +253,12 @@ function AnilloDia({ porcentaje, completo, libre }: { porcentaje: number; comple
           strokeLinecap="round"
           strokeDasharray={largo}
           strokeDashoffset={largo * (1 - porcentaje / 100)}
+          style={{ "--largo": largo } as React.CSSProperties}
           className={cn(
-            "transition-[stroke-dashoffset] duration-300 ease-out motion-reduce:transition-none",
-            completo ? "stroke-success" : "stroke-primary",
+            "animate-trazo transition-[stroke-dashoffset] duration-300 ease-out motion-reduce:transition-none",
+            completo
+              ? "stroke-success drop-shadow-[0_0_6px_var(--color-success)]"
+              : "stroke-primary drop-shadow-[0_0_6px_var(--color-primary)]",
             porcentaje === 0 && "opacity-0"
           )}
         />
@@ -323,7 +326,7 @@ function AvanceEquipo({ personas, usuarioId }: { personas: AvancePersona[]; usua
                     aria-valuenow={porcentaje}
                   >
                     <div
-                      className={cn("h-full rounded-full", porcentaje === 100 ? "bg-success" : "bg-primary")}
+                      className={cn("animate-barra h-full rounded-full", porcentaje === 100 ? "bg-success" : "bg-primary")}
                       style={{ width: `${porcentaje}%` }}
                     />
                   </div>

@@ -2,11 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FilePlus2, Mail, Phone, SearchX, Users } from "lucide-react";
 
+import { AvatarIniciales } from "@/components/layout/avatar-iniciales";
 import { BusquedaUrl } from "@/components/layout/busqueda-url";
+import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
+import { EstadoVacio } from "@/components/layout/estado-vacio";
 import { FiltroEjecutivo } from "@/components/layout/filtro-ejecutivo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -41,30 +44,31 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Directorio de Clientes</h1>
-          <p className="text-sm text-muted-foreground">
-            {formatNumero(totalGeneral)} {totalGeneral === 1 ? "cliente registrado" : "clientes registrados"}.
-            Se agregan al capturar su primera póliza.
-          </p>
-        </div>
-        <Button asChild>
-          <Link href="/captura">
-            <FilePlus2 /> Nueva póliza
-          </Link>
-        </Button>
-      </div>
+      <EncabezadoModulo
+        icono={Users}
+        titulo="Directorio de Clientes"
+        descripcion={
+          <>
+            {formatNumero(totalGeneral)} {totalGeneral === 1 ? "cliente registrado" : "clientes registrados"}. Se
+            agregan al capturar su primera póliza.
+          </>
+        }
+        acciones={
+          <Button asChild>
+            <Link href="/captura">
+              <FilePlus2 /> Nueva póliza
+            </Link>
+          </Button>
+        }
+      />
 
       {totalGeneral === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
-            <Users className="size-8 text-primary" />
-            <p className="font-medium">Aún no hay clientes registrados</p>
-            <p className="max-w-sm text-sm text-muted-foreground">
-              Captura una póliza y su contratante aparecerá aquí.
-            </p>
-          </CardContent>
+        <Card className="border-dashed py-0">
+          <EstadoVacio
+            icono={Users}
+            titulo="Aún no hay clientes registrados"
+            descripcion="Captura una póliza y su contratante aparecerá aquí."
+          />
         </Card>
       ) : (
         <div className="space-y-4">
@@ -78,11 +82,12 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
           </div>
           <Card className="gap-0 py-0">
             {clientes.length === 0 ? (
-              <div className="flex flex-col items-center gap-2 px-5 py-14 text-center">
-                <SearchX className="size-7 text-muted-foreground" />
-                <p className="font-medium">Ningún cliente coincide con la búsqueda</p>
-                <p className="text-sm text-muted-foreground">Prueba con otro nombre, RFC, dato de contacto o ejecutivo.</p>
-              </div>
+              <EstadoVacio
+                icono={SearchX}
+                tono="muted"
+                titulo="Ningún cliente coincide con la búsqueda"
+                descripcion="Prueba con otro nombre, RFC, dato de contacto o ejecutivo."
+              />
             ) : (
               <Table>
                 <TableHeader>
@@ -98,16 +103,21 @@ export default async function ClientesPage({ searchParams }: PageProps<"/cliente
                 <TableBody>
                   {clientes.map((c) => (
                     <TableRow key={c.id}>
-                      <TableCell className="max-w-[280px] pl-5">
-                        <Link
-                          href={`/clientes/${c.id}`}
-                          className="block truncate font-medium hover:text-primary hover:underline"
-                        >
-                          {c.nombre}
-                        </Link>
-                        {c.tipoPersona === "MORAL" && (
-                          <span className="text-[11px] text-muted-foreground">Persona moral</span>
-                        )}
+                      <TableCell className="max-w-[320px] pl-5">
+                        <div className="flex items-center gap-3">
+                          <AvatarIniciales nombre={c.nombre} />
+                          <div className="min-w-0">
+                            <Link
+                              href={`/clientes/${c.id}`}
+                              className="block truncate font-medium hover:text-primary hover:underline"
+                            >
+                              {c.nombre}
+                            </Link>
+                            {c.tipoPersona === "MORAL" && (
+                              <span className="text-[11px] text-muted-foreground">Persona moral</span>
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{c.rfc || <SinDato />}</TableCell>
                       <TableCell>
