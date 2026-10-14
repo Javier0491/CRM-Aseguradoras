@@ -284,33 +284,39 @@ function Escribiendo() {
 }
 
 /**
- * Markdown mínimo de las respuestas: párrafos, listas con "- " o "1.", **negritas** y enlaces
+ * Markdown mínimo de las respuestas: párrafos, listas con "- " o "1." (con un nivel de sangría
+ * para los puntos anidados), **negritas** y enlaces
  * internos [texto](/ruta). Los enlaces externos se muestran como texto: el asistente solo enlaza
  * pantallas del CRM.
  */
 function TextoMarkdown({ texto }: { texto: string }) {
   const bloques: React.ReactNode[] = [];
-  let lista: { ordenada: boolean; items: string[] } | null = null;
+  let lista: { ordenada: boolean; items: { texto: string; anidado: boolean }[] } | null = null;
   const cerrarLista = () => {
     if (!lista) return;
     const Tag = lista.ordenada ? "ol" : "ul";
     bloques.push(
       <Tag key={bloques.length} className={cn("space-y-1 pl-5", lista.ordenada ? "list-decimal" : "list-disc")}>
         {lista.items.map((item, i) => (
-          <li key={i}>{enLinea(item)}</li>
+          <li key={i} className={cn(item.anidado && "ml-5 list-[circle] text-foreground/90")}>
+            {enLinea(item.texto)}
+          </li>
         ))}
       </Tag>
     );
     lista = null;
   };
   for (const linea of texto.split("\n")) {
-    const vineta = /^\s*[-*•]\s+(.*)$/.exec(linea);
-    const numero = /^\s*\d+[.)]\s+(.*)$/.exec(linea);
-    if (vineta || numero) {
+    const vineta = /^(\s*)[-*•]\s+(.*)$/.exec(linea);
+    const numero = /^(\s*)\d+[.)]\s+(.*)$/.exec(linea);
+    const item = vineta ?? numero;
+    if (item) {
+      // Con sangría es un punto dentro del anterior: se queda en la misma lista, un nivel adentro.
+      const anidado = lista !== null && item[1].length >= 2;
       const ordenada = Boolean(numero);
-      if (lista && lista.ordenada !== ordenada) cerrarLista();
+      if (lista && !anidado && lista.ordenada !== ordenada) cerrarLista();
       lista ??= { ordenada, items: [] };
-      lista.items.push((vineta ?? numero)![1]);
+      lista.items.push({ texto: item[2], anidado });
       continue;
     }
     cerrarLista();
