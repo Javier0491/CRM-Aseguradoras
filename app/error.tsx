@@ -21,6 +21,12 @@ export default function ErrorApp({ error, retry }: { error: Error & { digest?: s
           No se pudo cargar esta pantalla. Intenta de nuevo; si sigue igual, avisa al administrador de la plataforma.
           {error.digest && <span className="mt-1 block font-mono text-xs">ref: {error.digest}</span>}
         </p>
+        {/* El detalle técnico ayuda a diagnosticar (en errores del servidor Next solo deja el ref). */}
+        {!error.digest && error.message && (
+          <p className="mx-auto max-w-sm rounded-md bg-muted px-3 py-2 font-mono text-[11px] break-words text-muted-foreground">
+            {error.message.slice(0, 240)}
+          </p>
+        )}
         <EstadoSistema />
         <Button variant="outline" onClick={() => retry()}>
           <RotateCcw /> Reintentar
