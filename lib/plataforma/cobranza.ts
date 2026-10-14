@@ -56,18 +56,49 @@ export function siguientePagadoHasta(pagadoHasta: string | null, hoy: string, me
   return sumarDias(sumarMeses(hoy, meses), -1);
 }
 
-export type AccionCobro = "avisar" | "suspender" | null;
+/** Duración de la prueba gratis. */
+export const DIAS_PRUEBA = 30;
+
+/** Último día de una prueba gratis que empieza `hoy` (hoy cuenta como el primer día). */
+export const finPrueba = (hoy: string) => sumarDias(hoy, DIAS_PRUEBA - 1);
 
 /**
- * Lo que hace la tarea diaria con una agencia: avisar una vez por periodo cuando está por vencer o
- * vencida (si no se avisó ya para ese pagadoHasta) y suspenderla al pasar la tolerancia si tiene
- * la suspensión automática. Una agencia suspendida no recibe más avisos.
+ * Prueba gratis de la agencia: los días que le quedan (0 = hoy es el último; negativo, ya terminó).
+ * null si no tiene prueba o si ya paga: con un pago registrado manda la cobranza normal.
+ */
+export function estadoPrueba(a: { pruebaHasta: string | null; pagadoHasta: string | null }, hoy: string) {
+  if (!a.pruebaHasta || a.pagadoHasta) return null;
+  const dias = diasEntre(hoy, a.pruebaHasta);
+  return { activa: dias >= 0, dias, hasta: a.pruebaHasta };
+}
+
+/** "Quedan 12 días de prueba", "Último día de prueba", "Prueba terminada". */
+export function textoPrueba(p: { dias: number }) {
+  if (p.dias < 0) return "Prueba terminada";
+  if (p.dias === 0) return "Último día de prueba";
+  return `${p.dias === 1 ? "Queda 1 día" : `Quedan ${p.dias} días`} de prueba`;
+}
+
+export type AccionCobro = "avisar" | "suspender" | "terminar_prueba" | null;
+
+/**
+ * Lo que hace la tarea diaria con una agencia: suspenderla cuando terminó su prueba gratis sin
+ * pagar; avisar una vez por periodo cuando está por vencer o vencida (si no se avisó ya para ese
+ * pagadoHasta) y suspenderla al pasar la tolerancia si tiene la suspensión automática. Una agencia
+ * suspendida no recibe más avisos.
  */
 export function accionCobroDiaria(
-  a: CobroAgencia & { suspendida: boolean; suspensionAutomatica: boolean; avisoCobroEnviadoPara: string | null },
+  a: CobroAgencia & {
+    suspendida: boolean;
+    suspensionAutomatica: boolean;
+    avisoCobroEnviadoPara: string | null;
+    pruebaHasta: string | null;
+  },
   hoy: string
 ): AccionCobro {
   if (a.suspendida) return null;
+  const prueba = estadoPrueba(a, hoy);
+  if (prueba) return prueba.activa ? null : "terminar_prueba";
   const { estado } = estadoCobro(a, hoy);
   if (estado === "suspendible") return a.suspensionAutomatica ? "suspender" : a.avisoCobroEnviadoPara === a.pagadoHasta ? null : "avisar";
   if ((estado === "por_vencer" || estado === "vencida") && a.avisoCobroEnviadoPara !== a.pagadoHasta) return "avisar";

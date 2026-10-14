@@ -37,7 +37,7 @@ const TARJETAS: Tarjeta[] = [
     previo: "Incluye:",
     incluye: ["CRM: clientes, pólizas, recibos y renovaciones", "Conciliación de recibos"],
     porEdicion: {
-      BASICO: ["1 usuario", "Captura manual con validación por ramo"],
+      BASICO: ["1 usuario", "10 escaneos OCR con IA al mes"],
       PRO: ["1 usuario", "50 escaneos OCR con IA al mes"],
     },
     cta: "Elegir Agente",

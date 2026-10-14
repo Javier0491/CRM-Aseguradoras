@@ -20,7 +20,7 @@ export const PLANES = {
   AGENTE: {
     nombre: "Agente",
     ediciones: {
-      BASICO: { usuarios: 1, ocrMensual: 0, precio: { MENSUAL: 900, ANUAL: 9_000 } },
+      BASICO: { usuarios: 1, ocrMensual: 10, precio: { MENSUAL: 900, ANUAL: 9_000 } },
       PRO: { usuarios: 1, ocrMensual: 50, precio: { MENSUAL: 1_500, ANUAL: 15_000 } },
     },
   },

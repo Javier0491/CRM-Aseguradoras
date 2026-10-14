@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { COLOR_MARCA_PREDETERMINADO } from "@/lib/agencias/marca";
 import type { AgenciaLobby } from "@/lib/agencias/queries";
@@ -47,6 +48,7 @@ import {
 } from "@/lib/agencias/superadmin";
 import { colorTextoSobre, normalizarHex } from "@/lib/color";
 import { formatFecha, formatNumero } from "@/lib/format";
+import { DIAS_PRUEBA } from "@/lib/plataforma/cobranza";
 import { conDeshacer } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -391,6 +393,15 @@ function NuevaAgencia({ onCreada }: { onCreada: (id: string) => void }) {
               aria-invalid={Boolean(state.error)}
             />
             {state.error && <p className="text-xs text-destructive">{state.error}</p>}
+          </div>
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+            <div className="space-y-1">
+              <Label htmlFor="prueba-agencia">Prueba gratis de {DIAS_PRUEBA} días</Label>
+              <p className="text-xs text-muted-foreground">
+                Al terminar sin pago registrado, la agencia se suspende sola. Puedes cambiar la fecha en Cobranza.
+              </p>
+            </div>
+            <Switch id="prueba-agencia" name="prueba" defaultChecked />
           </div>
           <DialogFooter>
             <DialogClose asChild>

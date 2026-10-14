@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { BadgeDollarSign, Loader2, Receipt, Save, Settings2 } from "lucide-react";
+import { BadgeDollarSign, Gift, Loader2, Receipt, Save, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -41,11 +41,14 @@ import {
 import { configurarCobranza, registrarPagoPlataforma } from "@/lib/plataforma/actions";
 import {
   DIAS_AVISO_COBRO,
+  DIAS_PRUEBA,
   detalleCobro,
   ETIQUETA_ESTADO_COBRO,
+  finPrueba,
   MAX_DIAS_TOLERANCIA,
   MAX_MESES_PAGO,
   siguientePagadoHasta,
+  textoPrueba,
   type EstadoCobro,
 } from "@/lib/plataforma/cobranza";
 import type { CobranzaAgencia } from "@/lib/plataforma/queries";
@@ -125,13 +128,31 @@ export function CobranzaPlataforma({ agencias, hoy }: { agencias: CobranzaAgenci
                 </p>
               </TableCell>
               <TableCell className="min-w-48 whitespace-normal">
-                <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap", ESTILO_ESTADO_COBRO[a.estado])}>
-                  {ETIQUETA_ESTADO_COBRO[a.estado]}
-                </span>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {detalleCobro(a)}
-                  {a.cuotaMensual !== null && (a.suspensionAutomatica ? " · suspensión automática" : " · sin suspensión automática")}
-                </p>
+                {a.prueba ? (
+                  <>
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap",
+                        a.prueba.activa ? "border-primary/40 bg-primary/10 text-primary" : "border-destructive/40 bg-destructive/10 text-destructive"
+                      )}
+                    >
+                      <Gift className="size-3" /> {a.prueba.activa ? "Prueba gratis" : "Prueba terminada"}
+                    </span>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {a.prueba.activa ? `${textoPrueba(a.prueba)} · hasta el ${fecha(a.prueba.hasta)}` : `Terminó el ${fecha(a.prueba.hasta)}`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <span className={cn("inline-flex rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap", ESTILO_ESTADO_COBRO[a.estado])}>
+                      {ETIQUETA_ESTADO_COBRO[a.estado]}
+                    </span>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      {detalleCobro(a)}
+                      {a.cuotaMensual !== null && (a.suspensionAutomatica ? " · suspensión automática" : " · sin suspensión automática")}
+                    </p>
+                  </>
+                )}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {a.cuotaMensual === null ? "—" : formatMoneda(a.cuotaMensual)}
@@ -179,6 +200,7 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
   const [tolerancia, setTolerancia] = React.useState(String(agencia.diasTolerancia));
   const [automatica, setAutomatica] = React.useState(agencia.suspensionAutomatica);
   const [correo, setCorreo] = React.useState(agencia.correoFacturacion ?? "");
+  const [pruebaHasta, setPruebaHasta] = React.useState(agencia.pruebaHasta ?? "");
   const [error, setError] = React.useState<string | null>(null);
   const [pendiente, startTransition] = React.useTransition();
 
@@ -195,6 +217,7 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
         diasTolerancia: tolerancia,
         suspensionAutomatica: automatica,
         correoFacturacion: correo,
+        pruebaHasta,
       });
       if (!r.ok) {
         setError(r.error);
@@ -312,6 +335,28 @@ function FormConfigurar({ agencia, hoy, onListo }: { agencia: CobranzaAgencia; h
           </p>
         </div>
         <Switch id="cobro-automatica" checked={automatica} onCheckedChange={setAutomatica} disabled={!cuota.trim()} />
+      </div>
+      <div className="space-y-2 rounded-lg border p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Label htmlFor="cobro-prueba" className="flex items-center gap-1.5">
+            <Gift className="size-4 text-primary" /> Prueba gratis hasta
+          </Label>
+          <div className="flex gap-1.5">
+            <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => setPruebaHasta(finPrueba(hoy))}>
+              {DIAS_PRUEBA} días desde hoy
+            </Button>
+            {pruebaHasta && (
+              <Button type="button" variant="ghost" size="sm" className="h-7" onClick={() => setPruebaHasta("")}>
+                Quitar
+              </Button>
+            )}
+          </div>
+        </div>
+        <Input id="cobro-prueba" type="date" value={pruebaHasta} onChange={(e) => setPruebaHasta(e.target.value)} />
+        <p className="text-xs text-muted-foreground">
+          Mientras no tenga pagos, al pasar esta fecha la tarea diaria la suspende y le avisa por correo. Con el primer
+          pago registrado la prueba deja de contar.
+        </p>
       </div>
       {agencia.pagos.length > 0 && (
         <div className="space-y-2">

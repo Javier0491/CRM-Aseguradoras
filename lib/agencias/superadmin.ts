@@ -9,6 +9,8 @@ import { slugDesdeNombre } from "@/lib/agencias/slug";
 import { getCurrentUser } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { db } from "@/lib/db";
+import { hoyISO } from "@/lib/format";
+import { DIAS_PRUEBA, finPrueba } from "@/lib/plataforma/cobranza";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type CambioAgenciaResultado = { ok: false; error: string };
@@ -97,11 +99,18 @@ export async function crearAgencia(_prev: CrearAgenciaState, formData: FormData)
     (await db.agencia.findMany({ where: { slug: { startsWith: base } }, select: { slug: true } })).map((a) => a.slug)
   );
   let slug = base;
+  const conPrueba = formData.get("prueba") === "on";
   for (let n = 2; usados.has(slug); n++) slug = `${base}-${n}`;
 
   const agencia = await db.$transaction(async (tx) => {
     const creada = await tx.agencia.create({
-      data: { nombre, slug, colorHex: COLOR_MARCA_PREDETERMINADO, tema: TEMA_PREDETERMINADO },
+      data: {
+        nombre,
+        slug,
+        colorHex: COLOR_MARCA_PREDETERMINADO,
+        tema: TEMA_PREDETERMINADO,
+        ...(conPrueba && { pruebaHasta: new Date(`${finPrueba(hoyISO())}T00:00:00Z`) }),
+      },
       select: { id: true, nombre: true },
     });
     await registrarBitacora(
@@ -110,7 +119,7 @@ export async function crearAgencia(_prev: CrearAgenciaState, formData: FormData)
         accion: "agencia.crear",
         entidad: "agencia",
         entidadId: creada.id,
-        descripcion: `${user.email ?? "Superadmin"} creó la agencia ${creada.nombre}`,
+        descripcion: `${user.email ?? "Superadmin"} creó la agencia ${creada.nombre}${conPrueba ? ` con ${DIAS_PRUEBA} días de prueba gratis` : ""}`,
       },
       tx
     );

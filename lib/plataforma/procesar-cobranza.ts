@@ -34,7 +34,10 @@ export async function procesarCobranzaPlataforma(): Promise<ResumenCobranza> {
   const resumen: ResumenCobranza = { avisadas: 0, suspendidas: 0, sinCorreo: 0, errores: [] };
   const plataforma = nombrePlataforma();
   const agencias = await db.agencia.findMany({
-    where: { suspendida: false, cuotaMensual: { not: null }, pagadoHasta: { not: null } },
+    where: {
+      suspendida: false,
+      OR: [{ cuotaMensual: { not: null }, pagadoHasta: { not: null } }, { pruebaHasta: { not: null } }],
+    },
     select: {
       id: true,
       nombre: true,
@@ -45,6 +48,7 @@ export async function procesarCobranzaPlataforma(): Promise<ResumenCobranza> {
       avisoCobroEnviadoPara: true,
       correoFacturacion: true,
       suspendida: true,
+      pruebaHasta: true,
     },
   });
 
@@ -55,10 +59,61 @@ export async function procesarCobranzaPlataforma(): Promise<ResumenCobranza> {
       diasTolerancia: a.diasToleranciaPago,
     };
     const accion = accionCobroDiaria(
-      { ...cobro, suspendida: a.suspendida, suspensionAutomatica: a.suspensionAutomatica, avisoCobroEnviadoPara: iso(a.avisoCobroEnviadoPara) },
+      {
+        ...cobro,
+        suspendida: a.suspendida,
+        suspensionAutomatica: a.suspensionAutomatica,
+        avisoCobroEnviadoPara: iso(a.avisoCobroEnviadoPara),
+        pruebaHasta: iso(a.pruebaHasta),
+      },
       hoy
     );
     if (!accion) continue;
+
+    if (accion === "terminar_prueba") {
+      const termino = formatFecha(`${iso(a.pruebaHasta)}T00:00:00Z`);
+      await db.$transaction(async (tx) => {
+        await tx.agencia.update({
+          where: { id: a.id },
+          data: { suspendida: true, suspendidaAt: new Date(), motivoSuspension: `Terminó la prueba gratis el ${termino}` },
+        });
+        await registrarBitacora(
+          { id: null, email: null, agenciaId: a.id },
+          {
+            accion: "agencia.suspender",
+            entidad: "agencia",
+            entidadId: a.id,
+            descripcion: `Suspensión automática: terminó la prueba gratis el ${termino} sin pago registrado`,
+          },
+          tx
+        );
+      });
+      resumen.suspendidas++;
+      const para = await destinatarios(a);
+      if (para.length === 0) {
+        resumen.sinCorreo++;
+        continue;
+      }
+      try {
+        const { html, texto } = await renderNotificacionCrm({
+          nombreCrm: plataforma,
+          colorTema: COLOR_MARCA_PREDETERMINADO,
+          logoUrl: logoPlataformaUrl(),
+          nombreUsuario: a.nombre,
+          tituloNotificacion: "Terminó tu prueba gratis",
+          mensajePrincipal: [
+            `La prueba gratis del CRM de ${a.nombre} terminó el ${termino}, así que el acceso quedó en pausa.`,
+            "Tus datos se conservan completos. Contrata tu plan y en cuanto registremos el pago se reactiva el acceso.",
+            "Responde este correo y te ayudamos a elegir el plan.",
+          ].join("\n"),
+        });
+        const r = await enviarCorreoPlataforma({ para, asunto: `Terminó la prueba gratis de ${a.nombre}`, html, texto });
+        resumen.errores.push(...r.errores.map((e) => `${a.nombre}: ${e}`));
+      } catch (e) {
+        resumen.errores.push(`${a.nombre}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+      continue;
+    }
     const { estado, limite } = estadoCobro(cobro, hoy);
     const vence = formatFecha(`${cobro.pagadoHasta}T00:00:00Z`);
 

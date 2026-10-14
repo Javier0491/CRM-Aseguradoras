@@ -61,6 +61,8 @@ export async function configurarCobranza(
     diasTolerancia: string;
     suspensionAutomatica: boolean;
     correoFacturacion: string;
+    /** Último día de la prueba gratis; vacío = sin prueba. */
+    pruebaHasta: string;
   }
 ): Promise<PlataformaResultado> {
   const user = await superadmin();
@@ -83,15 +85,23 @@ export async function configurarCobranza(
   }
   const correo = typeof datos.correoFacturacion === "string" ? datos.correoFacturacion.trim().toLowerCase() : "";
   if (correo && !emailValido(correo)) return { ok: false, error: "El correo de facturación no es válido." };
+  const pruebaHasta = typeof datos.pruebaHasta === "string" ? datos.pruebaHasta.trim() : "";
+  if (pruebaHasta && !fechaValida(pruebaHasta)) return { ok: false, error: "La fecha de fin de la prueba no es válida." };
 
   const agencia = await db.agencia.findUnique({
     where: { id: agenciaId },
-    select: { nombre: true, pagadoHasta: true, plan: true, edicion: true, cicloFacturacion: true },
+    select: { nombre: true, pagadoHasta: true, plan: true, edicion: true, cicloFacturacion: true, pruebaHasta: true },
   });
   if (!agencia) return { ok: false, error: "La agencia ya no existe." };
   const nuevo = `${definicionPlan(datos.plan, datos.edicion).nombre} ${ETIQUETA_CICLO[datos.ciclo].toLowerCase()}`;
   const anterior = `${definicionPlan(agencia.plan, agencia.edicion).nombre} ${ETIQUETA_CICLO[agencia.cicloFacturacion].toLowerCase()}`;
   const cambioPlan = nuevo !== anterior ? `plan ${nuevo} (antes ${anterior})` : "";
+  const cambioPrueba =
+    iso(agencia.pruebaHasta) === (pruebaHasta || null)
+      ? ""
+      : pruebaHasta
+        ? `; prueba gratis hasta el ${formatFecha(`${pruebaHasta}T00:00:00Z`)}`
+        : "; sin prueba gratis";
   await db.$transaction(async (tx) => {
     await tx.agencia.update({
       where: { id: agenciaId },
@@ -104,6 +114,7 @@ export async function configurarCobranza(
         diasToleranciaPago: tolerancia,
         suspensionAutomatica: cuota !== null && datos.suspensionAutomatica === true,
         correoFacturacion: correo || null,
+        pruebaHasta: pruebaHasta ? new Date(`${pruebaHasta}T00:00:00Z`) : null,
         // Otra fecha de pago es otro periodo: se podrá volver a avisar.
         ...(iso(agencia.pagadoHasta) !== (pagadoHasta || null) && { avisoCobroEnviadoPara: null }),
       },
@@ -116,8 +127,8 @@ export async function configurarCobranza(
         entidadId: agenciaId,
         descripcion:
           cuota === null
-            ? `${user.email ?? "Superadmin"} quitó la cobranza de ${agencia.nombre}${cambioPlan && `; ${cambioPlan}`}`
-            : `${user.email ?? "Superadmin"} configuró la cobranza de ${agencia.nombre}: ${cambioPlan && `${cambioPlan}, `}${formatMoneda(cuota)} al mes, pagado hasta el ${formatFecha(`${pagadoHasta}T00:00:00Z`)}`,
+            ? `${user.email ?? "Superadmin"} quitó la cobranza de ${agencia.nombre}${cambioPlan && `; ${cambioPlan}`}${cambioPrueba}`
+            : `${user.email ?? "Superadmin"} configuró la cobranza de ${agencia.nombre}: ${cambioPlan && `${cambioPlan}, `}${formatMoneda(cuota)} al mes, pagado hasta el ${formatFecha(`${pagadoHasta}T00:00:00Z`)}${cambioPrueba}`,
       },
       tx
     );

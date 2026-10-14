@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import { USUARIOS_DEL_PLAN } from "@/lib/planes/limites";
 import { definicionPlan, periodoDe } from "@/lib/planes/planes";
-import { estadoCobro } from "@/lib/plataforma/cobranza";
+import { estadoCobro, estadoPrueba } from "@/lib/plataforma/cobranza";
 
 const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
@@ -34,6 +34,7 @@ export async function getCobranzaAgencias() {
       diasToleranciaPago: true,
       suspensionAutomatica: true,
       correoFacturacion: true,
+      pruebaHasta: true,
       pagosPlataforma: {
         orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
         take: 6,
@@ -60,6 +61,8 @@ export async function getCobranzaAgencias() {
       ocr: { usados: a.usoOcr[0]?.escaneos ?? 0, limite: plan.ocrMensual },
       suspensionAutomatica: a.suspensionAutomatica,
       correoFacturacion: a.correoFacturacion,
+      pruebaHasta: iso(a.pruebaHasta),
+      prueba: estadoPrueba({ pruebaHasta: iso(a.pruebaHasta), pagadoHasta: cobro.pagadoHasta }, hoy),
       ...cobro,
       ...estadoCobro(cobro, hoy),
       pagos: a.pagosPlataforma.map((p) => ({
@@ -79,13 +82,14 @@ export type CobranzaAgencia = Awaited<ReturnType<typeof getCobranzaAgencias>>[nu
 export async function getEstadoPagoAgencia(agenciaId: string) {
   const a = await db.agencia.findUnique({
     where: { id: agenciaId },
-    select: { cuotaMensual: true, pagadoHasta: true, diasToleranciaPago: true },
+    select: { cuotaMensual: true, pagadoHasta: true, diasToleranciaPago: true, pruebaHasta: true },
   });
   if (!a) return null;
   const pagadoHasta = iso(a.pagadoHasta);
+  const hoy = hoyISO();
   const cobro = estadoCobro(
     { cuotaMensual: a.cuotaMensual === null ? null : Number(a.cuotaMensual), pagadoHasta, diasTolerancia: a.diasToleranciaPago },
-    hoyISO()
+    hoy
   );
-  return { ...cobro, pagadoHasta };
+  return { ...cobro, pagadoHasta, prueba: estadoPrueba({ pruebaHasta: iso(a.pruebaHasta), pagadoHasta }, hoy) };
 }

@@ -8,6 +8,7 @@ import { getAgencia } from "@/lib/agencias/queries";
 import { esAdmin, getCurrentUser, puedeConciliar, requireUser } from "@/lib/auth/dal";
 import { formatFecha } from "@/lib/format";
 import { getAlertasPlataforma } from "@/lib/plataforma/alertas";
+import { textoPrueba } from "@/lib/plataforma/cobranza";
 import { getEstadoPagoAgencia } from "@/lib/plataforma/queries";
 import { rolLabels } from "@/lib/usuarios/reglas";
 
@@ -69,6 +70,12 @@ export default async function DashboardLayout({
         {agencia.suspendida && (
           <p role="status" className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
             Esta agencia está suspendida: sus usuarios no pueden entrar. Reactívala desde Mis agencias.
+          </p>
+        )}
+        {pago?.prueba?.activa && (
+          <p role="status" className="border-b border-primary/30 bg-primary/10 px-4 py-2 text-sm text-primary">
+            {textoPrueba(pago.prueba)} gratis: tu prueba termina el {fecha(pago.prueba.hasta)}. Contrata tu plan antes para
+            no interrumpir el servicio.
           </p>
         )}
         {pago && vencimiento && (pago.estado === "por_vencer" || pago.estado === "vencida" || pago.estado === "suspendible") && (

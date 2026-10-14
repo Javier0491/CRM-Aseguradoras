@@ -18,7 +18,7 @@ import type { DatosTareas } from "@/components/tareas/vista-tareas";
 import { hoyISO } from "@/lib/format";
 import { Prisma, type EstadoRecibo, type FormaPago, type Ramo } from "@/lib/generated/prisma/client";
 import { definicionPlan } from "@/lib/planes/planes";
-import { estadoCobro } from "@/lib/plataforma/cobranza";
+import { estadoCobro, estadoPrueba } from "@/lib/plataforma/cobranza";
 import type { MensajeChat } from "@/lib/mensajes/reglas";
 import { COLUMNAS_EMBUDO, columnaDe, type ColumnaEmbudo } from "@/lib/renovaciones/reglas";
 import { MAX_RESPONSABLES_TAREA } from "@/lib/tareas/reglas";
@@ -886,6 +886,8 @@ export function datosSuperadmin(c: Conjunto): DatosSuperadmin {
       const plan = f === "demo" ? "BROKER" : ciclo(["AGENTE", "BROKER"] as const, i);
       const edicion = f === "demo" ? "PRO" : ciclo(["BASICO", "PRO"] as const, i);
       const definicion = definicionPlan(plan, edicion);
+      // Las que no pagan están en prueba: unas con días por delante y otras ya terminadas.
+      const pruebaHasta = cobro.pagadoHasta ? null : isoDia(i % 2 === 0 ? 12 : -2);
       return {
         id: `agc${i}`,
         nombre: nombre(i),
@@ -899,6 +901,8 @@ export function datosSuperadmin(c: Conjunto): DatosSuperadmin {
         ocr: { usados: f === "demo" ? 120 : ciclo([50, 0, 48_210], i), limite: definicion.ocrMensual },
         suspensionAutomatica: i % 2 === 0,
         correoFacturacion: f === "demo" ? "pagos@example.com" : ciclo(["cuentas.por.pagar.proveedores.tecnologia@grupoaseguradordelbajioyoccidente.example.com", null], i),
+        pruebaHasta,
+        prueba: estadoPrueba({ pruebaHasta, pagadoHasta: cobro.pagadoHasta }, hoy),
         ...cobro,
         ...estadoCobro(cobro, hoy),
         pagos: rango(cuota(i) === null ? 0 : 2).map((j) => ({

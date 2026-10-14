@@ -104,6 +104,9 @@ model Agencia {
   avisoCobroEnviadoPara DateTime? @db.Date @map("aviso_cobro_enviado_para")
   // A quién se mandan los avisos de cobro; sin él, a los administradores de la agencia.
   correoFacturacion     String?   @map("correo_facturacion")
+  // Último día de la prueba gratis (la da el SUPERADMIN). Mientras no haya pagos (pagadoHasta),
+  // al pasar esa fecha la tarea diaria suspende la agencia. null = sin prueba.
+  pruebaHasta           DateTime? @db.Date @map("prueba_hasta")
   // Plan de suscripción (lo asigna el SUPERADMIN): fija sus límites de usuarios activos y de
   // escaneos con IA al mes (lib/planes). El estado de la suscripción es el de la cobranza de
   // arriba: pagadoHasta, la tolerancia y `suspendida`.

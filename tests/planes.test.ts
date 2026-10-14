@@ -14,12 +14,12 @@ import {
 } from "@/lib/planes/planes";
 
 describe("planes de ZenSecure", () => {
-  it("Agente: 1 usuario, Básico sin IA y Pro con 50; Broker Básico 3 usuarios y 250, Broker Pro sin límites", () => {
+  it("Agente: 1 usuario, Básico con 10 escaneos y Pro con 50; Broker Básico 3 usuarios y 250, Broker Pro sin límites", () => {
     const limites = (plan: "AGENTE" | "BROKER", edicion: "BASICO" | "PRO") => {
       const d = definicionPlan(plan, edicion);
       return [d.usuarios, d.ocrMensual];
     };
-    assert.deepEqual(limites("AGENTE", "BASICO"), [1, 0]);
+    assert.deepEqual(limites("AGENTE", "BASICO"), [1, 10]);
     assert.deepEqual(limites("AGENTE", "PRO"), [1, 50]);
     assert.deepEqual(limites("BROKER", "BASICO"), [3, 250]);
     assert.deepEqual(limites("BROKER", "PRO"), [null, null]);
@@ -70,7 +70,7 @@ describe("planes de ZenSecure", () => {
     assert.match(mensajeLimiteUsuarios("AGENTE", "PRO"), /plan Agente Pro incluye 1 usuario activo\./);
     assert.match(mensajeLimiteUsuarios("BROKER", "BASICO"), /plan Broker Básico incluye 3 usuarios activos\./);
     assert.match(mensajeLimiteOcr("BROKER", "BASICO"), /los 250 escaneos con IA de este mes del plan Broker Básico/);
-    assert.match(mensajeLimiteOcr("AGENTE", "BASICO"), /Agente Básico no incluye captura con IA/);
+    assert.match(mensajeLimiteOcr("AGENTE", "BASICO"), /los 10 escaneos con IA de este mes del plan Agente Básico/);
     assert.equal(textoUso(3, 5), "3 de 5");
     assert.equal(textoUso(48_210, null), "48,210");
   });

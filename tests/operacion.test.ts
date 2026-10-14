@@ -11,7 +11,15 @@ import {
   type ClienteValores,
 } from "@/lib/clientes/reglas";
 import { formatPorcentaje } from "@/lib/format";
-import { accionCobroDiaria, detalleCobro, estadoCobro, siguientePagadoHasta } from "@/lib/plataforma/cobranza";
+import {
+  accionCobroDiaria,
+  detalleCobro,
+  estadoCobro,
+  estadoPrueba,
+  finPrueba,
+  siguientePagadoHasta,
+  textoPrueba,
+} from "@/lib/plataforma/cobranza";
 import { primaEndoso, validarEndoso, validarFechaCancelacion } from "@/lib/polizas/estatus";
 import { normalizarTelefono, parseNumero, rfcValido } from "@/lib/polizas/validacion";
 import { columnaDe, notaDePerdida, urgenciaRenovacion } from "@/lib/renovaciones/reglas";
@@ -36,13 +44,35 @@ describe("cobranza de la plataforma", () => {
     assert.equal(siguientePagadoHasta(null, "2026-10-05", 1), "2026-11-04");
   });
   it("la tarea diaria avisa una vez por periodo y suspende solo con la opción activa", () => {
-    const agencia = { ...base, suspendida: false, suspensionAutomatica: true, avisoCobroEnviadoPara: null };
+    const agencia = { ...base, suspendida: false, suspensionAutomatica: true, avisoCobroEnviadoPara: null, pruebaHasta: null };
     assert.equal(accionCobroDiaria(agencia, "2026-10-20"), null);
     assert.equal(accionCobroDiaria(agencia, "2026-10-27"), "avisar");
     assert.equal(accionCobroDiaria({ ...agencia, avisoCobroEnviadoPara: "2026-10-31" }, "2026-10-28"), null);
     assert.equal(accionCobroDiaria(agencia, "2026-11-06"), "suspender");
     assert.equal(accionCobroDiaria({ ...agencia, suspensionAutomatica: false }, "2026-11-06"), "avisar");
     assert.equal(accionCobroDiaria({ ...agencia, suspendida: true }, "2026-11-06"), null);
+  });
+  it("prueba gratis de 30 días: al terminar sin pago se suspende; con un pago manda la cobranza", () => {
+    assert.equal(finPrueba("2026-10-14"), "2026-11-12");
+    const enPrueba = {
+      cuotaMensual: null,
+      pagadoHasta: null,
+      diasTolerancia: 5,
+      suspendida: false,
+      suspensionAutomatica: false,
+      avisoCobroEnviadoPara: null,
+      pruebaHasta: "2026-11-12",
+    };
+    assert.equal(textoPrueba(estadoPrueba(enPrueba, "2026-10-14")!), "Quedan 29 días de prueba");
+    assert.equal(textoPrueba(estadoPrueba(enPrueba, "2026-11-11")!), "Queda 1 día de prueba");
+    assert.equal(textoPrueba(estadoPrueba(enPrueba, "2026-11-12")!), "Último día de prueba");
+    assert.equal(accionCobroDiaria(enPrueba, "2026-11-12"), null);
+    assert.equal(accionCobroDiaria(enPrueba, "2026-11-13"), "terminar_prueba");
+    assert.equal(accionCobroDiaria({ ...enPrueba, suspendida: true }, "2026-11-13"), null);
+    // Ya pagó: la prueba deja de contar.
+    const pagada = { ...enPrueba, cuotaMensual: 900, pagadoHasta: "2026-12-12" };
+    assert.equal(estadoPrueba(pagada, "2026-11-13"), null);
+    assert.equal(accionCobroDiaria(pagada, "2026-11-13"), null);
   });
   // Lo usa el servidor en el lobby del superadmin: vive en lib (no en un componente de cliente).
   it("detalle del estado de pago", () => {
