@@ -67,11 +67,24 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
   })).filter((g) => g.tareas.length > 0);
   const nombre = usuario.nombre?.trim().split(/\s+/)[0];
 
-  const tarjetas: { label: string; valor: number; icono: typeof ListTodo; tono: TonoResumen }[] = [
-    { label: "Mis pendientes", valor: resumen.pendientes, icono: ListTodo, tono: "primary" },
-    { label: "Para hoy", valor: resumen.deHoy, icono: CalendarCheck, tono: resumen.deHoy > 0 ? "warning" : "muted" },
-    { label: "Vencidas", valor: resumen.vencidas, icono: AlarmClock, tono: resumen.vencidas > 0 ? "destructive" : "muted" },
-    { label: "Hechas en 7 días", valor: resumen.hechas, icono: CheckCircle2, tono: "success" },
+  // Cada indicador abre sus tareas: la vista que corresponde y, dentro de ella, su grupo.
+  const tarjetas: { label: string; valor: number; icono: typeof ListTodo; tono: TonoResumen; href: string }[] = [
+    { label: "Mis pendientes", valor: resumen.pendientes, icono: ListTodo, tono: "primary", href: "/tareas" },
+    {
+      label: "Para hoy",
+      valor: resumen.deHoy,
+      icono: CalendarCheck,
+      tono: resumen.deHoy > 0 ? "warning" : "muted",
+      href: "/tareas#grupo-hoy",
+    },
+    {
+      label: "Vencidas",
+      valor: resumen.vencidas,
+      icono: AlarmClock,
+      tono: resumen.vencidas > 0 ? "destructive" : "muted",
+      href: "/tareas#grupo-vencida",
+    },
+    { label: "Hechas en 7 días", valor: resumen.hechas, icono: CheckCircle2, tono: "success", href: "/tareas?vista=completadas" },
   ];
 
   return (
@@ -98,7 +111,15 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
         <TuDia resumen={resumen} />
         <div className="grid grid-cols-2 gap-3">
           {tarjetas.map((t, i) => (
-            <TarjetaResumen key={t.label} titulo={t.label} valor={formatNumero(t.valor)} icono={t.icono} tono={t.tono} orden={i + 1} />
+            <TarjetaResumen
+              key={t.label}
+              titulo={t.label}
+              valor={formatNumero(t.valor)}
+              icono={t.icono}
+              tono={t.tono}
+              href={t.href}
+              orden={i + 1}
+            />
           ))}
         </div>
       </section>
@@ -158,8 +179,9 @@ export function VistaTareasPagina({ usuario, vista, conEquipo, tareas, total, li
               {grupos.map((g, i) => (
                 <Card
                   key={g.clave}
+                  id={`grupo-${g.clave}`}
                   acento={COLOR_GRUPO[g.clave]}
-                  className="animate-entrar gap-0 py-0"
+                  className="animate-entrar scroll-mt-20 gap-0 py-0"
                   style={{ animationDelay: `${250 + i * 80}ms` }}
                 >
                   <CardHeader className="border-b px-5 py-3 [.border-b]:pb-3">

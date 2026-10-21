@@ -23,13 +23,14 @@ type Estado = {
   ramo: string;
   ejecutivo: string;
   estatus: string;
+  aseguradora: string;
   contacto?: boolean;
 };
 
 /**
- * Búsqueda y filtros del listado de pólizas (ramo, ejecutivo y estatus). El estado vive en la URL
- * (?q=…&ramo=…&ejecutivo=…&estatus=…&contacto=falta), así el filtrado ocurre en la base de datos
- * y el enlace se puede compartir.
+ * Búsqueda y filtros del listado de pólizas (ramo, ejecutivo, estatus y aseguradora). El estado vive
+ * en la URL (?q=…&ramo=…&ejecutivo=…&estatus=…&aseguradora=…&contacto=falta), así el filtrado ocurre
+ * en la base de datos y el enlace se puede compartir (Aseguradoras enlaza aquí con su filtro puesto).
  */
 export function FiltrosPolizas({
   q: qInicial,
@@ -40,6 +41,8 @@ export function FiltrosPolizas({
   ejecutivos,
   usuarioId,
   estatus: estatusInicial = "",
+  aseguradora: aseguradoraInicial = "",
+  aseguradoras = [],
 }: {
   q: string;
   /** Valor del enum de BD o "" para todos. */
@@ -52,8 +55,11 @@ export function FiltrosPolizas({
   /** Sin la lista no se muestra el filtro (el ejecutivo que solo ve su cartera). */
   ejecutivos?: { id: string; nombre: string }[];
   usuarioId?: string;
-  /** "vigor", "canceladas" o "" para todas. */
+  /** "vigor", "vigentes", "canceladas" o "" para todas. */
   estatus?: string;
+  /** Id de la aseguradora o "" para todas. */
+  aseguradora?: string;
+  aseguradoras?: Opcion[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -61,6 +67,7 @@ export function FiltrosPolizas({
   const [ramo, setRamo] = React.useState(ramoInicial || TODOS);
   const [ejecutivo, setEjecutivo] = React.useState(ejecutivoInicial || TODOS);
   const [estatus, setEstatus] = React.useState(estatusInicial || TODOS);
+  const [aseguradora, setAseguradora] = React.useState(aseguradoraInicial || TODOS);
   const [pendiente, startTransition] = React.useTransition();
   const temporizador = React.useRef<number | null>(null);
 
@@ -77,6 +84,7 @@ export function FiltrosPolizas({
     if (siguiente.ramo !== TODOS) params.set("ramo", siguiente.ramo);
     if (siguiente.ejecutivo !== TODOS) params.set("ejecutivo", siguiente.ejecutivo);
     if (siguiente.estatus !== TODOS) params.set("estatus", siguiente.estatus);
+    if (siguiente.aseguradora !== TODOS) params.set("aseguradora", siguiente.aseguradora);
     if (siguiente.contacto ?? faltaContacto) params.set("contacto", "falta");
     const query = params.toString();
     startTransition(() => {
@@ -84,7 +92,7 @@ export function FiltrosPolizas({
     });
   }
 
-  const actual = (): Estado => ({ q, ramo, ejecutivo, estatus });
+  const actual = (): Estado => ({ q, ramo, ejecutivo, estatus, aseguradora });
 
   function cambiarTexto(valor: string) {
     setQ(valor);
@@ -98,10 +106,12 @@ export function FiltrosPolizas({
     setRamo(TODOS);
     setEjecutivo(TODOS);
     setEstatus(TODOS);
-    navegar({ q: "", ramo: TODOS, ejecutivo: TODOS, estatus: TODOS, contacto: false });
+    setAseguradora(TODOS);
+    navegar({ q: "", ramo: TODOS, ejecutivo: TODOS, estatus: TODOS, aseguradora: TODOS, contacto: false });
   }
 
-  const activos = q.trim() !== "" || ramo !== TODOS || ejecutivo !== TODOS || estatus !== TODOS || faltaContacto;
+  const activos =
+    q.trim() !== "" || ramo !== TODOS || ejecutivo !== TODOS || estatus !== TODOS || aseguradora !== TODOS || faltaContacto;
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
@@ -119,7 +129,7 @@ export function FiltrosPolizas({
           <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />
         )}
       </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:flex">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:flex lg:flex-wrap">
         <Select
           value={ramo}
           onValueChange={(v) => {
@@ -179,9 +189,31 @@ export function FiltrosPolizas({
           <SelectContent>
             <SelectItem value={TODOS}>Todas</SelectItem>
             <SelectItem value="vigor">En vigor</SelectItem>
+            <SelectItem value="vigentes">Vigentes hoy</SelectItem>
             <SelectItem value="canceladas">Canceladas</SelectItem>
           </SelectContent>
         </Select>
+        {aseguradoras.length > 0 && (
+          <Select
+            value={aseguradora}
+            onValueChange={(v) => {
+              setAseguradora(v);
+              navegar({ ...actual(), aseguradora: v });
+            }}
+          >
+            <SelectTrigger className="w-full bg-card lg:w-48" aria-label="Filtrar por aseguradora">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODOS}>Todas las aseguradoras</SelectItem>
+              {aseguradoras.map((a) => (
+                <SelectItem key={a.value} value={a.value}>
+                  {a.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
       {activos && (
         <Button type="button" variant="ghost" size="sm" onClick={limpiar} className="text-muted-foreground lg:ml-auto">

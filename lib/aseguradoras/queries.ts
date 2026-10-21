@@ -5,6 +5,7 @@ import { connection } from "next/server";
 import { getAlcance, polizasDe } from "@/lib/auth/alcance";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
+import { vigenteEn } from "@/lib/polizas/queries";
 
 /**
  * Catálogo de aseguradoras con su cartera: pólizas activas (vigentes hoy), su prima y el
@@ -34,7 +35,7 @@ export async function getAseguradorasCatalogo() {
     db.poliza.groupBy({
       by: ["aseguradora_id"],
       // Activas: en vigencia hoy y no canceladas; de la cartera que ve la sesión.
-      where: { ...polizasDe(alcance), canceladaAt: null, vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } },
+      where: { ...polizasDe(alcance), ...vigenteEn(hoy) },
       _count: { _all: true },
       _sum: { prima_total: true },
     }),

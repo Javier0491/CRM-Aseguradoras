@@ -5,6 +5,7 @@ import { PolizasConciliadas, PolizasSinConciliar } from "@/components/polizas/co
 import { AvatarIniciales } from "@/components/layout/avatar-iniciales";
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { EstadoVacio } from "@/components/layout/estado-vacio";
+import { PestanasUrl } from "@/components/layout/pestanas-url";
 import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
 import { SelectorVista } from "@/components/layout/selector-vista";
 import { FiltrosPolizas } from "@/components/polizas/filtros-polizas";
@@ -32,7 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import type { EstadoConciliacion } from "@/lib/polizas/conciliacion";
@@ -40,10 +41,12 @@ import {
   DIAS_POR_VENCER,
   FILTROS_RECIBOS,
   LIMITE_LISTADO,
+  type EstatusPolizas,
   type FiltroRecibos,
   type getPolizasListado,
   type getRecibosListado,
 } from "@/lib/polizas/queries";
+import type { Opcion } from "@/lib/polizas/ramos";
 import type { OpcionEjecutivo } from "@/lib/usuarios/queries";
 import type { VistaListado } from "@/lib/vista-listado";
 import { cn } from "@/lib/utils";
@@ -89,12 +92,16 @@ export type DatosPolizas = {
   conciliacion: EstadoConciliacion;
   /** Para filtrar por ejecutivo; no viene para quien solo ve su cartera. */
   ejecutivos?: OpcionEjecutivo[];
+  /** Para filtrar por aseguradora. */
+  aseguradoras?: Opcion[];
   filtros: {
     q: string;
     ramo?: Ramo;
     soloFaltaContacto: boolean;
     ejecutivo: string;
-    estatus: "" | "vigor" | "canceladas";
+    estatus: EstatusPolizas;
+    /** Id de la aseguradora o "" para todas. */
+    aseguradora: string;
     filtroRecibos: FiltroRecibos;
     pestana: PestanaPolizas;
     /** Tarjetas o lista (cookie del usuario). */
@@ -105,11 +112,22 @@ export type DatosPolizas = {
 };
 
 /** Pólizas y recibos: resumen, filtros y listados. La página carga los datos. */
-export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos, filtros, usuario, hoy }: DatosPolizas) {
+export function VistaPolizas({
+  listado,
+  listadoRecibos,
+  conciliacion,
+  ejecutivos,
+  aseguradoras = [],
+  filtros,
+  usuario,
+  hoy,
+}: DatosPolizas) {
   const { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto, canceladas } = listado;
   const { recibos, total: totalRecibos, pendientes } = listadoRecibos;
-  const { q, ramo, soloFaltaContacto, ejecutivo, estatus, filtroRecibos, pestana, vista } = filtros;
-  const filtrando = q.trim() !== "" || ramo !== undefined || soloFaltaContacto || ejecutivo !== "" || estatus !== "";
+  // La pestaña abierta la lee PestanasUrl de la URL (?tab=…).
+  const { q, ramo, soloFaltaContacto, ejecutivo, estatus, aseguradora, filtroRecibos, vista } = filtros;
+  const filtrando =
+    q.trim() !== "" || ramo !== undefined || soloFaltaContacto || ejecutivo !== "" || estatus !== "" || aseguradora !== "";
   const verEjecutivo = !usuario.soloSuCartera;
 
   // Filtros actuales del listado, para el aviso de contacto y el reporte.
@@ -119,6 +137,7 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
     if (ramo) p.set("ramo", ramo);
     if (ejecutivo) p.set("ejecutivo", ejecutivo);
     if (estatus) p.set("estatus", estatus);
+    if (aseguradora) p.set("aseguradora", aseguradora);
     for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v);
     return p;
   };
@@ -130,7 +149,8 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
   const hrefReporte = paramsReporte.size ? `/polizas/reporte-cartera?${paramsReporte}` : "/polizas/reporte-cartera";
 
   const resumen: { label: string; valor: string; icon: typeof FileText; tono: TonoResumen; href?: string }[] = [
-    { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, tono: "primary" },
+    // Quita los filtros y vuelve al listado completo.
+    { label: "Pólizas registradas", valor: formatNumero(totalGeneral), icon: FileText, tono: "primary", href: "/polizas" },
     {
       label: `Por vencer · ${DIAS_POR_VENCER} días`,
       valor: formatNumero(porVencer),
@@ -145,7 +165,13 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
       tono: "primary",
       href: "/polizas?tab=recibos&recibos=pendientes",
     },
-    { label: "Monto por cobrar", valor: formatMoneda(pendientes.monto), icon: Wallet, tono: "primary" },
+    {
+      label: "Monto por cobrar",
+      valor: formatMoneda(pendientes.monto),
+      icon: Wallet,
+      tono: "primary",
+      href: "/polizas?tab=recibos&recibos=pendientes",
+    },
   ];
 
   return (
@@ -184,7 +210,7 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
       {totalGeneral === 0 ? (
         <SinDatos />
       ) : (
-        <Tabs defaultValue={pestana} className="gap-4">
+        <PestanasUrl pestanas={PESTANAS} className="gap-4">
           <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="polizas">
               Pólizas · {formatNumero(filtrando ? totalPolizas : totalGeneral)}
@@ -226,6 +252,9 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
               <div className="min-w-0 flex-1">
                 <FiltrosPolizas
+                  // Un enlace que cambia los filtros (tarjetas, aviso de contacto) vuelve a poner los selectores;
+                  // la búsqueda no entra en la llave para no perder el foco mientras se escribe.
+                  key={[ramo, ejecutivo, estatus, aseguradora, soloFaltaContacto].join("|")}
                   q={q}
                   ramo={ramo ?? ""}
                   ramos={opcionesRamo}
@@ -234,6 +263,8 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
                   ejecutivos={ejecutivos}
                   usuarioId={usuario.id}
                   estatus={estatus}
+                  aseguradora={aseguradora}
+                  aseguradoras={aseguradoras}
                 />
               </div>
               <SelectorVista listado="polizas" vista={vista} />
@@ -266,7 +297,7 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
                     icono={SearchX}
                     tono="muted"
                     titulo="Ninguna póliza coincide con los filtros"
-                    descripcion="Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo o el estatus."
+                    descripcion="Prueba con otro número, nombre o RFC, o cambia el ramo, el ejecutivo, el estatus o la aseguradora."
                   />
                 ) : (
                   <Table>
@@ -466,7 +497,7 @@ export function VistaPolizas({ listado, listadoRecibos, conciliacion, ejecutivos
               <NotaLimite mostrados={recibos.length} total={totalRecibos} />
             </Card>
           </TabsContent>
-        </Tabs>
+        </PestanasUrl>
       )}
     </>
   );

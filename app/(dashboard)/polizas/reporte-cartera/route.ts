@@ -4,14 +4,14 @@ import { estadoVigencia, formaPagoLabel, ramoLabel, vigenciaEstilo } from "@/com
 import { getUsuarioCrm } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
-import { DIAS_POR_VENCER, getPolizasExportacion } from "@/lib/polizas/queries";
+import { DIAS_POR_VENCER, esEstatusPolizas, getPolizasExportacion } from "@/lib/polizas/queries";
 
 const fechaIso = (d: Date) => d.toISOString().slice(0, 10);
 const esRamo = (v: unknown): v is Ramo => typeof v === "string" && v in ramoLabel;
 
 /**
  * GET /polizas/reporte-cartera — Excel con la cartera de pólizas que ve la sesión. Respeta los mismos
- * filtros del listado (?q=…&ramo=…&ejecutivo=…&estatus=…&contacto=falta), pero sin su límite de renglones.
+ * filtros del listado (?q=…&ramo=…&ejecutivo=…&estatus=…&aseguradora=…&contacto=falta), pero sin su límite de renglones.
  */
 export async function GET(request: NextRequest) {
   const user = await getUsuarioCrm();
@@ -26,7 +26,8 @@ export async function GET(request: NextRequest) {
     ramo: esRamo(ramo) ? ramo : undefined,
     faltaContacto: params.get("contacto") === "falta",
     ejecutivo: params.get("ejecutivo") || undefined,
-    canceladas: estatus === "canceladas" ? true : estatus === "vigor" ? false : undefined,
+    estatus: esEstatusPolizas(estatus) ? estatus : undefined,
+    aseguradora: params.get("aseguradora") || undefined,
   });
   const hoy = hoyISO();
 

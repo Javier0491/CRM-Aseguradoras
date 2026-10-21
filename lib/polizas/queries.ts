@@ -44,8 +44,29 @@ export type FiltrosPolizas = {
   faltaContacto?: boolean;
   /** Ejecutivo responsable: su id, o "sin" para las que no tienen. */
   ejecutivo?: string;
-  /** Solo las canceladas (true) o solo las que siguen en vigor (false). */
-  canceladas?: boolean;
+  /** Estatus: en vigor (no canceladas), vigentes hoy, canceladas, o todas (""). */
+  estatus?: EstatusPolizas;
+  /** Id de la aseguradora. */
+  aseguradora?: string;
+};
+
+/**
+ * Estatus del filtro del listado. "vigor": no canceladas; "vigentes": además, en vigencia hoy (las
+ * mismas que cuenta Aseguradoras como pólizas vigentes).
+ */
+export const ESTATUS_POLIZAS = ["vigor", "vigentes", "canceladas"] as const;
+export type EstatusPolizas = "" | (typeof ESTATUS_POLIZAS)[number];
+export const esEstatusPolizas = (v: unknown): v is EstatusPolizas =>
+  typeof v === "string" && (ESTATUS_POLIZAS as readonly string[]).includes(v);
+
+/** Póliza vigente en `hoy`: no cancelada y dentro de su vigencia. */
+export const vigenteEn = (hoy: Date) =>
+  ({ canceladaAt: null, vigencia_inicio: { lte: hoy }, vigencia_fin: { gte: hoy } }) satisfies Prisma.PolizaWhereInput;
+
+const WHERE_ESTATUS: Record<Exclude<EstatusPolizas, "">, () => Prisma.PolizaWhereInput> = {
+  vigor: () => NO_CANCELADA,
+  vigentes: () => vigenteEn(new Date(`${hoyISO()}T00:00:00Z`)),
+  canceladas: () => ({ canceladaAt: { not: null } }),
 };
 
 /** Cliente sin teléfono o sin correo: se capturó sin ellos y hay que completarlos. */
@@ -64,7 +85,8 @@ function wherePolizas(alcance: Alcance, filtros: FiltrosPolizas): Prisma.PolizaW
       filtros.ramo ? { ramo: filtros.ramo } : {},
       filtros.faltaContacto ? CLIENTE_SIN_CONTACTO : {},
       ejecutivo ? { ejecutivoId: ejecutivo === "sin" ? null : ejecutivo } : {},
-      filtros.canceladas === undefined ? {} : { canceladaAt: filtros.canceladas ? { not: null } : null },
+      filtros.estatus ? WHERE_ESTATUS[filtros.estatus]() : {},
+      filtros.aseguradora ? { aseguradora_id: filtros.aseguradora.slice(0, 64) } : {},
       q
         ? {
             OR: [

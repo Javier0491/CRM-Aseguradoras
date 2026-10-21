@@ -77,13 +77,15 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
   // Parte de la prima total del embudo que tiene cada columna (para su barra).
   const primaTotal = columnas.reduce((s, c) => s + c.prima, 0);
 
-  const resumen: { label: string; valor: string; detalle: string; icono: typeof Wallet; tono: TonoResumen }[] = [
+  // Cada indicador lleva a su etapa del embudo (o, la tasa, a Reportes).
+  const resumen: { label: string; valor: string; detalle: string; icono: typeof Wallet; tono: TonoResumen; href: string }[] = [
     {
       label: "Prima en juego",
       valor: formatMoneda(enJuego),
       detalle: `${polizas(porCerrar)} por cerrar`,
       icono: Wallet,
       tono: "primary",
+      href: "#etapa-por_renovar",
     },
     {
       label: "Renovadas",
@@ -91,6 +93,7 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
       detalle: polizas(col.renovada.polizas.length),
       icono: CheckCircle2,
       tono: "success",
+      href: "#etapa-renovada",
     },
     {
       label: "Perdidas",
@@ -98,6 +101,7 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
       detalle: polizas(col.perdida.polizas.length),
       icono: XCircle,
       tono: col.perdida.polizas.length > 0 ? "destructive" : "muted",
+      href: "#etapa-perdida",
     },
     {
       label: "Tasa de renovación",
@@ -105,6 +109,7 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
       detalle: "de las renovaciones ya cerradas",
       icono: Percent,
       tono: "primary",
+      href: "/reportes",
     },
   ];
 
@@ -137,7 +142,16 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
 
       <section aria-label="Resumen" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {resumen.map((r, i) => (
-          <TarjetaResumen key={r.label} titulo={r.label} valor={r.valor} detalle={r.detalle} icono={r.icono} tono={r.tono} orden={i} />
+          <TarjetaResumen
+            key={r.label}
+            titulo={r.label}
+            valor={r.valor}
+            detalle={r.detalle}
+            icono={r.icono}
+            tono={r.tono}
+            href={r.href}
+            orden={i}
+          />
         ))}
       </section>
 
@@ -159,9 +173,10 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
               return (
                 <section
                   key={c.clave}
+                  id={`etapa-${c.clave}`}
                   aria-label={c.titulo}
                   style={{ animationDelay: `${200 + i * 70}ms` }}
-                  className="relative flex w-[80vw] max-w-[300px] animate-entrar snap-start flex-col overflow-hidden rounded-xl border bg-muted/30 backdrop-blur-sm xl:w-auto xl:max-w-none"
+                  className="relative flex w-[80vw] max-w-[300px] animate-entrar snap-start scroll-mt-20 flex-col overflow-hidden rounded-xl border bg-muted/30 backdrop-blur-sm xl:w-auto xl:max-w-none"
                 >
                   {/* Color de la etapa: una línea con brillo arriba de la columna. */}
                   <span

@@ -5,7 +5,13 @@ import { esPestana, esRamo, VistaPolizas } from "@/components/polizas/vista-poli
 import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
-import { esFiltroRecibos, getPolizasListado, getRecibosListado } from "@/lib/polizas/queries";
+import {
+  esEstatusPolizas,
+  esFiltroRecibos,
+  getAseguradorasOpciones,
+  getPolizasListado,
+  getRecibosListado,
+} from "@/lib/polizas/queries";
 import { getEjecutivos } from "@/lib/usuarios/queries";
 import { cookieVista, vistaDe } from "@/lib/vista-listado";
 
@@ -19,23 +25,26 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
   const ramo = esRamo(params.ramo) ? params.ramo : undefined;
   const soloFaltaContacto = params.contacto === "falta";
   const ejecutivo = typeof params.ejecutivo === "string" ? params.ejecutivo.slice(0, 64) : "";
-  const estatus = params.estatus === "vigor" || params.estatus === "canceladas" ? params.estatus : "";
+  const estatus = esEstatusPolizas(params.estatus) ? params.estatus : "";
+  const aseguradora = typeof params.aseguradora === "string" ? params.aseguradora.slice(0, 64) : "";
   const filtroRecibos = esFiltroRecibos(params.recibos) ? params.recibos : "todos";
   const pestana = esPestana(params.tab) ? params.tab : "polizas";
 
   const user = await requireUsuarioCrm();
-  const [listado, listadoRecibos, conciliacion, ejecutivos, galletas] = await Promise.all([
+  const [listado, listadoRecibos, conciliacion, ejecutivos, aseguradoras, galletas] = await Promise.all([
     getPolizasListado({
       q,
       ramo,
       faltaContacto: soloFaltaContacto,
       ejecutivo: ejecutivo || undefined,
-      canceladas: estatus === "" ? undefined : estatus === "canceladas",
+      estatus,
+      aseguradora: aseguradora || undefined,
     }),
     getRecibosListado(filtroRecibos),
     getEstadoConciliacion(),
     // Un ejecutivo que solo ve su cartera no filtra por ejecutivo.
     user.soloSuCartera ? Promise.resolve(undefined) : getEjecutivos(user.agenciaId),
+    getAseguradorasOpciones(),
     cookies(),
   ]);
   const vista = vistaDe(galletas.get(cookieVista("polizas"))?.value);
@@ -45,7 +54,8 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
       listadoRecibos={listadoRecibos}
       conciliacion={conciliacion}
       ejecutivos={ejecutivos}
-      filtros={{ q, ramo, soloFaltaContacto, ejecutivo, estatus, filtroRecibos, pestana, vista }}
+      aseguradoras={aseguradoras.map((a) => ({ value: a.value, label: a.label }))}
+      filtros={{ q, ramo, soloFaltaContacto, ejecutivo, estatus, aseguradora, filtroRecibos, pestana, vista }}
       usuario={{ id: user.id, soloSuCartera: user.soloSuCartera, verComisiones: veComisiones(user) }}
       hoy={hoyISO()}
     />

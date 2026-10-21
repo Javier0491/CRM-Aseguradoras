@@ -50,7 +50,8 @@ const nombreMes = new Intl.DateTimeFormat("es-MX", { month: "long", timeZone: "U
 
 const polizasTexto = (n: number) => `${formatNumero(n)} ${n === 1 ? "póliza" : "pólizas"}`;
 
-type Segmento = { clave: string; etiqueta: ReactNode; polizas: number; prima: number };
+/** `href`: las pólizas del segmento en el listado (de toda la cartera, no solo del periodo). */
+type Segmento = { clave: string; etiqueta: ReactNode; polizas: number; prima: number; href?: string };
 
 /** Barras horizontales con la participación de cada segmento en la prima emitida del periodo. */
 function DistribucionCard({
@@ -96,7 +97,17 @@ function DistribucionCard({
                 return (
                   <tr key={d.clave} className="align-middle">
                     <td className="w-32 max-w-32 truncate py-2 pr-3 text-xs whitespace-nowrap text-muted-foreground">
-                      {d.etiqueta}
+                      {d.href ? (
+                        <Link
+                          href={d.href}
+                          title="Ver sus pólizas"
+                          className="rounded-sm hover:text-primary hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                        >
+                          {d.etiqueta}
+                        </Link>
+                      ) : (
+                        d.etiqueta
+                      )}
                     </td>
                     <td className="py-2">
                       <div className="flex items-center gap-2">
@@ -159,13 +170,14 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
   const exportarHref =
     periodo === PERIODO_REPORTE_PREDETERMINADO ? "/reportes/exportar" : `/reportes/exportar?periodo=${periodo}`;
 
-  const kpis: { label: string; valor: string; detalle: string; icon: LucideIcon; tono: TonoResumen }[] = [
+  const kpis: { label: string; valor: string; detalle: string; icon: LucideIcon; tono: TonoResumen; href: string }[] = [
     {
       label: `Prima emitida · ${nombrePeriodo}`,
       valor: formatMoneda(emision.prima),
       detalle: `${polizasTexto(emision.polizas)} ${emision.polizas === 1 ? "iniciada" : "iniciadas"} ${enPeriodo}`,
       icon: Landmark,
       tono: "primary",
+      href: "#distribucion",
     },
     {
       label: `Prima promedio · ${nombrePeriodo}`,
@@ -173,6 +185,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
       detalle: `por póliza iniciada ${enPeriodo}`,
       icon: FileText,
       tono: "primary",
+      href: "#distribucion",
     },
     {
       label: `Por vencer · ${DIAS_POR_VENCER_REPORTE} días`,
@@ -180,6 +193,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
       detalle: `Prima a renovar: ${formatMoneda(primaPorVencer)}`,
       icon: CalendarClock,
       tono: totalPorVencer > 0 ? "warning" : "primary",
+      href: "#por-vencer",
     },
   ];
 
@@ -222,6 +236,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
             detalle={k.detalle}
             icono={k.icon}
             tono={k.tono}
+            href={k.href}
             orden={i}
           />
         ))}
@@ -231,13 +246,18 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
         mismas pólizas.
       </p>
 
-      <div className="grid items-start gap-6 lg:grid-cols-2">
+      <div id="distribucion" className="grid scroll-mt-20 items-start gap-6 lg:grid-cols-2">
         <DistribucionCard
           titulo="Distribución por ramo"
           icono={PieChart}
           descripcion={resumenEmision}
           columna="Ramo"
-          segmentos={distribucion.map((d) => ({ clave: d.ramo, etiqueta: ramoLabel[d.ramo], ...d }))}
+          segmentos={distribucion.map((d) => ({
+            clave: d.ramo,
+            etiqueta: ramoLabel[d.ramo],
+            href: `/polizas?ramo=${d.ramo}`,
+            ...d,
+          }))}
         />
         <DistribucionCard
           titulo="Distribución por aseguradora"
@@ -249,6 +269,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
             etiqueta: <AseguradoraTag nombre={d.nombre} color={d.color} />,
             polizas: d.polizas,
             prima: d.prima,
+            href: `/polizas?aseguradora=${encodeURIComponent(d.id)}`,
           }))}
         />
         {porEjecutivo && porEjecutivo.length > 0 && (
@@ -262,12 +283,13 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
               etiqueta: d.ejecutivo,
               polizas: d.polizas,
               prima: d.prima,
+              href: `/polizas?ejecutivo=${encodeURIComponent(d.id ?? "sin")}`,
             }))}
           />
         )}
       </div>
 
-      <Card className="gap-0 pb-0">
+      <Card id="por-vencer" className="scroll-mt-20 gap-0 pb-0">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-base">
             <CalendarClock className="size-4 text-warning" /> Próximas a vencer
