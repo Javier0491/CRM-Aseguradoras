@@ -27,6 +27,7 @@ import { SelectorZip, type ZipAbierto } from "@/components/captura/selector-zip"
 import { copiarTodosEnMemoria } from "@/lib/archivos/memoria";
 import { ErrorZip, esZip, extraerDeZip, leerIndiceZip, mimePorNombre, type EntradaZip } from "@/lib/archivos/zip";
 import { etiquetaPolizaVigor } from "@/lib/aseguradoras/poliza-vigor";
+import { completarRfcDesdeArchivos } from "@/lib/ocr/rfc-de-archivo";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import {
   OCR_MAX_ARCHIVOS,
@@ -102,7 +103,7 @@ export function OcrDropzone({
   const [previews, setPreviews] = React.useState<Map<File, string>>(new Map());
   const [estado, setEstado] = React.useState<Estado>({ status: "idle" });
   // ZIP soltado: se elige qué documento de adentro leer. `resto` son los demás archivos de la selección.
-  const zipRef = React.useRef<{ datos: Uint8Array; resto: File[] } | null>(null);
+  const zipRef = React.useRef<{ zip: Blob; resto: File[] } | null>(null);
   const [zip, setZip] = React.useState<ZipAbierto | null>(null);
 
   const actualizarPreviews = React.useCallback((archivos: File[]) => {
@@ -168,13 +169,10 @@ export function OcrDropzone({
         setEstado({ status: "error", archivos, mensaje: json.error });
         return;
       }
-      setEstado({
-        status: "listo",
-        archivos,
-        datos: json.datos,
-        modelo: json.modelo,
-      });
-      onAplicar(json.datos, archivos);
+      // Sin RFC o con el genérico, se toma del nombre de la factura o el aviso (lo traen los portales).
+      const datos = completarRfcDesdeArchivos(json.datos, archivos.map((a) => a.name));
+      setEstado({ status: "listo", archivos, datos, modelo: json.modelo });
+      onAplicar(datos, archivos);
     } catch (e) {
       if (controller.signal.aborted) return;
       console.error(e);
@@ -202,10 +200,10 @@ export function OcrDropzone({
 
     const copia = await copiarTodosEnMemoria([archivoZip]);
     if (!copia.ok) return fallar(copia.error);
-    const datos = new Uint8Array(await copia.archivos[0].arrayBuffer());
+    const [enMemoria] = copia.archivos;
     let entradas: EntradaZip[];
     try {
-      entradas = leerIndiceZip(datos).filter((e) =>
+      entradas = (await leerIndiceZip(enMemoria)).filter((e) =>
         (OCR_TIPOS_PERMITIDOS as readonly string[]).includes(mimePorNombre(e.nombre))
       );
     } catch (e) {
@@ -214,7 +212,7 @@ export function OcrDropzone({
     }
     if (entradas.length === 0) return fallar(`«${archivoZip.name}» no trae PDF ni imágenes.`);
 
-    zipRef.current = { datos, resto: seleccion.filter((a) => !esZip(a)) };
+    zipRef.current = { zip: enMemoria, resto: seleccion.filter((a) => !esZip(a)) };
     // Con un solo documento no hay nada que elegir.
     if (entradas.length === 1) {
       const fallo = await elegirDelZip(entradas[0]);
@@ -229,7 +227,7 @@ export function OcrDropzone({
     if (!abierto) return null;
     let contenido: Uint8Array<ArrayBuffer>;
     try {
-      contenido = await extraerDeZip(abierto.datos, entrada);
+      contenido = await extraerDeZip(abierto.zip, entrada);
     } catch (e) {
       if (e instanceof ErrorZip) return e.message;
       throw e;

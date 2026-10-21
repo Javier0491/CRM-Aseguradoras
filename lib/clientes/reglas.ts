@@ -32,6 +32,14 @@ export type ErroresCliente = Partial<Record<keyof ClienteValores, string>>;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
+/** Teléfono y correo del cliente (los dos opcionales). */
+export function validarContacto(v: { telefono: string; email: string }): { telefono?: string; email?: string } {
+  const e: { telefono?: string; email?: string } = {};
+  if (v.telefono.trim() && normalizarTelefono(v.telefono).length !== 10) e.telefono = "Debe tener 10 dígitos.";
+  if (v.email.trim() && (!EMAIL.test(v.email.trim()) || v.email.trim().length > 254)) e.email = "Correo con formato inválido.";
+  return e;
+}
+
 /** Valida el formulario del expediente (el nombre y el RFC son obligatorios; lo demás, opcional). */
 export function validarCliente(v: ClienteValores, hoy: string): ErroresCliente {
   const e: ErroresCliente = {};
@@ -39,8 +47,7 @@ export function validarCliente(v: ClienteValores, hoy: string): ErroresCliente {
   if (nombre.length < 2) e.nombre = "Escribe el nombre o razón social.";
   else if (nombre.length > 200) e.nombre = "Máximo 200 caracteres.";
   if (!rfcValido(v.rfc)) e.rfc = "RFC con formato inválido.";
-  if (v.telefono.trim() && normalizarTelefono(v.telefono).length !== 10) e.telefono = "Debe tener 10 dígitos.";
-  if (v.email.trim() && (!EMAIL.test(v.email.trim()) || v.email.trim().length > 254)) e.email = "Correo con formato inválido.";
+  Object.assign(e, validarContacto(v));
   if (!esTipoPersona(v.tipoPersona)) e.tipoPersona = "Elige el tipo de persona.";
   if (v.fechaNacimiento) {
     const valida = FECHA.test(v.fechaNacimiento) && new Date(`${v.fechaNacimiento}T00:00:00Z`).toISOString().startsWith(v.fechaNacimiento);

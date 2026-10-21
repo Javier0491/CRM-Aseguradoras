@@ -17,7 +17,7 @@ const primerPdf = (archivos: File[]) => archivos.find((a) => a.type === "applica
 const normalizar = (s: string) =>
   s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 
-function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): PolizaFormInicial {
+export function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[]): PolizaFormInicial {
   // La IA devuelve el nombre de la aseguradora; el formulario necesita su id en BD.
   const nombre = datos.generales.aseguradora;
   const aseguradora = nombre

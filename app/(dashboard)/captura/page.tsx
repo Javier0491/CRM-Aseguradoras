@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Ban, RefreshCcw, ScanText } from "lucide-react";
+import { Ban, FolderUp, RefreshCcw, ScanText } from "lucide-react";
 
 import { CapturaWorkspace } from "@/components/captura/captura-workspace";
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
+import { esAdmin, requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { getUsoPlan } from "@/lib/planes/limites";
 import { hayCupo } from "@/lib/planes/planes";
 import { getPolizaParaRenovar } from "@/lib/polizas/formulario";
@@ -49,6 +49,15 @@ export default async function CapturaPage({ searchParams }: PageProps<"/captura"
           ) : (
             "Extrae los datos de una póliza con IA o captúrala manualmente por ramo."
           )
+        }
+        acciones={
+          !renovacion && esAdmin(user) ? (
+            <Button asChild variant="outline">
+              <Link href="/captura/masiva">
+                <FolderUp /> Carga masiva
+              </Link>
+            </Button>
+          ) : undefined
         }
       >
         {ocr.limite === 0 ? (

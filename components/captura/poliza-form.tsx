@@ -147,6 +147,32 @@ const SUBIENDO: Record<TipoArchivo, string> = {
 /** Campos del complemento que reemplazan lo capturado en lugar de solo llenar vacíos. */
 const CAMPOS_DEL_COMPLEMENTO = new Set(["condicionesSubgrupo"]);
 
+/**
+ * Complementa una captura con lo leído de un segundo documento (formato de negociación u orden de
+ * emisión de GMM Colectivo): solo llena lo vacío, salvo "Condiciones del Subgrupo", que se toma
+ * siempre del documento porque es su fuente. Un RFC genérico cuenta como vacío (la carátula de
+ * grupo a veces no trae el de la empresa). Con la suma "Sin límite" sus campos quedan vacíos.
+ */
+export function combinarComplemento(base: PolizaFormInicial, extra: PolizaFormInicial): PolizaFormInicial {
+  const ramo = extra.ramo ?? base.ramo;
+  const ilimitada = Boolean(base.sumaAseguradaIlimitada || extra.sumaAseguradaIlimitada);
+  const camposSuma = new Set(ramo ? camposSumaAsegurada(ramo) : []);
+  const generales = { ...base.generales };
+  for (const [nombre, valor] of Object.entries(extra.generales ?? {})) {
+    const actual = generales[nombre]?.trim() ?? "";
+    const vacio = !actual || (nombre === "rfcCliente" && RFC_GENERICOS.has(normalizarRfc(actual)));
+    if (valor && vacio) generales[nombre] = valor;
+  }
+  // Los datos del ramo anterior no sirven si el documento dice que es otro ramo.
+  const especificos = ramo === base.ramo ? { ...base.especificos } : {};
+  if (ilimitada) for (const nombre of camposSuma) especificos[nombre] = "";
+  for (const [nombre, valor] of Object.entries(extra.especificos ?? {})) {
+    if (ilimitada && camposSuma.has(nombre)) continue;
+    if (valor && (!especificos[nombre]?.trim() || CAMPOS_DEL_COMPLEMENTO.has(nombre))) especificos[nombre] = valor;
+  }
+  return { ...base, ramo, generales, especificos, sumaAseguradaIlimitada: ilimitada };
+}
+
 type Exito = Extract<GuardarPolizaResultado, { ok: true }> & {
   /** Resultado de la subida de cada archivo adjuntado. */
   archivos: Partial<Record<TipoArchivo, VincularArchivoResultado>>;
@@ -226,6 +252,23 @@ function valoresIniciales(inicial?: PolizaFormInicial, ejecutivoPredeterminado =
   };
 }
 
+/** Lo que se manda a guardar. Sin selector de ejecutivo (quien solo ve su cartera) decide el servidor. */
+function datosDelFormulario(values: FormValues, conEjecutivo: boolean) {
+  return {
+    ramo: values.ramo,
+    generales: values.generales,
+    especificos: values.especificos[values.ramo],
+    // En los ramos con censo los asegurados no se capturan uno por uno.
+    asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
+    sumaAseguradaIlimitada: esSumaIlimitada(values),
+    ...(conEjecutivo && { ejecutivoId: values.ejecutivoId }),
+  };
+}
+
+/** La póliza tal como la guardaría el formulario prellenado con `inicial` (p. ej. la carga masiva). */
+export const datosParaGuardar = (inicial: PolizaFormInicial, ejecutivoId: string | undefined) =>
+  datosDelFormulario(valoresIniciales(inicial, ejecutivoId ?? ""), ejecutivoId !== undefined);
+
 /** Ruta del campo dentro del formulario para un error plano de la validación. */
 function rutaCampo(nombre: string, ramo: Ramo) {
   // Los errores de asegurados ya vienen con su ruta ("asegurados.2.nombre").
@@ -245,8 +288,10 @@ export function PolizaForm({
   leidaConIa = false,
   caratula = null,
   negociacion = null,
+  expediente = null,
   onReiniciar,
   onRamoChange,
+  onGuardada,
   modo = { tipo: "captura" },
   ref,
 }: {
@@ -277,8 +322,12 @@ export function PolizaForm({
   caratula?: File | null;
   /** PDF del formato de negociación (GMM Colectivo), del segundo panel. Se guarda igual. */
   negociacion?: File | null;
+  /** Expediente ya armado (p. ej. en la carga masiva) si no se elige uno en el formulario. */
+  expediente?: File | null;
   /** "Limpiar" o "Capturar otra": el contenedor también debe descartar el documento leído. */
   onReiniciar?: () => void;
+  /** La póliza nueva quedó guardada (con sus archivos ya subidos). */
+  onGuardada?: (resultado: Extract<GuardarPolizaResultado, { ok: true }>) => void;
 }) {
   const [errorGeneral, setErrorGeneral] = React.useState<string | null>(null);
   const [exito, setExito] = React.useState<Exito | null>(null);
@@ -402,26 +451,24 @@ export function PolizaForm({
         const opciones = { shouldDirty: true, shouldValidate: submitCount > 0 };
         const actuales = getValues();
         const destino = datos.ramo ?? actuales.ramo;
-        if (datos.ramo && datos.ramo !== actuales.ramo) setValue("ramo", datos.ramo, opciones);
-        // Con la suma "Sin límite" (ya marcada o detectada en este documento) sus campos no se llenan.
-        const ilimitada = actuales.sumaIlimitada || Boolean(datos.sumaAseguradaIlimitada);
-        const camposSuma = new Set(camposSumaAsegurada(destino));
-        if (datos.sumaAseguradaIlimitada && camposSuma.size > 0 && !actuales.sumaIlimitada) {
+        const combinado = combinarComplemento(
+          {
+            ramo: destino,
+            generales: actuales.generales,
+            especificos: actuales.especificos[destino],
+            sumaAseguradaIlimitada: actuales.sumaIlimitada,
+          },
+          datos
+        );
+        if (destino !== actuales.ramo) setValue("ramo", destino, opciones);
+        if (combinado.sumaAseguradaIlimitada && !actuales.sumaIlimitada && camposSumaAsegurada(destino).length > 0) {
           setValue("sumaIlimitada", true, opciones);
-          for (const nombre of camposSuma) setValue(`especificos.${destino}.${nombre}`, "", opciones);
         }
-
-        for (const [nombre, valor] of Object.entries(datos.generales ?? {})) {
-          if (valor && !actuales.generales[nombre]?.trim()) {
-            setValue(`generales.${nombre}`, valor, opciones);
-          }
+        for (const [nombre, valor] of Object.entries(combinado.generales ?? {})) {
+          if (valor !== actuales.generales[nombre]) setValue(`generales.${nombre}`, valor, opciones);
         }
-        for (const [nombre, valor] of Object.entries(datos.especificos ?? {})) {
-          const vacio = !actuales.especificos[destino]?.[nombre]?.trim();
-          if (ilimitada && camposSuma.has(nombre)) continue;
-          if (valor && (vacio || CAMPOS_DEL_COMPLEMENTO.has(nombre))) {
-            setValue(`especificos.${destino}.${nombre}`, valor, opciones);
-          }
+        for (const [nombre, valor] of Object.entries(combinado.especificos ?? {})) {
+          if (valor !== actuales.especificos[destino]?.[nombre]) setValue(`especificos.${destino}.${nombre}`, valor, opciones);
         }
         setErrorGeneral(null);
         setExito(null);
@@ -486,16 +533,7 @@ export function PolizaForm({
       }
     }
 
-    const datos = {
-      ramo: values.ramo,
-      generales: values.generales,
-      especificos: values.especificos[values.ramo],
-      // En los ramos con censo los asegurados no se capturan uno por uno.
-      asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
-      sumaAseguradaIlimitada: esSumaIlimitada(values),
-      // Sin selector (ejecutivo que solo ve su cartera) el servidor decide.
-      ...(ejecutivos && { ejecutivoId: values.ejecutivoId }),
-    };
+    const datos = datosDelFormulario(values, Boolean(ejecutivos));
 
     if (modo.tipo === "edicion") {
       const editada = await editarPoliza(modo.polizaId, datos);
@@ -523,7 +561,7 @@ export function PolizaForm({
       const porTipo: Record<TipoArchivo, File | null> = {
         caratula,
         negociacion,
-        expediente: values.expediente,
+        expediente: values.expediente ?? expediente,
       };
       for (const tipo of TIPOS_ARCHIVO) {
         const archivo = porTipo[tipo];
@@ -532,6 +570,7 @@ export function PolizaForm({
         archivos[tipo] = await subirArchivo(res.poliza.id, tipo, archivo);
       }
       setSubiendo(null);
+      onGuardada?.(res);
       // Renovación: el agradecimiento sale ya con la carátula y el expediente que se acaban de subir.
       if (modo.tipo === "renovacion" && agradecer) {
         setExito({ ...res, archivos, enviandoAgradecimiento: true });

@@ -31,7 +31,7 @@ export type GuardarPolizaResultado =
       ok: true;
       poliza: { id: string; numero: string };
       recibos: number;
-      cliente: { nombre: string; nuevo: boolean };
+      cliente: { id: string; nombre: string; nuevo: boolean };
       /** Solo en renovaciones con el agradecimiento activado. */
       agradecimiento?: AgradecimientoRenovacion;
     }
@@ -362,7 +362,7 @@ export async function registrarPoliza(
             },
         tx
       );
-      return { cliente: { nombre: cliente.nombre, nuevo: cliente.nuevo }, poliza };
+      return { cliente: { id: cliente.id, nombre: cliente.nombre, nuevo: cliente.nuevo }, poliza };
     });
 
     return {

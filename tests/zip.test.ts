@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { deflateRawSync } from "node:zlib";
+import { crc32 as crc32Zlib, deflateRawSync } from "node:zlib";
 
-import { ErrorZip, extraerDeZip, leerIndiceZip, mimePorNombre } from "@/lib/archivos/zip";
+import { crearZip, ErrorZip, extraerDeZip, leerIndiceZip, mimePorNombre } from "@/lib/archivos/zip";
 
 /** Arma un ZIP con los archivos dados (deflate o sin comprimir), como lo haría un compresor. */
 function armarZip(archivos: { ruta: string; contenido: string; comprimir?: boolean }[], antepuesto = new Uint8Array()) {
@@ -43,6 +43,8 @@ function armarZip(archivos: { ruta: string; contenido: string; comprimir?: boole
   return new Uint8Array(Buffer.concat([antepuesto, ...locales, indice, fin]));
 }
 
+const FIRMA_CENTRAL = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
+const crc32Conocido = (t: string) => crc32Zlib(Buffer.from(t, "utf8"));
 const texto = (b: Uint8Array) => Buffer.from(b).toString("utf8");
 
 describe("lector de ZIP", () => {
@@ -53,8 +55,8 @@ describe("lector de ZIP", () => {
   ];
 
   it("lista los archivos (sin carpetas) y extrae comprimidos y sin comprimir", async () => {
-    const zip = armarZip(archivos);
-    const entradas = leerIndiceZip(zip);
+    const zip = new Blob([armarZip(archivos)]);
+    const entradas = await leerIndiceZip(zip);
     assert.deepEqual(
       entradas.map((e) => [e.carpeta, e.nombre]),
       [
@@ -67,16 +69,42 @@ describe("lector de ZIP", () => {
   });
 
   it("corrige las posiciones cuando el ZIP trae bytes antepuestos (marca PK 07 08)", async () => {
-    const zip = armarZip(archivos, new Uint8Array([0x50, 0x4b, 0x07, 0x08]));
-    const [factura] = leerIndiceZip(zip);
+    const zip = new Blob([armarZip(archivos, new Uint8Array([0x50, 0x4b, 0x07, 0x08]))]);
+    const [factura] = await leerIndiceZip(zip);
     assert.equal(texto(await extraerDeZip(zip, factura)), archivos[1].contenido);
   });
 
-  it("rechaza lo que no es ZIP", () => {
-    assert.throws(() => leerIndiceZip(new TextEncoder().encode("%PDF-1.4 no soy zip")), ErrorZip);
+  it("rechaza lo que no es ZIP", async () => {
+    await assert.rejects(leerIndiceZip(new Blob(["%PDF-1.4 no soy zip"])), ErrorZip);
   });
 
-  it("reconoce el tipo de documento por la extensión", () => {
+  it("lee los nombres que el Explorador de Windows guarda en CP850 (sin UTF-8)", async () => {
+    // "IÑIGUEZ Carátula.pdf" en CP850: Ñ = A5, á = A0.
+    const nombre = Buffer.concat([Buffer.from("I"), Buffer.from([0xa5]), Buffer.from("IGUEZ Car"), Buffer.from([0xa0]), Buffer.from("tula.pdf")]);
+    const zip = armarZip([{ ruta: "X".repeat(nombre.length), contenido: "%PDF", comprimir: false }]);
+    // Se reemplaza el nombre ASCII de relleno por los bytes CP850 y se apaga la bandera UTF-8.
+    const crudo = Buffer.from(zip);
+    const central = crudo.indexOf(FIRMA_CENTRAL);
+    for (const inicio of [30, central + 46]) nombre.copy(crudo, inicio);
+    crudo.writeUInt16LE(0, 6);
+    crudo.writeUInt16LE(0, central + 8);
+    const [entrada] = await leerIndiceZip(new Blob([crudo]));
+    assert.equal(entrada.nombre, "IÑIGUEZ Carátula.pdf");
+  });
+
+  it("arma un ZIP sin comprimir que se vuelve a leer igual", async () => {
+    const zip = await crearZip([
+      { ruta: "24-25 679535 MARÍA IÑIGUEZ/Caratula/0000679535_Caratula.pdf", contenido: new Blob(["%PDF-1.4 carátula"]) },
+      { ruta: "24-25 679535 MARÍA IÑIGUEZ/FACT_X.zip", contenido: new Blob([armarZip(archivos)]) },
+    ]);
+    const entradas = await leerIndiceZip(zip);
+    assert.deepEqual(entradas.map((e) => e.nombre), ["0000679535_Caratula.pdf", "FACT_X.zip"]);
+    assert.equal(texto(await extraerDeZip(zip, entradas[0])), "%PDF-1.4 carátula");
+    // El CRC debe ser el estándar para que cualquier descompresor lo acepte.
+    assert.equal(new DataView(await zip.slice(14, 18).arrayBuffer()).getUint32(0, true), crc32Conocido("%PDF-1.4 carátula"));
+  });
+
+    it("reconoce el tipo de documento por la extensión", () => {
     assert.equal(mimePorNombre("FACT_C.PDF"), "application/pdf");
     assert.equal(mimePorNombre("foto.jpeg"), "image/jpeg");
     assert.equal(mimePorNombre("PAGO.xml"), "");

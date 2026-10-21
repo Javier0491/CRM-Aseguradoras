@@ -7,7 +7,7 @@ import {
   RateLimitError,
 } from "openai";
 
-import { getUsuarioCrm } from "@/lib/auth/dal";
+import { esAdmin, getUsuarioCrm } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import {
   getExtractor,
@@ -107,8 +107,10 @@ export async function POST(request: Request) {
   }
 
   // Un escaneo del mes por lectura (aunque lleve varios documentos), según el plan de la agencia.
-  const reserva = await reservarEscaneoOcr(user.agenciaId);
-  if (!reserva.ok) return error(reserva.error, 429);
+  // La carga masiva (solo administradores) no se descuenta del plan.
+  const masiva = formData.get("masiva") === "1" && esAdmin(user);
+  const reserva = masiva ? null : await reservarEscaneoOcr(user.agenciaId);
+  if (reserva && !reserva.ok) return error(reserva.error, 429);
 
   try {
     const extractor = getExtractor();
@@ -133,9 +135,11 @@ export async function POST(request: Request) {
   } catch (e) {
     // Solo el tipo y mensaje del error: nunca el contenido del documento.
     console.error("[ocr] Error en la extracción:", e instanceof Error ? `${e.name}: ${e.message}` : e);
-    await liberarEscaneoOcr(user.agenciaId, reserva.periodo).catch((e2) =>
-      console.error("[ocr] No se pudo devolver el escaneo:", e2 instanceof Error ? e2.message : e2)
-    );
+    if (reserva) {
+      await liberarEscaneoOcr(user.agenciaId, reserva.periodo).catch((e2) =>
+        console.error("[ocr] No se pudo devolver el escaneo:", e2 instanceof Error ? e2.message : e2)
+      );
+    }
     return errorDeExtraccion(e);
   }
 }
