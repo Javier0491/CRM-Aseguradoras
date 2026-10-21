@@ -6,6 +6,7 @@ import { alcanceDe, clientesDe, polizasDe } from "@/lib/auth/alcance";
 import { esAdmin, getAdmin, getUsuarioCrm, type UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import {
+  claveNombre,
   esTipoPersona,
   esTipoSeguimiento,
   MAX_TEXTO_SEGUIMIENTO,
@@ -16,7 +17,7 @@ import {
 } from "@/lib/clientes/reglas";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
-import { normalizarRfc, normalizarTelefono } from "@/lib/polizas/validacion";
+import { normalizarRfc, normalizarTelefono, rfcValido } from "@/lib/polizas/validacion";
 import { leerEjecutivoSolicitado, resolverEjecutivo } from "@/lib/usuarios/asignacion";
 
 const SESION = "Tu sesión expiró. Vuelve a iniciar sesión.";
@@ -253,4 +254,33 @@ export async function fusionarClientes(destinoId: string, origenId: string): Pro
   revalidatePath("/clientes", "layout");
   revalidatePath("/polizas", "layout");
   return { ok: true, polizas };
+}
+
+export type ContactoCliente = { nombre: string; telefono: string; email: string; polizas: number };
+
+/**
+ * Cliente ya registrado con ese RFC (o RFC genérico + nombre), con el mismo criterio con que la
+ * póliza se liga al guardar. Solo busca entre los clientes que el usuario puede ver.
+ */
+export async function buscarContactoPorRfc(rfcCrudo: unknown, nombreCrudo: unknown): Promise<ContactoCliente | null> {
+  const user = await getUsuarioCrm();
+  if (!user || typeof rfcCrudo !== "string" || typeof nombreCrudo !== "string") return null;
+  const rfc = normalizarRfc(rfcCrudo.slice(0, 20));
+  if (!rfcValido(rfc)) return null;
+
+  const alcance = alcanceDe(user);
+  const seleccion = {
+    nombre: true,
+    telefono: true,
+    email: true,
+    _count: { select: { polizas: { where: polizasDe(alcance) } } },
+  } as const;
+  const where = { AND: [{ rfc }, clientesDe(alcance)] };
+  const cliente = RFC_GENERICOS.has(rfc)
+    ? (await db.cliente.findMany({ where, select: seleccion, take: 500 })).find(
+        (c) => claveNombre(c.nombre) === claveNombre(nombreCrudo.slice(0, 200))
+      )
+    : await db.cliente.findFirst({ where, orderBy: { id: "asc" }, select: seleccion });
+  if (!cliente) return null;
+  return { nombre: cliente.nombre, telefono: cliente.telefono, email: cliente.email, polizas: cliente._count.polizas };
 }

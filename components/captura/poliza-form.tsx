@@ -10,6 +10,7 @@ import {
   useFormState,
   useWatch,
   type Control,
+  type UseFormGetValues,
   type UseFormSetValue,
   type FieldErrors,
   type Resolver,
@@ -28,6 +29,7 @@ import {
   Save,
   Scale,
   Trash2,
+  UserCheck,
   UserPlus,
   Shapes,
   ShieldCheck,
@@ -65,6 +67,8 @@ import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
 import { etiquetaPolizaVigor, usaFolioInterno, usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { subirArchivo } from "@/lib/archivos/subir";
+import { buscarContactoPorRfc, type ContactoCliente } from "@/lib/clientes/actions";
+import { claveNombre, RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { hoyISO } from "@/lib/format";
 import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
@@ -94,7 +98,7 @@ import {
   type Opcion,
   type Ramo,
 } from "@/lib/polizas/ramos";
-import { validarPoliza, type Errores, type Valores } from "@/lib/polizas/validacion";
+import { normalizarRfc, rfcValido, validarPoliza, type Errores, type Valores } from "@/lib/polizas/validacion";
 import { cn } from "@/lib/utils";
 
 export type PolizaFormInicial = {
@@ -355,6 +359,9 @@ export function PolizaForm({
     formState: { errors, isSubmitting, submitCount },
   } = useForm<FormValues>({ defaultValues: valoresIniciales(inicial, ejecutivoPredeterminado), resolver });
 
+  // En una edición la póliza ya está ligada a su cliente; al capturar o renovar se busca por RFC.
+  const clienteRegistrado = useClienteRegistrado(control, getValues, setValue, modo.tipo !== "edicion");
+
   const ramo = useWatch({ control, name: "ramo" });
   const secciones = seccionesPorRamo[ramo];
   const RamoIcon = iconosRamo[ramo];
@@ -579,7 +586,11 @@ export function PolizaForm({
             onBlur={field.onBlur}
             destacado={esVigor}
             ayuda={
-              ayudaModo ?? (esVigor && vigorManual && !conFolioInterno ? (
+              ayudaModo ??
+              (campo.name === "rfcCliente" && clienteRegistrado ? (
+                <AvisoClienteRegistrado {...clienteRegistrado} />
+              ) : undefined) ??
+              (esVigor && vigorManual && !conFolioInterno ? (
                 <button
                   type="button"
                   onClick={() => {
@@ -1013,6 +1024,77 @@ const CAMPO_FOLIO_INTERNO = {
   placeholder: "Ej. 1868609",
   hint: "Clave de cobranza de SURA; viene en la información del recibo.",
 };
+
+type ClienteHallado = { clave: string; cliente: ContactoCliente; completados: ("teléfono" | "correo")[] };
+
+/**
+ * Cliente con más de una póliza: si el RFC capturado (o el RFC genérico + nombre) ya es de un
+ * cliente registrado, toma de su expediente el teléfono y el correo que falten en el formulario.
+ * Nunca pisa lo que ya está escrito o lo que leyó la IA; lo que llenó solo sí se cambia (o se
+ * borra) si el RFC se corrige. Al guardar, la póliza se liga a ese cliente con el mismo criterio
+ * (lib/polizas/guardar.ts).
+ */
+function useClienteRegistrado(
+  control: Control<FormValues>,
+  getValues: UseFormGetValues<FormValues>,
+  setValue: UseFormSetValue<FormValues>,
+  activo: boolean
+): ClienteHallado | null {
+  const rfc = normalizarRfc(useWatch({ control, name: "generales.rfcCliente" }) ?? "");
+  const nombre = useWatch({ control, name: "generales.cliente" }) ?? "";
+  // Qué identifica al cliente: el nombre solo cuenta con un RFC genérico.
+  const clave = !activo || !rfcValido(rfc) ? null : RFC_GENERICOS.has(rfc) ? `${rfc}|${claveNombre(nombre)}` : rfc;
+  const [hallado, setHallado] = React.useState<ClienteHallado | null>(null);
+  // Lo último que se tomó del expediente, por campo.
+  const autollenado = React.useRef<Partial<Record<"telefono" | "email", string>>>({});
+
+  React.useEffect(() => {
+    if (!clave) return;
+    let vigente = true;
+    // Espera a que se termine de escribir el RFC.
+    const espera = setTimeout(async () => {
+      const g = getValues("generales");
+      const cliente = await buscarContactoPorRfc(g.rfcCliente ?? "", g.cliente ?? "").catch(() => null);
+      if (!vigente) return;
+      const actuales = getValues("generales");
+      const completados: ClienteHallado["completados"] = [];
+      for (const [campo, etiqueta] of [["telefono", "teléfono"], ["email", "correo"]] as const) {
+        const actual = actuales[campo]?.trim() ?? "";
+        // Solo se toca un campo vacío o con lo que se llenó solo para otro RFC.
+        if (actual && actual !== autollenado.current[campo]) continue;
+        const nuevo = cliente?.[campo] ?? "";
+        if (actual !== nuevo) setValue(`generales.${campo}`, nuevo, { shouldDirty: true });
+        autollenado.current[campo] = nuevo || undefined;
+        if (nuevo) completados.push(etiqueta);
+      }
+      setHallado(cliente && { clave, cliente, completados });
+    }, 400);
+    return () => {
+      vigente = false;
+      clearTimeout(espera);
+    };
+  }, [clave, getValues, setValue]);
+
+  return hallado && hallado.clave === clave ? hallado : null;
+}
+
+function AvisoClienteRegistrado({ cliente, completados }: ClienteHallado) {
+  const sinContacto = !cliente.telefono && !cliente.email;
+  return (
+    <span className="flex items-start gap-1.5 text-success">
+      <UserCheck className="mt-px size-3.5 shrink-0" />
+      <span>
+        Cliente ya registrado: <span className="font-medium">{cliente.nombre}</span>
+        {cliente.polizas > 0 && ` (${cliente.polizas} ${cliente.polizas === 1 ? "póliza" : "pólizas"})`}.{" "}
+        {completados.length > 0
+          ? `Se ${completados.length === 1 ? "tomó su" : "tomaron su"} ${completados.join(" y ")} de su expediente.`
+          : sinContacto
+            ? "Su expediente no tiene teléfono ni correo."
+            : "La póliza se agregará a su expediente."}
+      </span>
+    </span>
+  );
+}
 
 function Campo({
   campo,
