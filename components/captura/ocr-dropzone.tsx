@@ -23,7 +23,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { SelectorZip, type ZipAbierto } from "@/components/captura/selector-zip";
 import { copiarTodosEnMemoria } from "@/lib/archivos/memoria";
+import { ErrorZip, esZip, extraerDeZip, leerIndiceZip, mimePorNombre, type EntradaZip } from "@/lib/archivos/zip";
 import { etiquetaPolizaVigor } from "@/lib/aseguradoras/poliza-vigor";
 import { formatFecha, formatMoneda } from "@/lib/format";
 import {
@@ -49,6 +51,10 @@ function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+/** Lo que ofrecen los selectores: los documentos que lee la IA y el ZIP que los trae (p. ej. el de facturas). */
+const ACCEPT = [...OCR_TIPOS_PERMITIDOS, ".zip", "application/zip", "application/x-zip-compressed"].join(",");
+const ZIP_MAX_BYTES = 200 * 1024 * 1024;
 
 function validarArchivos(archivos: File[]): string | null {
   if (archivos.length > OCR_MAX_ARCHIVOS) {
@@ -95,6 +101,9 @@ export function OcrDropzone({
   const [arrastrandoAgregar, setArrastrandoAgregar] = React.useState(false);
   const [previews, setPreviews] = React.useState<Map<File, string>>(new Map());
   const [estado, setEstado] = React.useState<Estado>({ status: "idle" });
+  // ZIP soltado: se elige qué documento de adentro leer. `resto` son los demás archivos de la selección.
+  const zipRef = React.useRef<{ datos: Uint8Array; resto: File[] } | null>(null);
+  const [zip, setZip] = React.useState<ZipAbierto | null>(null);
 
   const actualizarPreviews = React.useCallback((archivos: File[]) => {
     for (const url of previewsRef.current.values()) URL.revokeObjectURL(url);
@@ -117,6 +126,7 @@ export function OcrDropzone({
 
   async function procesar(seleccion: File[]) {
     if (seleccion.length === 0) return;
+    if (seleccion.some(esZip)) return abrirZip(seleccion);
     const invalido = validarArchivos(seleccion);
     if (invalido) {
       actualizarPreviews([]);
@@ -128,7 +138,11 @@ export function OcrDropzone({
     const copia = await copiarTodosEnMemoria(seleccion);
     if (!copia.ok) {
       actualizarPreviews([]);
-      setEstado({ status: "error", archivos: seleccion, mensaje: copia.error });
+      setEstado({
+        status: "error",
+        archivos: seleccion,
+        mensaje: `${copia.error} Si viene en un ZIP, también puedes subir el ZIP completo y elegir el documento.`,
+      });
       return;
     }
     const archivos = copia.archivos;
@@ -173,6 +187,62 @@ export function OcrDropzone({
       // Una petición abortada por otra más reciente no debe apagar el indicador.
       if (abortRef.current === controller) onProcesando?.(false);
     }
+  }
+
+  /**
+   * Abre el ZIP en memoria y deja elegir el documento a leer. Leerlo aquí evita abrirlo desde el
+   * Explorador de Windows, que lo deja en una carpeta temporal que el navegador ya no alcanza a leer.
+   */
+  async function abrirZip(seleccion: File[]) {
+    const zips = seleccion.filter(esZip);
+    const fallar = (mensaje: string) => setEstado({ status: "error", archivos, mensaje });
+    if (zips.length > 1) return fallar("Sube un ZIP a la vez.");
+    const [archivoZip] = zips;
+    if (archivoZip.size > ZIP_MAX_BYTES) return fallar(`«${archivoZip.name}» es demasiado grande para abrirlo aquí.`);
+
+    const copia = await copiarTodosEnMemoria([archivoZip]);
+    if (!copia.ok) return fallar(copia.error);
+    const datos = new Uint8Array(await copia.archivos[0].arrayBuffer());
+    let entradas: EntradaZip[];
+    try {
+      entradas = leerIndiceZip(datos).filter((e) =>
+        (OCR_TIPOS_PERMITIDOS as readonly string[]).includes(mimePorNombre(e.nombre))
+      );
+    } catch (e) {
+      if (!(e instanceof ErrorZip)) throw e;
+      return fallar(`«${archivoZip.name}»: ${e.message}`);
+    }
+    if (entradas.length === 0) return fallar(`«${archivoZip.name}» no trae PDF ni imágenes.`);
+
+    zipRef.current = { datos, resto: seleccion.filter((a) => !esZip(a)) };
+    // Con un solo documento no hay nada que elegir.
+    if (entradas.length === 1) {
+      const fallo = await elegirDelZip(entradas[0]);
+      if (fallo) fallar(fallo);
+      return;
+    }
+    setZip({ nombre: archivoZip.name, entradas });
+  }
+
+  async function elegirDelZip(entrada: EntradaZip): Promise<string | null> {
+    const abierto = zipRef.current;
+    if (!abierto) return null;
+    let contenido: Uint8Array<ArrayBuffer>;
+    try {
+      contenido = await extraerDeZip(abierto.datos, entrada);
+    } catch (e) {
+      if (e instanceof ErrorZip) return e.message;
+      throw e;
+    }
+    zipRef.current = null;
+    setZip(null);
+    void procesar([...abierto.resto, new File([contenido], entrada.nombre, { type: mimePorNombre(entrada.nombre) })]);
+    return null;
+  }
+
+  function cerrarZip() {
+    zipRef.current = null;
+    setZip(null);
   }
 
   function limpiar() {
@@ -265,13 +335,14 @@ export function OcrDropzone({
                   : "Arrastra uno o varios PDF o imágenes, o haz clic para seleccionar"}
             </p>
             <p className="text-xs text-muted-foreground">
-              Carátula, recibo, constancia fiscal… · hasta {OCR_MAX_ARCHIVOS} archivos de 10 MB
+              Carátula, recibo, constancia fiscal… · hasta {OCR_MAX_ARCHIVOS} archivos de 10 MB · también el ZIP
+              del portal
             </p>
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept={OCR_TIPOS_PERMITIDOS.join(",")}
+            accept={ACCEPT}
             multiple
             className="sr-only"
             tabIndex={-1}
@@ -339,12 +410,12 @@ export function OcrDropzone({
                   <Plus className="size-4 shrink-0" />
                   {arrastrandoAgregar
                     ? "Suelta para agregarlo y volver a leer"
-                    : "Arrastra aquí la factura u otro documento, o haz clic, para agregarlo y volver a leer"}
+                    : "Arrastra aquí la factura (PDF o el ZIP del portal) u otro documento, o haz clic, para agregarlo y volver a leer"}
                 </button>
                 <input
                   ref={agregarRef}
                   type="file"
-                  accept={OCR_TIPOS_PERMITIDOS.join(",")}
+                  accept={ACCEPT}
                   multiple
                   className="sr-only"
                   tabIndex={-1}
@@ -377,6 +448,7 @@ export function OcrDropzone({
           />
         )}
       </CardContent>
+      <SelectorZip zip={zip} onElegir={elegirDelZip} onCerrar={cerrarZip} />
     </Card>
   );
 }
