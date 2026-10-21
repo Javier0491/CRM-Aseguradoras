@@ -135,16 +135,18 @@ export function AsistenteFlotante({ asistente, usuario, color }: { asistente: st
             whileTap={{ scale: 0.92 }}
             className={cn(
               // En celular queda arriba de la barra de acciones de cliente y póliza.
-              "group fixed right-4 bottom-20 z-40 flex items-center gap-2 rounded-full outline-none md:right-6 md:bottom-6",
+              // El botón es solo el círculo: el nombre va fuera de él para que su espacio (invisible
+              // mientras no se pasa el mouse) no tape ni capture los clics de lo que está debajo.
+              "group fixed right-4 bottom-20 z-40 size-16 rounded-full outline-none md:right-6 md:bottom-6",
               // El área del botón llega hasta la orilla: al salir de su lugar a un lado, el mouse sigue encima.
               "after:absolute after:inset-y-0 after:left-full after:w-4 md:after:w-6",
               "focus-visible:ring-[3px] focus-visible:ring-ring/50"
             )}
           >
-            {/* El nombre aparece al pasar el mouse (y siempre mientras responde). */}
+            {/* El nombre aparece al pasar el mouse (y siempre mientras responde), a la izquierda del círculo. */}
             <span
               className={cn(
-                "pointer-events-none hidden rounded-full border bg-card/95 px-3 py-1.5 text-xs font-medium whitespace-nowrap shadow-lg backdrop-blur md:block",
+                "pointer-events-none absolute top-1/2 right-full mr-2 hidden -translate-y-1/2 rounded-full border bg-card/95 px-3 py-1.5 text-xs font-medium whitespace-nowrap shadow-lg backdrop-blur md:block",
                 "translate-x-2 opacity-0 transition-[opacity,translate] duration-200 ease-out group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100",
                 estado !== "reposo" && "translate-x-0 opacity-100",
                 // A un lado, el nombre no se asoma (taparía lo que el personaje dejó libre).
@@ -153,7 +155,7 @@ export function AsistenteFlotante({ asistente, usuario, color }: { asistente: st
             >
               {estado === "pensando" ? `${asistente} está pensando…` : estado === "hablando" ? `${asistente} está respondiendo…` : etiqueta}
             </span>
-            <span className="relative grid size-16 place-items-center rounded-full border border-primary/30 bg-card/90 shadow-[0_10px_30px_-10px_var(--color-primary)] backdrop-blur transition-[box-shadow,scale] duration-200 ease-out group-hover:scale-105 group-hover:shadow-[0_14px_40px_-8px_var(--color-primary)] motion-reduce:group-hover:scale-100">
+            <span className="relative grid size-full place-items-center rounded-full border border-primary/30 bg-card/90 shadow-[0_10px_30px_-10px_var(--color-primary)] backdrop-blur transition-[box-shadow,scale] duration-200 ease-out group-hover:scale-105 group-hover:shadow-[0_14px_40px_-8px_var(--color-primary)] motion-reduce:group-hover:scale-100">
               <Personaje estado={estado} color={color} className="size-16" />
               {/* Aviso discreto mientras llega una respuesta con el panel cerrado. */}
               {estado !== "reposo" && (
