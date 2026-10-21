@@ -8,6 +8,10 @@
 // - un ZIP suelto (p. ej. "0000619607.zip" o "Documentos88554-04134….zip" de un portal);
 // - PDFs sueltos de una misma carpeta que comparten número ("Poliza 0413…pdf" y
 //   "Recibos Poliza 0413…pdf"), o un PDF suelto sin compañeros.
+//
+// Los ZIP sueltos se abren antes de agrupar (ver expandirZips) y su contenido se trata como una
+// carpeta más: un ZIP con varias pólizas adentro ("06 10 2023.zip" → AGOSTO 2023/…zip, …) es solo
+// un contenedor y se separa en ellas; uno sin pólizas adentro es una póliza.
 
 import { OCR_MAX_BYTES, OCR_MAX_BYTES_TOTAL } from "@/lib/ocr/types";
 
@@ -36,9 +40,39 @@ const VIGENCIA = /^\d{2}\s*-\s*\d{2}\s+\S/;
 /** Subcarpetas que marcan a su carpeta madre como una póliza descargada del portal. */
 const SUBCARPETA_POLIZA = /^(caratula|poliza)s?$/i;
 /** Carpetas con documentos de apoyo: sueltas no son una póliza. */
-const CARPETA_APOYO = /^(certificados|credenciales|condiciones generales|textos|acuse.*|ac|endosos?|listado|detalle de coberturas|carta bienvenida|aviso pago|pago|factura)$/i;
+const CARPETA_APOYO = /^(certificados|credenciales|condiciones generales|textos.*|acuse.*|ac|endosos?|listados?|detalle de coberturas|carta bienvenida|aviso pago|pagos?|facturas?|recibos)$/i;
 /** ZIP sueltos que solo traen facturas o pagos. */
-const ZIP_SOLO_COBRANZA = /^(fact|pago|aviso)_/i;
+export const ZIP_SOLO_COBRANZA = /^(fact|pago|aviso)_/i;
+
+const segmentosDe = (ruta: string) => ruta.split("/").filter(Boolean);
+
+/**
+ * Carpetas que son una póliza por sí mismas: por su nombre de vigencia o por tener una subcarpeta
+ * Carátula / Póliza. (Sirve también para rutas dentro de un ZIP.)
+ */
+export function carpetasPolizaDe(rutas: Iterable<string>): Set<string> {
+  const carpetas = new Set<string>();
+  for (const ruta of rutas) {
+    const segmentos = segmentosDe(ruta);
+    for (let i = 0; i < segmentos.length - 1; i++) {
+      if (VIGENCIA.test(segmentos[i])) carpetas.add(segmentos.slice(0, i + 1).join("/"));
+      if (i > 0 && SUBCARPETA_POLIZA.test(sinAcentos(segmentos[i]))) carpetas.add(segmentos.slice(0, i).join("/"));
+    }
+  }
+  return carpetas;
+}
+
+/** ¿La ruta está dentro de alguna de las carpetas? */
+export const estaDentroDe = (ruta: string, carpetas: ReadonlySet<string>) => {
+  const segmentos = segmentosDe(ruta);
+  return segmentos.some((_, i) => i > 0 && carpetas.has(segmentos.slice(0, i).join("/")));
+};
+
+const nombreSinZip = (nombre: string) => nombre.replace(/\.zip$/i, "");
+
+/** Copias que dejan macOS y Windows al comprimir ("__MACOSX/", "._archivo", desktop.ini…). */
+export const esBasuraDeSistema = (ruta: string) =>
+  /(^|\/)__MACOSX\//i.test(ruta) || /(^|\/)(\._[^/]*|desktop\.ini|\.ds_store|thumbs\.db)$/i.test(ruta);
 
 /** Corrida de dígitos más larga del texto (≥ 5), sin ceros a la izquierda. */
 export function numeroDeNombre(nombre: string): string | null {
@@ -60,18 +94,36 @@ export function coincideNumero(numeroNombre: string, leidos: string[]): boolean 
   });
 }
 
-/** Parte la lista de archivos en pólizas. */
-export function agruparPolizas(archivos: ArchivoRuta[]): { unidades: UnidadPoliza[]; omitidos: Omitido[] } {
-  const partes = archivos.map((a) => ({ ...a, segmentos: a.ruta.split("/").filter(Boolean) }));
+/**
+ * Parte la lista de archivos en pólizas. `zips` son los ZIP ya abiertos: su contenido viene en la
+ * lista como si el ZIP fuera una carpeta ("…/06 10 2023.zip/AGOSTO 2023/…").
+ */
+export function agruparPolizas(
+  archivos: ArchivoRuta[],
+  zips: ReadonlySet<string> = new Set()
+): { unidades: UnidadPoliza[]; omitidos: Omitido[] } {
+  // Un ZIP abierto ya no cuenta como archivo: cuenta su contenido.
+  const partes = archivos
+    .filter((a) => !zips.has(a.ruta) && !esBasuraDeSistema(a.ruta))
+    .map((a) => ({ ...a, segmentos: segmentosDe(a.ruta) }));
+  const carpetasPoliza = carpetasPolizaDe(partes.map((p) => p.ruta));
 
-  // Carpetas que son una póliza: por su nombre o por tener una subcarpeta Carátula / Póliza.
-  const carpetasPoliza = new Set<string>();
-  for (const { segmentos } of partes) {
-    for (let i = 0; i < segmentos.length - 1; i++) {
-      const ruta = segmentos.slice(0, i + 1).join("/");
-      if (VIGENCIA.test(segmentos[i])) carpetasPoliza.add(ruta);
-      if (i > 0 && SUBCARPETA_POLIZA.test(sinAcentos(segmentos[i]))) carpetasPoliza.add(segmentos.slice(0, i).join("/"));
-    }
+  // Un ZIP abierto es una póliza salvo que adentro haya varias (carpetas de póliza o ZIP con número
+  // que no estén entre los documentos de apoyo): entonces es solo un contenedor. Si adentro hay una
+  // sola (p. ej. el ZIP del portal con su carpeta "0000023696/Caratula/…"), el ZIP es esa póliza.
+  const esPolizaAdentro = (ruta: string, zip: string) => {
+    const relativa = segmentosDe(ruta.slice(zip.length + 1));
+    const nombre = relativa.at(-1) ?? "";
+    if (relativa.slice(0, -1).some((s) => CARPETA_APOYO.test(sinAcentos(s)))) return false;
+    return carpetasPoliza.has(ruta) || (zips.has(ruta) && !ZIP_SOLO_COBRANZA.test(nombre) && numeroDeNombre(nombre) !== null);
+  };
+  const candidatos = [...carpetasPoliza, ...zips];
+  for (const zip of zips) {
+    if (carpetasPoliza.has(zip) || ZIP_SOLO_COBRANZA.test(segmentosDe(zip).at(-1) ?? "")) continue;
+    const adentro = candidatos.filter((c) => c.startsWith(`${zip}/`) && esPolizaAdentro(c, zip));
+    // Solo cuentan las de más afuera: lo que esté dentro de otra póliza es parte de ella.
+    const polizas = adentro.filter((c) => !adentro.some((o) => c.startsWith(`${o}/`)));
+    if (polizas.length < 2) carpetasPoliza.add(zip);
   }
 
   const porCarpeta = new Map<string, string[]>();
@@ -95,11 +147,12 @@ export function agruparPolizas(archivos: ArchivoRuta[]): { unidades: UnidadPoliz
     const madre = a.segmentos.slice(0, -1).join("/");
     const ext = extension(nombre);
     if (ext === "zip") {
+      // Un ZIP que no se pudo abrir: se intenta como una póliza al procesarlo.
       if (ZIP_SOLO_COBRANZA.test(nombre)) omitidos.push({ ruta: a.ruta, motivo: "Solo trae facturas o pagos" });
       else
         unidades.push({
           clave: a.ruta,
-          nombre: nombre.replace(/\.zip$/i, ""),
+          nombre: nombreSinZip(nombre),
           tipo: "zip",
           archivos: [a.ruta],
           numero: numeroDeNombre(nombre),
@@ -111,32 +164,43 @@ export function agruparPolizas(archivos: ArchivoRuta[]): { unidades: UnidadPoliz
       } else {
         sueltosPorCarpeta.set(madre, [...(sueltosPorCarpeta.get(madre) ?? []), a]);
       }
-    } else if (!/^(desktop\.ini|\.ds_store|thumbs\.db)$/i.test(nombre) && ext !== "xml") {
+    } else if (ext !== "xml") {
       omitidos.push({ ruta: a.ruta, motivo: "No es PDF, imagen ni ZIP" });
     }
   }
 
   for (const [carpeta, rutas] of porCarpeta) {
-    const nombre = carpeta.split("/").at(-1) ?? carpeta;
-    unidades.push({ clave: carpeta, nombre, tipo: "carpeta", archivos: rutas, numero: numeroDeNombre(nombre), copias: [] });
+    const nombre = nombreSinZip(carpeta.split("/").at(-1) ?? carpeta);
+    const tipo = zips.has(carpeta) ? "zip" : "carpeta";
+    unidades.push({ clave: carpeta, nombre, tipo, archivos: rutas, numero: numeroDeNombre(nombre), copias: [] });
   }
 
-  // PDFs sueltos: los de una misma carpeta con el mismo número son una sola póliza.
+  // PDFs sueltos: los de una misma carpeta con el mismo número son una sola póliza. Si en la
+  // carpeta hay una sola póliza o carátula entre otros documentos sin número común (p. ej.
+  // "GUPO INDEBIT RC": la póliza de HDI y sus facturas), todos son de esa póliza.
   for (const [madre, sueltos] of sueltosPorCarpeta) {
     const grupos = new Map<string, ArchivoRuta[]>();
+    const conPoliza = sueltos.filter((s) => /poliza|caratula/i.test(sinAcentos(s.ruta.split("/").at(-1) ?? "")));
     for (const s of sueltos) {
-      const clave = numeroDeNombre(s.ruta.split("/").at(-1) ?? "") ?? `archivo:${s.ruta}`;
+      const clave =
+        conPoliza.length === 1 && sueltos.length > 1
+          ? (numeroDeNombre(madre.split("/").at(-1) ?? "") ?? `carpeta:${madre}`)
+          : (numeroDeNombre(s.ruta.split("/").at(-1) ?? "") ?? `archivo:${s.ruta}`);
       grupos.set(clave, [...(grupos.get(clave) ?? []), s]);
     }
     for (const [numero, grupo] of grupos) {
       const solo = grupo.length === 1;
       const nombreArchivo = grupo[0].ruta.split("/").at(-1) ?? grupo[0].ruta;
       unidades.push({
-        clave: solo ? grupo[0].ruta : `${madre}/#${numero}`,
-        nombre: solo ? nombreArchivo.replace(/\.[^.]+$/, "") : `${madre.split("/").at(-1) ?? ""} · ${numero}`.trim(),
+        clave: solo ? grupo[0].ruta : `${madre}/#${numero.startsWith("carpeta:") ? "carpeta" : numero}`,
+        nombre: solo
+          ? nombreArchivo.replace(/\.[^.]+$/, "")
+          : numero.startsWith("carpeta:")
+            ? (madre.split("/").at(-1) ?? madre)
+            : `${madre.split("/").at(-1) ?? ""} · ${numero}`.trim(),
         tipo: "pdf",
         archivos: grupo.map((g) => g.ruta),
-        numero: numero.startsWith("archivo:") ? null : numero,
+        numero: /^(archivo|carpeta):/.test(numero) ? null : numero,
         copias: [],
       });
     }
@@ -147,7 +211,7 @@ export function agruparPolizas(archivos: ArchivoRuta[]): { unidades: UnidadPoliz
   // aunque el número venga con ceros ("23-24 679535 …" y "23-24 0000679535 …").
   const porNombre = new Map<string, UnidadPoliza>();
   for (const u of unidades.sort((a, b) => b.archivos.length - a.archivos.length || a.clave.localeCompare(b.clave))) {
-    const vigencia = u.tipo === "carpeta" ? /^(\d{2})\s*-\s*(\d{2})/.exec(u.nombre) : null;
+    const vigencia = u.tipo !== "pdf" ? /^(\d{2})\s*-\s*(\d{2})/.exec(u.nombre) : null;
     const clave =
       vigencia && u.numero
         ? `vigencia|${vigencia[1]}-${vigencia[2]}|${u.numero}`
@@ -164,10 +228,11 @@ export function agruparPolizas(archivos: ArchivoRuta[]): { unidades: UnidadPoliz
 
 /** Documentos que nunca se mandan a leer: no traen los datos de la póliza. */
 const EXCLUIDO =
-  /condiciones|certificad|credencial|textos|acuse|endoso|listado|detalle de cobertura|carta.{0,4}bienvenida|anexo|\brc eua\b|(^|\/)pago[_/ ]|(^|\/)(c|t)_\d{6}|documentacion|reembolso/i;
+  /condiciones|certificad|credencial|textos|acuse|endoso|listado|detalle de cobertura|carta.{0,4}bienvenida|anexo|\brc eua\b|(^|\/)pago[_/ ]|(^|\/)(c|t)_\d{6}|documentacion|reembolso|aviso/i;
 const CARATULA = /caratula/i;
 const POLIZA = /poliza/i;
-const RECIBO = /(^|\/)fact_|recibo|aviso.?(de.?)?(pago|cobro)|(^|\/)aviso_/i;
+/** Factura o recibo de la póliza (para la referencia de pago). Los avisos de cobro no se usan. */
+const RECIBO = /(^|\/)fact_|factura|recibo/i;
 
 /** Lo mínimo que hace falta de cada documento para elegir. */
 export type DocumentoCandidato = { ruta: string; tamano: number };
@@ -185,10 +250,11 @@ export function elegirDocumentos<T extends DocumentoCandidato>(docs: T[]): T[] {
 
   const caratulas = candidatos.filter((d) => CARATULA.test(texto(d)));
   const polizas = candidatos.filter((d) => !CARATULA.test(texto(d)) && POLIZA.test(texto(d)) && !RECIBO.test(texto(d)));
-  // De los recibos, primero la copia del cliente ("_C.pdf").
+  // De los recibos, primero la factura del portal y, de ella, la copia del cliente ("_C.pdf").
+  const preferencia = (d: T) => (/(^|\/)fact_/i.test(texto(d)) ? 2 : 0) + (/_c\.pdf$/i.test(d.ruta) ? 1 : 0);
   const recibos = candidatos
     .filter((d) => RECIBO.test(texto(d)) && !CARATULA.test(texto(d)))
-    .sort((a, b) => Number(/_c\.pdf$/i.test(b.ruta)) - Number(/_c\.pdf$/i.test(a.ruta)));
+    .sort((a, b) => preferencia(b) - preferencia(a));
   const principales = caratulas.length ? caratulas.slice(0, 2) : polizas.slice(0, 2);
   const otros = principales.length
     ? []

@@ -62,16 +62,70 @@ describe("carga masiva: pólizas de una carpeta", () => {
   });
 });
 
+describe("carga masiva: ZIP con varias pólizas adentro", () => {
+  // "06 10 2023.zip" guarda las pólizas de tres meses, cada una en su propio ZIP o carpeta.
+  const zip = "CRM/AGREGADO/06 10 2023.zip";
+  const zips = new Set([
+    zip,
+    `${zip}/AGOSTO 2023/23-24 0000075296 GONZALEZ BANTE.zip`,
+    `${zip}/OCTUBRE 2023/0000023696 SILVIA AGUILAR.zip`,
+    `${zip}/OCTUBRE 2023/Documentos79497-041340291272000000 ALEJANDRO.zip`,
+    "CRM/INGRESADO/0000619607.zip",
+  ]);
+  const { unidades } = agruparPolizas(
+    [
+      archivo(zip),
+      archivo(`${zip}/AGOSTO 2023/23-24 0000075296 GONZALEZ BANTE.zip`),
+      archivo(`${zip}/AGOSTO 2023/23-24 0000075296 GONZALEZ BANTE.zip/Caratula/0000075296_Caratula.pdf`),
+      archivo(`${zip}/AGOSTO 2023/23-24 0000075296 GONZALEZ BANTE.zip/FACT_GOBR641203512_79651397_.zip`),
+      archivo(`${zip}/OCTUBRE 2023/0000023696 SILVIA AGUILAR.zip`),
+      // El ZIP del portal con una carpeta adentro: el ZIP es la póliza.
+      archivo(`${zip}/OCTUBRE 2023/0000023696 SILVIA AGUILAR.zip/0000023696/Caratula/0000023696_Caratula.pdf`),
+      archivo(`${zip}/OCTUBRE 2023/Documentos79497-041340291272000000 ALEJANDRO.zip`),
+      archivo(`${zip}/OCTUBRE 2023/Documentos79497-041340291272000000 ALEJANDRO.zip/Poliza 041340291272000000.pdf`),
+      archivo(`${zip}/OCTUBRE 2023/02006_M0456755/Caratula/M0456755_Caratula.pdf`),
+      archivo(`${zip}/SEPTIEMBRE 2023/GUPO INDEBIT RC/49_3877__0_0.pdf`),
+      archivo(`${zip}/SEPTIEMBRE 2023/GUPO INDEBIT RC/D-12320669.pdf`),
+      archivo(`${zip}/SEPTIEMBRE 2023/GUPO INDEBIT RC/HDI_RENOVACION Poliza3877-1 GRUPO INDEBIT.pdf`),
+      archivo(`${zip}/__MACOSX/OCTUBRE 2023/._0000023696.zip`),
+      archivo("CRM/INGRESADO/0000619607.zip"),
+      archivo("CRM/INGRESADO/0000619607.zip/Caratula/0000619607_Caratula.pdf"),
+    ],
+    zips
+  );
+
+  it("separa el contenedor en sus pólizas y no lo trata como una", () => {
+    assert.deepEqual(unidades.map((u) => [u.tipo, u.nombre]).sort(), [
+      ["carpeta", "02006_M0456755"],
+      ["pdf", "GUPO INDEBIT RC"],
+      ["zip", "0000023696 SILVIA AGUILAR"],
+      ["zip", "0000619607"],
+      ["zip", "23-24 0000075296 GONZALEZ BANTE"],
+      ["zip", "Documentos79497-041340291272000000 ALEJANDRO"],
+    ]);
+  });
+
+  it("los documentos de la póliza son los de su ZIP, incluido el de facturas", () => {
+    const gonzalez = unidades.find((u) => u.nombre.startsWith("23-24"))!;
+    assert.equal(gonzalez.archivos.length, 2);
+    assert.equal(unidades.find((u) => u.nombre === "GUPO INDEBIT RC")?.archivos.length, 3);
+  });
+});
+
 describe("carga masiva: documentos que se leen", () => {
-  it("la carátula y un recibo (la copia del cliente), sin documentos de apoyo", () => {
+  it("la carátula y la factura (la copia del cliente), sin avisos de cobro ni documentos de apoyo", () => {
     const elegidos = elegirDocumentos([
       archivo("Condiciones Generales/CG MedicaLife.pdf"),
       archivo("Credenciales/T_0000000000001_GUIJARRO.pdf"),
-      archivo("AC/AVISO_GUAH_81961568_0000619607__A.pdf"),
       archivo("AC/AVISO_GUAH_81961568_0000619607__C.pdf"),
+      archivo("FACT_GUAH_77605195_.zip/Factura/FACT_GUAH_81961568_0000619607_A.pdf"),
+      archivo("FACT_GUAH_77605195_.zip/Factura/FACT_GUAH_81961568_0000619607_C.pdf"),
       archivo("Caratula/0000619607_Caratula_GM6029.pdf"),
     ]);
-    assert.deepEqual(elegidos.map((d) => d.ruta), ["Caratula/0000619607_Caratula_GM6029.pdf", "AC/AVISO_GUAH_81961568_0000619607__C.pdf"]);
+    assert.deepEqual(elegidos.map((d) => d.ruta), [
+      "Caratula/0000619607_Caratula_GM6029.pdf",
+      "FACT_GUAH_77605195_.zip/Factura/FACT_GUAH_81961568_0000619607_C.pdf",
+    ]);
     assert.equal(caratulaDe(elegidos)?.ruta, "Caratula/0000619607_Caratula_GM6029.pdf");
   });
 
@@ -123,6 +177,7 @@ describe("carga masiva: expediente y formato de negociación", () => {
   ]);
   const fuente: Fuente = {
     nombre: "CRM",
+    zips: new Set(),
     archivos: new Map(
       [...contenido].map(([ruta, texto]) => [ruta, { ruta, tamano: texto.length, leer: async () => new Blob([texto]) }])
     ),

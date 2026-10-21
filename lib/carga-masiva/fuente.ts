@@ -4,7 +4,14 @@
 
 import { ARCHIVOS, formatBytes } from "@/lib/archivos/config";
 import { crearZip, esZip, extraerDeZip, leerIndiceZip, mimePorNombre } from "@/lib/archivos/zip";
-import type { DocumentoCandidato, UnidadPoliza } from "@/lib/carga-masiva/agrupar";
+import {
+  carpetasPolizaDe,
+  esBasuraDeSistema,
+  estaDentroDe,
+  ZIP_SOLO_COBRANZA,
+  type DocumentoCandidato,
+  type UnidadPoliza,
+} from "@/lib/carga-masiva/agrupar";
 
 export type ArchivoFuente = { ruta: string; tamano: number; leer: () => Promise<Blob> };
 
@@ -12,6 +19,8 @@ export type Fuente = {
   /** Nombre de la carpeta o del ZIP elegido. */
   nombre: string;
   archivos: Map<string, ArchivoFuente>;
+  /** ZIP ya abiertos: su contenido está en `archivos` como "ruta/del.zip/ruta interna". */
+  zips: Set<string>;
 };
 
 /** ZIP dentro de la carpeta que se abren para buscar documentos (los de un portal pesan pocos MB). */
@@ -34,7 +43,7 @@ export function fuenteDeCarpeta(archivos: FileList | File[]): Fuente {
     mapa.set(ruta, { ruta, tamano: f.size, leer: async () => f });
   }
   const nombre = lista[0]?.webkitRelativePath.split("/")[0] || "Carpeta";
-  return { nombre, archivos: mapa };
+  return { nombre, archivos: mapa, zips: new Set() };
 }
 
 /** ZIP de la carpeta completa: se lee por partes, sin cargarlo entero en memoria. */
@@ -44,7 +53,57 @@ export async function fuenteDeZip(zip: File): Promise<Fuente> {
   for (const e of entradas) {
     mapa.set(e.ruta, { ruta: e.ruta, tamano: e.tamano, leer: async () => new Blob([await extraerDeZip(zip, e)]) });
   }
-  return { nombre: zip.name.replace(/\.zip$/i, ""), archivos: mapa };
+  return { nombre: zip.name.replace(/\.zip$/i, ""), archivos: mapa, zips: new Set() };
+}
+
+/** Hasta qué profundidad se abren ZIP dentro de ZIP para buscar pólizas. */
+const PROFUNDIDAD_ZIP = 3;
+
+/**
+ * Abre los ZIP que no están dentro de una póliza (los de un portal, o uno que guarda las pólizas
+ * de varios meses como "06 10 2023.zip") y agrega su contenido como si fueran carpetas, para que
+ * la agrupación los separe. Los ZIP de una póliza (su factura, sus recibos) no se abren aquí: se
+ * leen al procesarla. El contenido se vuelve a extraer cuando se usa; no se guarda en memoria.
+ */
+export async function expandirZips(fuente: Fuente, alAvanzar?: (abiertos: number) => void): Promise<Fuente> {
+  const archivos = new Map(fuente.archivos);
+  const zips = new Set<string>();
+  const dePoliza = carpetasPolizaDe(archivos.keys());
+  const pendientes = [...archivos.values()]
+    .filter((a) => esZip({ name: a.ruta }) && !estaDentroDe(a.ruta, dePoliza))
+    .map((a) => ({ archivo: a, profundidad: 1 }));
+
+  while (pendientes.length > 0) {
+    const { archivo: zip, profundidad } = pendientes.shift()!;
+    const nombre = zip.ruta.split("/").at(-1) ?? "";
+    if (ZIP_SOLO_COBRANZA.test(nombre) || zip.tamano > ZIP_INTERNO_MAX * 20) continue;
+    let entradas;
+    try {
+      entradas = await leerIndiceZip(await zip.leer());
+    } catch {
+      continue; // ZIP dañado: queda como un archivo más
+    }
+    zips.add(zip.ruta);
+    alAvanzar?.(zips.size);
+    // Dentro de este ZIP, los ZIP que sean parte de una póliza (o del ZIP mismo si ya es una
+    // póliza, con su Carátula) no se abren.
+    const internasDePoliza = carpetasPolizaDe(entradas.map((e) => `${nombre}/${e.ruta}`));
+    for (const e of entradas) {
+      if (esBasuraDeSistema(e.ruta)) continue;
+      const ruta = `${zip.ruta}/${e.ruta}`;
+      const interno: ArchivoFuente = {
+        ruta,
+        tamano: e.tamano,
+        leer: async () => new Blob([await extraerDeZip(await zip.leer(), e)]),
+      };
+      archivos.set(ruta, interno);
+      const dentroDePoliza = estaDentroDe(`${nombre}/${e.ruta}`, internasDePoliza) || internasDePoliza.has(nombre);
+      if (esZip({ name: e.nombre }) && profundidad < PROFUNDIDAD_ZIP && !dentroDePoliza && e.tamano <= ZIP_INTERNO_MAX) {
+        pendientes.push({ archivo: interno, profundidad: profundidad + 1 });
+      }
+    }
+  }
+  return { ...fuente, archivos, zips };
 }
 
 const esDocumento = (nombre: string) => mimePorNombre(nombre) !== "";
@@ -81,8 +140,9 @@ export async function documentosDe(unidad: UnidadPoliza, fuente: Fuente): Promis
   for (const ruta of unidad.archivos) {
     const archivo = fuente.archivos.get(ruta);
     if (!archivo) continue;
-    // Dentro de una carpeta de póliza se muestra la ruta desde ella; un archivo suelto, su nombre.
-    const visible = unidad.tipo === "carpeta" ? ruta.slice(unidad.clave.length + 1) : (ruta.split("/").at(-1) ?? ruta);
+    // Dentro de una carpeta (o ZIP abierto) de póliza se muestra la ruta desde ella; un archivo
+    // suelto, su nombre.
+    const visible = ruta.startsWith(`${unidad.clave}/`) ? ruta.slice(unidad.clave.length + 1) : (ruta.split("/").at(-1) ?? ruta);
     if (esDocumento(ruta)) {
       docs.push({ ruta: visible, tamano: archivo.tamano, ref: ruta, leer: archivo.leer });
     } else if (esZip({ name: ruta }) && archivo.tamano <= ZIP_INTERNO_MAX) {
@@ -110,7 +170,6 @@ export async function leerDocumento(ref: string, fuente: Fuente): Promise<Blob |
 export const comoArchivo = async (blob: Blob, ruta: string) =>
   new File([await blob.arrayBuffer()], ruta.split("/").at(-1) ?? ruta, { type: mimePorNombre(ruta) });
 
-const SISTEMA = /(^|\/)(desktop\.ini|\.ds_store|thumbs\.db)$/i;
 
 /**
  * Expediente de respaldo de la póliza: su ZIP tal cual o, si es una carpeta, un ZIP con todo lo
@@ -126,12 +185,14 @@ export async function expedienteDe(
     omitido: `El expediente pesa ${formatBytes(bytes)} y el máximo es ${formatBytes(maximo)}: súbelo a mano desde la póliza.`,
   });
   const archivos = unidad.archivos
-    .filter((ruta) => !SISTEMA.test(ruta))
+    .filter((ruta) => !esBasuraDeSistema(ruta))
     .flatMap((ruta) => fuente.archivos.get(ruta) ?? []);
   if (archivos.length === 0) return null;
 
   if (unidad.tipo === "zip") {
-    const [zip] = archivos;
+    // El ZIP original tal cual (aunque esté dentro de otro ZIP).
+    const zip = fuente.archivos.get(unidad.clave);
+    if (!zip) return null;
     if (zip.tamano > maximo) return demasiado(zip.tamano);
     return { archivo: new File([await zip.leer()], zip.ruta.split("/").at(-1) ?? "expediente.zip", { type: "application/zip" }) };
   }

@@ -28,7 +28,15 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { agruparPolizas, caratulaDe, type Omitido, type UnidadPoliza } from "@/lib/carga-masiva/agrupar";
 import { terminarCargaMasiva } from "@/lib/carga-masiva/actions";
-import { comoArchivo, expedienteDe, fuenteDeCarpeta, fuenteDeZip, leerDocumento, type Fuente } from "@/lib/carga-masiva/fuente";
+import {
+  comoArchivo,
+  expandirZips,
+  expedienteDe,
+  fuenteDeCarpeta,
+  fuenteDeZip,
+  leerDocumento,
+  type Fuente,
+} from "@/lib/carga-masiva/fuente";
 import { procesarPoliza, SesionVencida, type EstadoPoliza } from "@/lib/carga-masiva/procesar";
 import { ErrorZip } from "@/lib/archivos/zip";
 import { formatNumero } from "@/lib/format";
@@ -104,7 +112,8 @@ export function CargaMasiva({
   const carpetaRef = React.useRef<HTMLInputElement>(null);
   const zipRef = React.useRef<HTMLInputElement>(null);
   const [fuente, setFuente] = React.useState<Fuente | null>(null);
-  const [abriendo, setAbriendo] = React.useState(false);
+  // Mientras se abre lo elegido: cuántos ZIP van abiertos (los que guardan varias pólizas).
+  const [abriendo, setAbriendo] = React.useState<number | null>(null);
   const [unidades, setUnidades] = React.useState<UnidadPoliza[]>([]);
   const [omitidos, setOmitidos] = React.useState<Omitido[]>([]);
   const [estados, setEstados] = React.useState<Record<string, EstadoPoliza>>({});
@@ -140,10 +149,10 @@ export function CargaMasiva({
 
   async function elegir(origen: () => Promise<Fuente>) {
     controlRef.current?.abort();
-    setAbriendo(true);
+    setAbriendo(0);
     try {
-      const nueva = await origen();
-      const agrupado = agruparPolizas([...nueva.archivos.values()]);
+      const nueva = await expandirZips(await origen(), setAbriendo);
+      const agrupado = agruparPolizas([...nueva.archivos.values()], nueva.zips);
       setFuente(nueva);
       setUnidades(agrupado.unidades);
       setOmitidos(agrupado.omitidos);
@@ -152,7 +161,7 @@ export function CargaMasiva({
     } catch (e) {
       toast.error(e instanceof ErrorZip ? e.message : "No se pudo abrir lo que elegiste.");
     } finally {
-      setAbriendo(false);
+      setAbriendo(null);
     }
   }
 
@@ -218,10 +227,10 @@ export function CargaMasiva({
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2">
-            <Button onClick={() => carpetaRef.current?.click()} disabled={corriendo || abriendo}>
-              {abriendo ? <Loader2 className="animate-spin" /> : <FolderOpen />} Elegir carpeta
+            <Button onClick={() => carpetaRef.current?.click()} disabled={corriendo || abriendo !== null}>
+              {abriendo !== null ? <Loader2 className="animate-spin" /> : <FolderOpen />} Elegir carpeta
             </Button>
-            <Button variant="outline" onClick={() => zipRef.current?.click()} disabled={corriendo || abriendo}>
+            <Button variant="outline" onClick={() => zipRef.current?.click()} disabled={corriendo || abriendo !== null}>
               <FolderArchive /> Elegir un ZIP de la carpeta
             </Button>
             <input
@@ -251,7 +260,12 @@ export function CargaMasiva({
               }}
             />
           </div>
-          {fuente && (
+          {abriendo !== null && (
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              Separando las pólizas… {abriendo > 0 && `${formatNumero(abriendo)} ZIP abiertos`}
+            </p>
+          )}
+          {fuente && abriendo === null && (
             <p className="text-sm">
               <span className="font-medium">{fuente.nombre}</span>: {formatNumero(fuente.archivos.size)} archivos ·{" "}
               <span className="font-medium">{formatNumero(unidades.length)} pólizas</span>

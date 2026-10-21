@@ -184,9 +184,14 @@ export function normalizarExtraccion(
     }
   } else if (vigorReferencia) {
     generales.polizaVigor = vigorReferencia;
-    advertencias.push(
-      `Póliza vigor ${vigorReferencia} calculada de la referencia de pago ${referenciaPago}; verifícala.`
-    );
+    // Solo se pide verificarla si no cuadra con el número impreso (o no hay con qué compararla).
+    const sinCeros = (v: string) => v.replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
+    const impreso = generales.numeroImpreso ? sinCeros(generales.numeroImpreso) : "";
+    if (!impreso || !impreso.includes(sinCeros(vigorReferencia))) {
+      advertencias.push(
+        `Póliza vigor ${vigorReferencia} calculada de la referencia de pago ${referenciaPago}; verifícala.`
+      );
+    }
   } else {
     if (generales.numeroImpreso) generales.polizaVigor = extraerPolizaVigor(generales.numeroImpreso);
     if (referenciaPago) {
