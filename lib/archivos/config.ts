@@ -53,6 +53,9 @@ export const ARCHIVOS: Record<TipoArchivo, DefinicionArchivo> = {
     firmas: [
       [0x50, 0x4b, 0x03, 0x04], // PK con archivos
       [0x50, 0x4b, 0x05, 0x06], // PK vacío
+      // Marca de "ZIP de un solo volumen" (PK 07 08) antes del primer archivo: la ponen algunos
+      // compresores, p. ej. el de los expedientes que descargan los portales de las aseguradoras.
+      [0x50, 0x4b, 0x07, 0x08, 0x50, 0x4b, 0x03, 0x04],
     ],
     verEnLinea: false,
   },
@@ -94,6 +97,13 @@ export function formatBytes(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** Bytes del inicio del archivo que hacen falta para revisar su firma. */
+export const BYTES_FIRMA = Math.max(...Object.values(ARCHIVOS).flatMap((d) => d.firmas.map((f) => f.length)));
+
+/** El inicio del archivo coincide con alguna de las firmas de su tipo. */
+export const firmaValida = (tipo: TipoArchivo, inicio: Uint8Array) =>
+  ARCHIVOS[tipo].firmas.some((firma) => firma.every((b, i) => inicio[i] === b));
+
 /**
  * Valida extensión, tamaño y firma del archivo. No se confía en `file.type`,
  * que varía entre sistemas operativos y navegadores.
@@ -108,11 +118,10 @@ export async function validarArchivo(tipo: TipoArchivo, archivo: File): Promise<
 
   let inicio: Uint8Array;
   try {
-    inicio = new Uint8Array(await archivo.slice(0, 4).arrayBuffer());
+    inicio = new Uint8Array(await archivo.slice(0, BYTES_FIRMA).arrayBuffer());
   } catch (e) {
     if (esArchivoIlegible(e)) return `El archivo ${MENSAJE_ARCHIVO_PERDIDO}`;
     throw e;
   }
-  const valido = def.firmas.some((firma) => firma.every((b, i) => inicio[i] === b));
-  return valido ? null : `El archivo no es un ${def.extension.toUpperCase()} válido.`;
+  return firmaValida(tipo, inicio) ? null : `El archivo no es un ${def.extension.toUpperCase()} válido.`;
 }

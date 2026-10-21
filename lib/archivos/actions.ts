@@ -6,8 +6,10 @@ import { getAlmacen } from "@/lib/archivos/almacen";
 import type { SubidaFirmada } from "@/lib/archivos/almacen/tipos";
 import {
   ARCHIVOS,
+  BYTES_FIRMA,
   COLUMNAS_ARCHIVO,
   esTipoArchivo,
+  firmaValida,
   rutaArchivoValida,
   type TipoArchivo,
 } from "@/lib/archivos/config";
@@ -102,9 +104,8 @@ export async function vincularArchivo(
   const info = await almacen.info(path);
   if (!info) return { ok: false, error: "No se encontró el archivo subido." };
 
-  const inicio = await almacen.leerInicio(path, 4);
-  const firmaValida = inicio !== null && def.firmas.some((f) => f.every((b, i) => inicio[i] === b));
-  if (info.bytes <= 0 || info.bytes > def.maxBytes || !firmaValida) {
+  const inicio = await almacen.leerInicio(path, BYTES_FIRMA);
+  if (info.bytes <= 0 || info.bytes > def.maxBytes || inicio === null || !firmaValida(tipo, inicio)) {
     await almacen.eliminar([path]).catch((e) => console.error("[vincularArchivo] limpieza", e));
     return { ok: false, error: `El archivo no es un ${def.extension.toUpperCase()} válido.` };
   }
