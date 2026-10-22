@@ -83,9 +83,26 @@ export async function procesarPoliza(
 ): Promise<EstadoPoliza> {
   try {
     const docs = await documentosDe(unidad, fuente);
-    const elegidos = elegirDocumentos(docs);
-    if (elegidos.length === 0) return { tipo: "sin_documentos" };
-    const archivos = await Promise.all(elegidos.map(async (d) => comoArchivo(await d.leer(), d.ruta)));
+    // Un documento que Windows no deja leer (p. ej. una ruta de más de 260 caracteres) se salta y
+    // se lee el siguiente que sirva.
+    const ilegibles = new Set<string>();
+    let elegidos = elegirDocumentos(docs);
+    let archivos: File[] = [];
+    for (;;) {
+      if (elegidos.length === 0) break;
+      const leidos = await Promise.all(elegidos.map((d) => d.leer().then((b) => comoArchivo(b, d.ruta)).catch(() => null)));
+      if (leidos.every((a) => a !== null)) {
+        archivos = leidos;
+        break;
+      }
+      elegidos.forEach((d, i) => leidos[i] === null && ilegibles.add(d.ref));
+      elegidos = elegirDocumentos(docs.filter((d) => !ilegibles.has(d.ref)));
+    }
+    if (elegidos.length === 0) {
+      return ilegibles.size
+        ? { tipo: "error", mensaje: `Windows no deja leer sus documentos (¿ruta demasiado larga?): ${[...ilegibles].map((r) => r.split("/").at(-1)).join(", ")}.` }
+        : { tipo: "sin_documentos" };
+    }
 
     const datos = await leerConIa(archivos, senal);
     let inicial = aValoresIniciales(datos, aseguradoras);
@@ -149,6 +166,11 @@ export async function procesarPoliza(
     const caratula = caratulaDe(elegidos);
     const expediente = await expedienteDe(unidad, fuente);
     if (expediente && "omitido" in expediente) avisos.push(expediente.omitido);
+    if (expediente && "archivo" in expediente && expediente.ilegibles.length > 0) {
+      avisos.push(
+        `El expediente no incluye ${expediente.ilegibles.length} ${expediente.ilegibles.length === 1 ? "archivo" : "archivos"} que Windows no deja leer (ruta demasiado larga): ${expediente.ilegibles.slice(0, 3).join(", ")}${expediente.ilegibles.length > 3 ? "…" : ""}.`
+      );
+    }
     const subir = {
       caratula: caratula ? archivos[elegidos.indexOf(caratula)] : null,
       negociacion,

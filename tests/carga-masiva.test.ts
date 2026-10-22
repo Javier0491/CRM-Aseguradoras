@@ -196,6 +196,22 @@ describe("carga masiva: expediente y formato de negociación", () => {
     ]);
   });
 
+  it("un archivo que Windows no deja leer se deja fuera del expediente y se avisa", async () => {
+    const larga = "CRM/x/24-25 02001M0064834 LAW INNOVATION/Factura/FACT_ruta_muy_larga_C.pdf";
+    const conIlegible: Fuente = {
+      ...fuente,
+      archivos: new Map([
+        ...fuente.archivos,
+        [larga, { ruta: larga, tamano: 10, leer: async () => Promise.reject(new DOMException("", "NotFoundError")) }],
+      ]),
+    };
+    const unidad = agruparPolizas([...conIlegible.archivos.values()]).unidades.find((u) => u.nombre.startsWith("24-25"))!;
+    const r = await expedienteDe(unidad, conIlegible);
+    assert.ok(r && "archivo" in r);
+    assert.deepEqual(r.ilegibles, ["FACT_ruta_muy_larga_C.pdf"]);
+    assert.equal((await leerIndiceZip(r.archivo)).length, 2);
+  });
+
   it("un ZIP del portal se sube tal cual y un PDF suelto no lleva expediente", async () => {
     const zip = await expedienteDe(por("0000225513"), fuente);
     assert.ok(zip && "archivo" in zip && zip.archivo.name === "0000225513.zip");

@@ -57,7 +57,7 @@ export async function fuenteDeZip(zip: File): Promise<Fuente> {
 }
 
 /** Hasta qué profundidad se abren ZIP dentro de ZIP para buscar pólizas. */
-const PROFUNDIDAD_ZIP = 3;
+const PROFUNDIDAD_ZIP = 6;
 
 /**
  * Abre los ZIP que no están dentro de una póliza (los de un portal, o uno que guarda las pólizas
@@ -65,7 +65,11 @@ const PROFUNDIDAD_ZIP = 3;
  * la agrupación los separe. Los ZIP de una póliza (su factura, sus recibos) no se abren aquí: se
  * leen al procesarla. El contenido se vuelve a extraer cuando se usa; no se guarda en memoria.
  */
-export async function expandirZips(fuente: Fuente, alAvanzar?: (abiertos: number) => void): Promise<Fuente> {
+export async function expandirZips(
+  fuente: Fuente,
+  alAvanzar?: (abiertos: number) => void,
+  profundidadMaxima = PROFUNDIDAD_ZIP
+): Promise<Fuente> {
   const archivos = new Map(fuente.archivos);
   const zips = new Set<string>();
   const dePoliza = carpetasPolizaDe(archivos.keys());
@@ -98,7 +102,7 @@ export async function expandirZips(fuente: Fuente, alAvanzar?: (abiertos: number
       };
       archivos.set(ruta, interno);
       const dentroDePoliza = estaDentroDe(`${nombre}/${e.ruta}`, internasDePoliza) || internasDePoliza.has(nombre);
-      if (esZip({ name: e.nombre }) && profundidad < PROFUNDIDAD_ZIP && !dentroDePoliza && e.tamano <= ZIP_INTERNO_MAX) {
+      if (esZip({ name: e.nombre }) && profundidad < profundidadMaxima && !dentroDePoliza && e.tamano <= ZIP_INTERNO_MAX) {
         pendientes.push({ archivo: interno, profundidad: profundidad + 1 });
       }
     }
@@ -179,7 +183,7 @@ export const comoArchivo = async (blob: Blob, ruta: string) =>
 export async function expedienteDe(
   unidad: UnidadPoliza,
   fuente: Fuente
-): Promise<{ archivo: File } | { omitido: string } | null> {
+): Promise<{ archivo: File; ilegibles: string[] } | { omitido: string } | null> {
   const maximo = ARCHIVOS.expediente.maxBytes;
   const demasiado = (bytes: number) => ({
     omitido: `El expediente pesa ${formatBytes(bytes)} y el máximo es ${formatBytes(maximo)}: súbelo a mano desde la póliza.`,
@@ -194,7 +198,10 @@ export async function expedienteDe(
     const zip = fuente.archivos.get(unidad.clave);
     if (!zip) return null;
     if (zip.tamano > maximo) return demasiado(zip.tamano);
-    return { archivo: new File([await zip.leer()], zip.ruta.split("/").at(-1) ?? "expediente.zip", { type: "application/zip" }) };
+    return {
+      archivo: new File([await zip.leer()], zip.ruta.split("/").at(-1) ?? "expediente.zip", { type: "application/zip" }),
+      ilegibles: [],
+    };
   }
   if (unidad.tipo === "pdf" && archivos.length === 1) return null;
 
@@ -202,15 +209,24 @@ export async function expedienteDe(
   if (total > maximo) return demasiado(total);
   // Dentro del ZIP las rutas empiezan en la carpeta de la póliza (o en el nombre del PDF suelto).
   const corte = unidad.tipo === "carpeta" ? unidad.clave.lastIndexOf("/") + 1 : null;
-  const zip = await crearZip(
-    await Promise.all(
-      archivos.map(async (a) => ({
-        ruta: corte === null ? (a.ruta.split("/").at(-1) ?? a.ruta) : a.ruta.slice(corte),
-        contenido: await a.leer(),
-      }))
-    )
+  // Un archivo que Windows no deja leer (p. ej. con una ruta de más de 260 caracteres) se deja
+  // fuera del expediente en lugar de perderlo todo.
+  const ilegibles: string[] = [];
+  const leidos = await Promise.all(
+    archivos.map(async (a) => {
+      try {
+        return {
+          ruta: corte === null ? (a.ruta.split("/").at(-1) ?? a.ruta) : a.ruta.slice(corte),
+          contenido: new Blob([await (await a.leer()).arrayBuffer()]),
+        };
+      } catch {
+        ilegibles.push(a.ruta.split("/").at(-1) ?? a.ruta);
+        return null;
+      }
+    })
   );
+  const zip = await crearZip(leidos.filter((l) => l !== null));
   if (zip.size > maximo) return demasiado(zip.size);
   const nombre = unidad.nombre.replace(/[\\/:*?"<>|]+/g, " ").trim() || "expediente";
-  return { archivo: new File([zip], `${nombre}.zip`, { type: "application/zip" }) };
+  return { archivo: new File([zip], `${nombre}.zip`, { type: "application/zip" }), ilegibles };
 }
