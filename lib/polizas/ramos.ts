@@ -154,6 +154,12 @@ const RED_MEDICA: CampoDef = {
   hint: "Según la aseguradora; ej. \"Red Médica: Ejecutivo\" → Ejecutivo.",
 };
 
+/**
+ * Coberturas de GMM que se contestan con Sí o No. Si los documentos no las mencionan, la póliza no
+ * las tiene: se llenan con "No" en lugar de quedar vacías.
+ */
+export const COBERTURAS_SI_NO_GMM = ["maternidad", "emergenciaExtranjero", "correccionVista"] as const;
+
 // Comunes a GMM Individual y Colectivo.
 const COBERTURAS_GMM: CampoDef[] = [
   { name: "maternidad", label: "Cobertura de maternidad", type: "select", options: ["Sí", "No"] },

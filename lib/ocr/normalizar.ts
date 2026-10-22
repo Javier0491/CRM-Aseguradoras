@@ -5,6 +5,7 @@ import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 import {
   camposGenerales,
   camposSumaAsegurada,
+  COBERTURAS_SI_NO_GMM,
   maxLongitud,
   RAMOS,
   RAMOS_CON_CENSO,
@@ -207,6 +208,10 @@ export function normalizarExtraccion(
     : {};
 
   if (!ramo) advertencias.push("No se pudo determinar el ramo; selecciónalo manualmente.");
+  // Una cobertura de GMM que no aparece en los documentos no está contratada.
+  if (ramo === "gmm_individual" || ramo === "gmm_colectivo") {
+    for (const cobertura of COBERTURAS_SI_NO_GMM) especificos[cobertura] ||= "No";
+  }
 
   // "Sin límite" solo aplica a ramos con suma asegurada; entonces la cantidad se descarta
   // aunque la IA haya puesto alguna, para que el formulario no muestre un número inventado.

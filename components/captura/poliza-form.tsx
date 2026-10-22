@@ -87,6 +87,7 @@ import { redesDeAseguradora } from "@/lib/polizas/redes-medicas";
 import {
   camposGenerales,
   camposSumaAsegurada,
+  COBERTURAS_SI_NO_GMM,
   normalizarOpcion,
   RAMOS,
   RAMOS_CON_CENSO,
@@ -146,6 +147,8 @@ const SUBIENDO: Record<TipoArchivo, string> = {
 
 /** Campos del complemento que reemplazan lo capturado en lugar de solo llenar vacíos. */
 const CAMPOS_DEL_COMPLEMENTO = new Set(["condicionesSubgrupo"]);
+/** Coberturas que la carátula deja en "No" cuando no las menciona: un "Sí" del complemento manda. */
+const COBERTURAS_SI_GANA = new Set<string>(COBERTURAS_SI_NO_GMM);
 
 /**
  * Complementa una captura con lo leído de un segundo documento (formato de negociación u orden de
@@ -168,7 +171,8 @@ export function combinarComplemento(base: PolizaFormInicial, extra: PolizaFormIn
   if (ilimitada) for (const nombre of camposSuma) especificos[nombre] = "";
   for (const [nombre, valor] of Object.entries(extra.especificos ?? {})) {
     if (ilimitada && camposSuma.has(nombre)) continue;
-    if (valor && (!especificos[nombre]?.trim() || CAMPOS_DEL_COMPLEMENTO.has(nombre))) especificos[nombre] = valor;
+    const reemplaza = CAMPOS_DEL_COMPLEMENTO.has(nombre) || (COBERTURAS_SI_GANA.has(nombre) && valor === "Sí");
+    if (valor && (!especificos[nombre]?.trim() || reemplaza)) especificos[nombre] = valor;
   }
   return { ...base, ramo, generales, especificos, sumaAseguradaIlimitada: ilimitada };
 }
