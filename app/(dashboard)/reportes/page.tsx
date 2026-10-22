@@ -9,11 +9,13 @@ import {
   FileText,
   Landmark,
   PieChart,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
 
 import { PeriodoSelector } from "@/components/dashboard/periodo-selector";
+import { CrecimientoChart } from "@/components/reportes/crecimiento-chart";
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { TarjetaResumen, type TonoResumen } from "@/components/layout/tarjeta-resumen";
 import {
@@ -159,6 +161,7 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
     porVencer,
     totalPorVencer,
     primaPorVencer,
+    crecimiento,
   } = await getReportes(periodo);
   const fechaHoy = new Date(`${hoy}T00:00:00Z`);
   const nombrePeriodo = {
@@ -245,6 +248,26 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
         Prima emitida: prima total de las pólizas cuya vigencia inicia en el periodo. El CSV exportado contiene esas
         mismas pólizas.
       </p>
+
+      <Card id="crecimiento" className="animate-entrar scroll-mt-20 gap-4" style={{ animationDelay: "200ms" }}>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <TrendingUp className="size-4 text-primary" /> Crecimiento por año
+          </CardTitle>
+          <CardDescription>
+            Prima emitida por año de inicio de vigencia, de toda la cartera (no depende del periodo).
+            {crecimiento.at(-1)?.enCurso &&
+              ` * ${crecimiento.at(-1)?.anio} cuenta hasta hoy y su crecimiento se compara con el mismo periodo del año pasado.`}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {crecimiento.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Todavía no hay pólizas emitidas.</p>
+          ) : (
+            <CrecimientoChart datos={crecimiento} />
+          )}
+        </CardContent>
+      </Card>
 
       <div id="distribucion" className="grid scroll-mt-20 items-start gap-6 lg:grid-cols-2">
         <DistribucionCard

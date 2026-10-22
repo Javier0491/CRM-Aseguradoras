@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { NO_CANCELADA } from "@/lib/polizas/queries";
+import { crecimientoAnual } from "@/lib/reportes/crecimiento";
 import { rangoReporte, type PeriodoReporte } from "@/lib/reportes/periodos";
 
 /** Días hacia adelante que cubre la lista de pólizas por vencer. */
@@ -36,7 +37,7 @@ export async function getReportes(periodo: PeriodoReporte) {
   const emitidas = whereEmision(alcance, rango);
   const porVencerWhere: Prisma.PolizaWhereInput = { ...polizasDe(alcance), ...NO_CANCELADA, vigencia_fin: { gte: hoy, lte: limite } };
 
-  const [emision, porRamo, porAseguradora, aseguradoras, porVencer, resumenPorVencer, porEjecutivo] = await Promise.all([
+  const [emision, porRamo, porAseguradora, aseguradoras, porVencer, resumenPorVencer, porEjecutivo, iniciosHistoricos] = await Promise.all([
     db.poliza.aggregate({
       where: emitidas,
       _sum: { prima_total: true },
@@ -78,6 +79,11 @@ export async function getReportes(periodo: PeriodoReporte) {
     }),
     // De toda la agencia: no la ve un ejecutivo que solo ve su cartera.
     alcance.ejecutivoId ? Promise.resolve(null) : produccionPorEjecutivo(agenciaId, rango ?? { desde: new Date(0), hasta: hoy }),
+    // Crecimiento por año: toda la cartera visible, no depende del periodo.
+    db.poliza.findMany({
+      where: { ...polizasDe(alcance), vigencia_inicio: { lte: hoy } },
+      select: { vigencia_inicio: true, prima_total: true },
+    }),
   ]);
 
   const distribucion = porRamo
@@ -109,6 +115,10 @@ export async function getReportes(periodo: PeriodoReporte) {
     porVencer: porVencer.map((p) => ({ ...p, prima_total: Number(p.prima_total) })),
     totalPorVencer: resumenPorVencer._count._all,
     primaPorVencer: Number(resumenPorVencer._sum.prima_total ?? 0),
+    crecimiento: crecimientoAnual(
+      iniciosHistoricos.map((p) => ({ inicio: p.vigencia_inicio, prima: Number(p.prima_total) })),
+      hoyIso
+    ),
   };
 }
 
