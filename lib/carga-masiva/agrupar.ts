@@ -32,6 +32,9 @@ export type UnidadPoliza = {
 
 export type Omitido = { ruta: string; motivo: string };
 
+/** Una ubicación que no se lee porque es la misma póliza que otra (la que sí se lee). */
+export type Repetida = { unidad: UnidadPoliza; original: string; motivo: string };
+
 const sinAcentos = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "");
 const extension = (ruta: string) => ruta.slice(ruta.lastIndexOf(".") + 1).toLowerCase();
 const DOCUMENTO = new Set(["pdf", "png", "jpg", "jpeg", "webp"]);
@@ -100,8 +103,10 @@ export function coincideNumero(numeroNombre: string, leidos: string[]): boolean 
  */
 export function agruparPolizas(
   archivos: ArchivoRuta[],
-  zips: ReadonlySet<string> = new Set()
-): { unidades: UnidadPoliza[]; omitidos: Omitido[] } {
+  zips: ReadonlySet<string> = new Set(),
+  /** Copias que el usuario pidió leer aparte: no se juntan con su original. */
+  separadas: ReadonlySet<string> = new Set()
+): { unidades: UnidadPoliza[]; omitidos: Omitido[]; repetidas: Repetida[] } {
   // Un ZIP abierto ya no cuenta como archivo: cuenta su contenido.
   const partes = archivos
     .filter((a) => !zips.has(a.ruta) && !esBasuraDeSistema(a.ruta))
@@ -208,21 +213,47 @@ export function agruparPolizas(
 
   // La misma póliza guardada en varias carpetas (p. ej. "enviado" y "CRM 27 03 2024"): se procesa
   // la copia con más archivos. Dos carpetas de la misma vigencia y número son la misma póliza
-  // aunque el número venga con ceros ("23-24 679535 …" y "23-24 0000679535 …").
+  // aunque el número venga con ceros ("23-24 679535 …" y "23-24 0000679535 …"). Sin vigencia en el
+  // nombre, solo es copia si además tiene los mismos archivos: "0000420721.zip" de 2023 y el de la
+  // renovación de 2026 se llaman igual pero son vigencias distintas.
+  const tamanos = new Map(partes.map((p) => [p.ruta, p.tamano]));
+  const huella = (u: UnidadPoliza) => {
+    const base = u.tipo === "pdf" ? u.clave.slice(0, u.clave.lastIndexOf("/") + 1) : `${u.clave}/`;
+    return u.archivos
+      .map((ruta) => `${ruta.startsWith(base) ? ruta.slice(base.length) : ""}:${tamanos.get(ruta) ?? 0}`)
+      .sort()
+      .join("|");
+  };
   const porNombre = new Map<string, UnidadPoliza>();
+  const repetidas: Repetida[] = [];
   for (const u of unidades.sort((a, b) => b.archivos.length - a.archivos.length || a.clave.localeCompare(b.clave))) {
     const vigencia = u.tipo !== "pdf" ? /^(\d{2})\s*-\s*(\d{2})/.exec(u.nombre) : null;
-    const clave =
-      vigencia && u.numero
+    const clave = separadas.has(u.clave)
+      ? `separada|${u.clave}`
+      : vigencia && u.numero
         ? `vigencia|${vigencia[1]}-${vigencia[2]}|${u.numero}`
-        : `${u.tipo}|${sinAcentos(u.nombre).toUpperCase().replace(/\s+/g, " ").trim()}`;
+        : `${u.tipo}|${sinAcentos(u.nombre).toUpperCase().replace(/\s+/g, " ").trim()}|${huella(u)}`;
     const original = porNombre.get(clave);
-    if (original) original.copias.push(u.clave);
-    else porNombre.set(clave, u);
+    if (original) {
+      original.copias.push(u.clave);
+      repetidas.push({
+        unidad: u,
+        original: original.clave,
+        motivo:
+          vigencia && u.numero
+            ? `Misma vigencia ${vigencia[1]}-${vigencia[2]} y número ${u.numero}`
+            : u.tipo === "pdf"
+              ? "Mismo archivo (nombre y tamaño)"
+              : u.tipo === "zip"
+                ? "Mismo ZIP con los mismos archivos"
+                : "Misma carpeta con los mismos archivos",
+      });
+    } else porNombre.set(clave, u);
   }
   return {
     unidades: [...porNombre.values()].sort((a, b) => a.clave.localeCompare(b.clave, "es")),
     omitidos,
+    repetidas: repetidas.sort((a, b) => a.unidad.clave.localeCompare(b.unidad.clave, "es")),
   };
 }
 

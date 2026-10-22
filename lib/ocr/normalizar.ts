@@ -184,18 +184,14 @@ export function normalizarExtraccion(
       advertencias.push('No se encontró el "Folio interno" en el recibo de SURA; captúralo a mano.');
     }
   } else if (vigorReferencia) {
+    // Regla fija de la referencia (no una lectura dudosa): no se pide verificarla. En GNP la
+    // póliza vigor casi nunca es el número impreso ("0000619607" ↔ "1132516").
     generales.polizaVigor = vigorReferencia;
-    // Solo se pide verificarla si no cuadra con el número impreso (o no hay con qué compararla).
-    const sinCeros = (v: string) => v.replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
-    const impreso = generales.numeroImpreso ? sinCeros(generales.numeroImpreso) : "";
-    if (!impreso || !impreso.includes(sinCeros(vigorReferencia))) {
-      advertencias.push(
-        `Póliza vigor ${vigorReferencia} calculada de la referencia de pago ${referenciaPago}; verifícala.`
-      );
-    }
   } else {
     if (generales.numeroImpreso) generales.polizaVigor = extraerPolizaVigor(generales.numeroImpreso);
-    if (referenciaPago) {
+    // Una referencia con otro formato (GNP Autos, Vida, HDI…) no importa si la póliza vigor ya
+    // salió del número impreso; solo se avisa cuando no hay de dónde sacarla.
+    else if (referenciaPago) {
       advertencias.push(
         `La referencia de pago ${referenciaPago} no tiene el formato esperado (letra "I" seguida de ` +
           "dígitos); la póliza vigor no se calculó con ella."

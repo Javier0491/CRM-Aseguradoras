@@ -62,6 +62,40 @@ describe("carga masiva: pólizas de una carpeta", () => {
   });
 });
 
+describe("carga masiva: copias repetidas", () => {
+  const lista = [
+    // Mismo ZIP en dos carpetas, con el mismo contenido: es una copia.
+    archivo("CRM/AGREGADO/AGREGAR MONICA/0008408903.zip", 1_200_000),
+    archivo("CRM/RESPALDO/AGREGAR MONICA/0008408903.zip", 1_200_000),
+    // Mismo nombre, distinto contenido: la de 2023 y la renovación de 2026 se leen las dos.
+    archivo("CRM/ACTUALIZAR NALLELY/0000420721.zip", 900_000),
+    archivo("CRM/Renovaciones marzo 2026/0000420721.zip", 1_400_000),
+    // Misma vigencia y número aunque cambie el contenido: es la misma póliza.
+    archivo("CRM/enviado/24-25 619607 HECTOR/Caratula/0000619607_Caratula.pdf"),
+    archivo("CRM/CRM 27 03 2024/24-25 0000619607 HECTOR/Caratula/0000619607_Caratula.pdf"),
+    archivo("CRM/CRM 27 03 2024/24-25 0000619607 HECTOR/Recibos/recibo.pdf"),
+  ];
+
+  it("dice cuál se lee en su lugar y por qué", () => {
+    const { unidades, repetidas } = agruparPolizas(lista);
+    assert.equal(unidades.length, 4);
+    assert.equal(unidades.filter((u) => u.nombre === "0000420721").length, 2);
+    assert.deepEqual(
+      repetidas.map((r) => [r.unidad.clave, r.original, r.motivo]),
+      [
+        ["CRM/enviado/24-25 619607 HECTOR", "CRM/CRM 27 03 2024/24-25 0000619607 HECTOR", "Misma vigencia 24-25 y número 619607"],
+        ["CRM/RESPALDO/AGREGAR MONICA/0008408903.zip", "CRM/AGREGADO/AGREGAR MONICA/0008408903.zip", "Mismo ZIP con los mismos archivos"],
+      ]
+    );
+  });
+
+  it("una copia que se manda a leer aparte ya no se junta con su original", () => {
+    const { unidades, repetidas } = agruparPolizas(lista, new Set(), new Set(["CRM/enviado/24-25 619607 HECTOR"]));
+    assert.equal(unidades.length, 5);
+    assert.equal(repetidas.length, 1);
+  });
+});
+
 describe("carga masiva: ZIP con varias pólizas adentro", () => {
   // "06 10 2023.zip" guarda las pólizas de tres meses, cada una en su propio ZIP o carpeta.
   const zip = "CRM/AGREGADO/06 10 2023.zip";

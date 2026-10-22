@@ -20,13 +20,14 @@ import {
 import { toast } from "sonner";
 
 import { ContactosPendientes } from "@/components/captura/contactos-pendientes";
+import { NoSeLeen } from "@/components/captura/no-se-leen";
 import { PolizaForm } from "@/components/captura/poliza-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { agruparPolizas, caratulaDe, type Omitido, type UnidadPoliza } from "@/lib/carga-masiva/agrupar";
+import { agruparPolizas, caratulaDe, type UnidadPoliza } from "@/lib/carga-masiva/agrupar";
 import { terminarCargaMasiva } from "@/lib/carga-masiva/actions";
 import {
   comoArchivo,
@@ -37,7 +38,14 @@ import {
   leerDocumento,
   type Fuente,
 } from "@/lib/carga-masiva/fuente";
-import { procesarPoliza, SesionVencida, type EstadoPoliza } from "@/lib/carga-masiva/procesar";
+import {
+  guardarSinLeer,
+  motivosVigentes,
+  procesarPoliza,
+  seGuardaSinLeer,
+  SesionVencida,
+  type EstadoPoliza,
+} from "@/lib/carga-masiva/procesar";
 import { ErrorZip } from "@/lib/archivos/zip";
 import { formatNumero } from "@/lib/format";
 import type { Opcion } from "@/lib/polizas/ramos";
@@ -65,10 +73,18 @@ const FILTROS: { valor: Filtro; etiqueta: string; tono: string }[] = [
 
 /** Estados que ya no se vuelven a leer al continuar la carga. */
 const TERMINADOS = new Set<Tipo>(["guardada", "revisar", "ya_existia", "sin_documentos", "descartada"]);
+/** Una póliza por revisar solo por avisos que ya no aplican vuelve a la cola: se guarda sin leerla. */
+const terminada = (e: EstadoPoliza) => TERMINADOS.has(e.tipo) && !seGuardaSinLeer(e);
 
 const enFiltro = (e: EstadoPoliza, f: Filtro) =>
   f === "todas" ||
-  (f === "pendiente" ? e.tipo === "pendiente" || e.tipo === "leyendo" : f === "rfc_generico" ? e.tipo === "revisar" && e.rfcGenerico : e.tipo === f);
+  (f === "pendiente"
+    ? e.tipo === "pendiente" || e.tipo === "leyendo" || seGuardaSinLeer(e)
+    : f === "revisar"
+      ? e.tipo === "revisar" && !seGuardaSinLeer(e)
+      : f === "rfc_generico"
+        ? e.tipo === "revisar" && e.rfcGenerico
+        : e.tipo === f);
 
 // El avance se recuerda en este navegador: si se cierra la pestaña, al volver a elegir la carpeta
 // sigue donde se quedó. Puede no estar disponible (modo privado): entonces solo dura la sesión.
@@ -79,6 +95,23 @@ function leerAvance(usuarioId: string): Record<string, EstadoPoliza> {
     return crudo ? (JSON.parse(crudo) as Record<string, EstadoPoliza>) : {};
   } catch {
     return {};
+  }
+}
+// Copias que el usuario mandó a leer aparte (porque en realidad son otra póliza).
+const claveSeparadas = (usuarioId: string) => `zensecure:carga-masiva:${usuarioId}:separadas`;
+function leerSeparadas(usuarioId: string): Set<string> {
+  try {
+    const crudo = window.localStorage.getItem(claveSeparadas(usuarioId));
+    return new Set(crudo ? (JSON.parse(crudo) as string[]) : []);
+  } catch {
+    return new Set();
+  }
+}
+function guardarSeparadas(usuarioId: string, separadas: Set<string>) {
+  try {
+    window.localStorage.setItem(claveSeparadas(usuarioId), JSON.stringify([...separadas]));
+  } catch {
+    // Sin almacenamiento disponible: solo dura mientras la página esté abierta.
   }
 }
 function guardarAvance(usuarioId: string, estados: Record<string, EstadoPoliza>) {
@@ -114,8 +147,7 @@ export function CargaMasiva({
   const [fuente, setFuente] = React.useState<Fuente | null>(null);
   // Mientras se abre lo elegido: cuántos ZIP van abiertos (los que guardan varias pólizas).
   const [abriendo, setAbriendo] = React.useState<number | null>(null);
-  const [unidades, setUnidades] = React.useState<UnidadPoliza[]>([]);
-  const [omitidos, setOmitidos] = React.useState<Omitido[]>([]);
+  const [separadas, setSeparadas] = React.useState<Set<string>>(new Set());
   const [estados, setEstados] = React.useState<Record<string, EstadoPoliza>>({});
   const estadosRef = React.useRef(estados);
   const [corriendo, setCorriendo] = React.useState(false);
@@ -131,7 +163,23 @@ export function CargaMasiva({
     estadosRef.current = previo;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage solo existe en el navegador
     setEstados(previo);
+    setSeparadas(leerSeparadas(usuarioId));
   }, [usuarioId]);
+
+  const agrupado = React.useMemo(
+    () => (fuente ? agruparPolizas([...fuente.archivos.values()], fuente.zips, separadas) : null),
+    [fuente, separadas]
+  );
+  const unidades = React.useMemo(() => agrupado?.unidades ?? [], [agrupado]);
+  const omitidos = agrupado?.omitidos ?? [];
+  const repetidas = agrupado?.repetidas ?? [];
+
+  function leerAparte(clave: string) {
+    const nuevas = new Set(separadas).add(clave);
+    setSeparadas(nuevas);
+    guardarSeparadas(usuarioId, nuevas);
+    toast.success("Se leerá aparte: aparece en Pendientes.");
+  }
 
   // Cerrar la pestaña detiene la carga: se pide confirmación mientras corre.
   React.useEffect(() => {
@@ -152,12 +200,11 @@ export function CargaMasiva({
     setAbriendo(0);
     try {
       const nueva = await expandirZips(await origen(), setAbriendo);
-      const agrupado = agruparPolizas([...nueva.archivos.values()], nueva.zips);
       setFuente(nueva);
-      setUnidades(agrupado.unidades);
-      setOmitidos(agrupado.omitidos);
       setPagina(1);
-      if (agrupado.unidades.length === 0) toast.error("No se encontraron pólizas en lo que elegiste.");
+      if (agruparPolizas([...nueva.archivos.values()], nueva.zips).unidades.length === 0) {
+        toast.error("No se encontraron pólizas en lo que elegiste.");
+      }
     } catch (e) {
       toast.error(e instanceof ErrorZip ? e.message : "No se pudo abrir lo que elegiste.");
     } finally {
@@ -170,22 +217,28 @@ export function CargaMasiva({
     const control = new AbortController();
     controlRef.current = control;
     setCorriendo(true);
-    const cola = unidades.filter((u) => !TERMINADOS.has(estadosRef.current[u.clave]?.tipo ?? "pendiente"));
+    const cola = unidades.filter((u) => !terminada(estadosRef.current[u.clave] ?? { tipo: "pendiente" }));
     let siguiente = 0;
     let sesionVencida = false;
     const trabajador = async () => {
       while (!control.signal.aborted && siguiente < cola.length) {
         const unidad = cola[siguiente++];
+        const previo = estadosRef.current[unidad.clave];
+        const opciones = {
+          aseguradoras,
+          ejecutivoId: ejecutivos ? (ejecutivoId === SIN_EJECUTIVO ? "" : ejecutivoId) : undefined,
+          senal: control.signal,
+        };
         actualizar(unidad.clave, { tipo: "leyendo" });
         try {
-          const estado = await procesarPoliza(unidad, fuente, {
-            aseguradoras,
-            ejecutivoId: ejecutivos ? (ejecutivoId === SIN_EJECUTIVO ? "" : ejecutivoId) : undefined,
-            senal: control.signal,
-          });
+          const estado =
+            previo && seGuardaSinLeer(previo)
+              ? await guardarSinLeer(unidad, fuente, previo, opciones)
+              : await procesarPoliza(unidad, fuente, opciones);
           actualizar(unidad.clave, estado);
         } catch (e) {
-          actualizar(unidad.clave, { tipo: "pendiente" });
+          // Si se interrumpe, lo ya leído no se pierde.
+          actualizar(unidad.clave, previo && seGuardaSinLeer(previo) ? previo : { tipo: "pendiente" });
           if (e instanceof SesionVencida) {
             sesionVencida = true;
             control.abort();
@@ -207,9 +260,8 @@ export function CargaMasiva({
 
   const conEstado = unidades.map((u) => ({ unidad: u, estado: estados[u.clave] ?? ({ tipo: "pendiente" } as EstadoPoliza) }));
   const cuenta = (f: Filtro) => conEstado.filter((x) => enFiltro(x.estado, f)).length;
-  const terminadas = conEstado.filter((x) => TERMINADOS.has(x.estado.tipo)).length;
+  const terminadas = conEstado.filter((x) => terminada(x.estado)).length;
   const visibles = conEstado.filter((x) => enFiltro(x.estado, filtro));
-  const copias = unidades.reduce((s, u) => s + u.copias.length, 0);
   const clientesGuardados = [
     ...new Set(conEstado.flatMap((x) => (x.estado.tipo === "guardada" ? [x.estado.clienteId] : []))),
   ];
@@ -269,9 +321,18 @@ export function CargaMasiva({
             <p className="text-sm">
               <span className="font-medium">{fuente.nombre}</span>: {formatNumero(fuente.archivos.size)} archivos ·{" "}
               <span className="font-medium">{formatNumero(unidades.length)} pólizas</span>
-              {copias > 0 && ` · ${formatNumero(copias)} ${copias === 1 ? "copia repetida que no se lee" : "copias repetidas que no se leen"}`}
+              {repetidas.length > 0 &&
+                ` · ${formatNumero(repetidas.length)} ${repetidas.length === 1 ? "copia repetida que no se lee" : "copias repetidas que no se leen"}`}
               {omitidos.length > 0 &&
                 ` · ${formatNumero(omitidos.length)} ${omitidos.length === 1 ? "archivo que no es póliza" : "archivos que no son pólizas"}`}
+              {(repetidas.length > 0 || omitidos.length > 0) && (
+                <>
+                  {" · "}
+                  <a href="#lo-que-no-se-lee" className="text-primary underline-offset-4 hover:underline">
+                    Verificar lo que no se lee
+                  </a>
+                </>
+              )}
             </p>
           )}
           {!fuente && Object.keys(estados).length > 0 && (
@@ -393,6 +454,18 @@ export function CargaMasiva({
 
       {clientesGuardados.length > 0 && <ContactosPendientes clienteIds={clientesGuardados} actualizando={corriendo} />}
 
+      {fuente && abriendo === null && (repetidas.length > 0 || omitidos.length > 0) && (
+        <NoSeLeen
+          nombre={fuente.nombre}
+          repetidas={repetidas}
+          omitidos={omitidos}
+          unidades={unidades}
+          tamanoDe={(ruta) => fuente.archivos.get(ruta)?.tamano ?? 0}
+          ocupado={corriendo}
+          onLeerAparte={leerAparte}
+        />
+      )}
+
       <RevisarPoliza
         unidad={revisando}
         estado={revisando ? estados[revisando.clave] : undefined}
@@ -437,7 +510,9 @@ function FilaPoliza({
   const contratante = "rfc" in estado ? estado : null;
   return (
     <li className="flex items-start gap-3 px-3 py-2.5">
-      <span className="flex size-5 shrink-0 items-center justify-center pt-0.5">{ICONOS[estado.tipo]}</span>
+      <span className="flex size-5 shrink-0 items-center justify-center pt-0.5">
+        {ICONOS[seGuardaSinLeer(estado) ? "pendiente" : estado.tipo]}
+      </span>
       <div className="min-w-0 flex-1 space-y-0.5">
         <p className="text-sm font-medium [overflow-wrap:anywhere]">{unidad.nombre}</p>
         {contratante && (
@@ -449,9 +524,12 @@ function FilaPoliza({
             {contratante.numero && ` · Póliza ${contratante.numero}`}
           </p>
         )}
+        {seGuardaSinLeer(estado) && (
+          <p className="text-xs text-muted-foreground">Ya está leída: al continuar la carga se guarda sin volver a leerla.</p>
+        )}
         {estado.tipo === "revisar" && (
           <ul className="list-disc space-y-0.5 pl-4 text-xs text-warning">
-            {estado.motivos.map((m, i) => (
+            {motivosVigentes(estado.motivos).map((m, i) => (
               <li key={i}>{m}</li>
             ))}
           </ul>
@@ -584,9 +662,9 @@ function RevisarPoliza({
             {archivos?.expediente && " y el expediente (ZIP con todo lo de la póliza)"} se suben con ella.
           </DialogDescription>
         </DialogHeader>
-        {revision && (
+        {revision && motivosVigentes(revision.motivos).length > 0 && (
           <ul className="list-disc space-y-1 rounded-md border border-warning/30 bg-warning/10 py-2.5 pr-3 pl-7 text-xs text-warning">
-            {revision.motivos.map((m, i) => (
+            {motivosVigentes(revision.motivos).map((m, i) => (
               <li key={i}>{m}</li>
             ))}
           </ul>

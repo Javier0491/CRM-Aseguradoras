@@ -9,11 +9,11 @@ import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memor
 import { subirArchivo } from "@/lib/archivos/subir";
 import { caratulaDe, coincideNumero, elegirDocumentos, negociacionDe, type UnidadPoliza } from "@/lib/carga-masiva/agrupar";
 import { guardarPolizaMasiva } from "@/lib/carga-masiva/actions";
-import { comoArchivo, documentosDe, expedienteDe, type Fuente } from "@/lib/carga-masiva/fuente";
+import { comoArchivo, documentosDe, expedienteDe, leerDocumento, type Fuente } from "@/lib/carga-masiva/fuente";
 import { RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { rfcDeNombres } from "@/lib/ocr/rfc-de-archivo";
 import type { ContextoOcr, ExtraccionPoliza, OcrRespuesta } from "@/lib/ocr/types";
-import { camposGenerales, seccionesPorRamo, type Opcion } from "@/lib/polizas/ramos";
+import { camposGenerales, COBERTURAS_SI_NO_GMM, seccionesPorRamo, type Opcion } from "@/lib/polizas/ramos";
 import { normalizarRfc } from "@/lib/polizas/validacion";
 
 /** Datos del contratante que se muestran en la lista (el usuario pidió ver el RFC de cada una). */
@@ -153,47 +153,134 @@ export async function procesarPoliza(
       }) as const;
     if (motivos.length > 0) return revisar(motivos);
 
-    const res = await guardarPolizaMasiva({ ...datosParaGuardar(inicial, ejecutivoId), origen: "ocr" });
-    if (!res.ok) {
-      if (res.errores?.numeroImpreso?.startsWith("Ya existe")) return { tipo: "ya_existia", ...contratante };
-      if (res.errores) return revisar(Object.entries(res.errores).map(([campo, m]) => `${etiqueta(campo)}: ${m}`));
-      if (res.error?.startsWith("Tu sesión expiró")) throw new SesionVencida();
-      return { tipo: "error", mensaje: res.error ?? "No se pudo guardar la póliza." };
-    }
-
-    // La póliza ya existe aunque un archivo falle: se puede subir después desde su detalle.
-    const avisos: string[] = [];
     const caratula = caratulaDe(elegidos);
-    const expediente = await expedienteDe(unidad, fuente);
-    if (expediente && "omitido" in expediente) avisos.push(expediente.omitido);
-    if (expediente && "archivo" in expediente && expediente.ilegibles.length > 0) {
-      avisos.push(
-        `El expediente no incluye ${expediente.ilegibles.length} ${expediente.ilegibles.length === 1 ? "archivo" : "archivos"} que Windows no deja leer (ruta demasiado larga): ${expediente.ilegibles.slice(0, 3).join(", ")}${expediente.ilegibles.length > 3 ? "…" : ""}.`
-      );
-    }
-    const subir = {
+    return await guardarConArchivos(unidad, fuente, {
+      inicial,
+      contratante,
+      ejecutivoId,
       caratula: caratula ? archivos[elegidos.indexOf(caratula)] : null,
       negociacion,
-      expediente: expediente && "archivo" in expediente ? expediente.archivo : null,
-    };
-    for (const [tipo, archivo] of Object.entries(subir) as [keyof typeof subir, File | null][]) {
-      if (!archivo) continue;
-      const subida = await subirArchivo(res.poliza.id, tipo, archivo);
-      if (!subida.ok) avisos.push(`${ETIQUETA_ARCHIVO[tipo]} no se subió: ${subida.error}`);
-    }
-    return {
-      tipo: "guardada",
-      polizaId: res.poliza.id,
-      clienteId: res.cliente.id,
-      ...contratante,
-      numero: res.poliza.numero,
-      ...(avisos.length > 0 && { aviso: avisos.join(" ") }),
-    };
+      revisar,
+    });
   } catch (e) {
-    if (e instanceof SesionVencida || senal.aborted) throw e;
-    if (e instanceof ErrorZip) return { tipo: "error", mensaje: e.message };
-    if (esArchivoIlegible(e)) return { tipo: "error", mensaje: `Un archivo ${MENSAJE_ARCHIVO_PERDIDO}` };
-    console.error("[carga masiva]", unidad.clave, e);
-    return { tipo: "error", mensaje: e instanceof Error && e.message ? e.message : "Error inesperado." };
+    return fallo(unidad, e, senal);
+  }
+}
+
+function fallo(unidad: UnidadPoliza, e: unknown, senal: AbortSignal): EstadoPoliza {
+  if (e instanceof SesionVencida || senal.aborted) throw e;
+  if (e instanceof ErrorZip) return { tipo: "error", mensaje: e.message };
+  if (esArchivoIlegible(e)) return { tipo: "error", mensaje: `Un archivo ${MENSAJE_ARCHIVO_PERDIDO}` };
+  console.error("[carga masiva]", unidad.clave, e);
+  return { tipo: "error", mensaje: e instanceof Error && e.message ? e.message : "Error inesperado." };
+}
+
+/** Guarda la póliza leída y le sube su carátula, su formato de negociación y su expediente. */
+async function guardarConArchivos(
+  unidad: UnidadPoliza,
+  fuente: Fuente,
+  {
+    inicial,
+    contratante,
+    ejecutivoId,
+    caratula,
+    negociacion,
+    revisar,
+  }: {
+    inicial: PolizaFormInicial;
+    contratante: Contratante;
+    ejecutivoId: string | undefined;
+    caratula: File | null;
+    negociacion: File | null;
+    revisar: (motivos: string[]) => EstadoPoliza;
+  }
+): Promise<EstadoPoliza> {
+  const res = await guardarPolizaMasiva({ ...datosParaGuardar(inicial, ejecutivoId), origen: "ocr" });
+  if (!res.ok) {
+    if (res.errores?.numeroImpreso?.startsWith("Ya existe")) return { tipo: "ya_existia", ...contratante };
+    if (res.errores) return revisar(Object.entries(res.errores).map(([campo, m]) => `${etiqueta(campo)}: ${m}`));
+    if (res.error?.startsWith("Tu sesión expiró")) throw new SesionVencida();
+    return { tipo: "error", mensaje: res.error ?? "No se pudo guardar la póliza." };
+  }
+
+  // La póliza ya existe aunque un archivo falle: se puede subir después desde su detalle.
+  const avisos: string[] = [];
+  const expediente = await expedienteDe(unidad, fuente);
+  if (expediente && "omitido" in expediente) avisos.push(expediente.omitido);
+  if (expediente && "archivo" in expediente && expediente.ilegibles.length > 0) {
+    avisos.push(
+      `El expediente no incluye ${expediente.ilegibles.length} ${expediente.ilegibles.length === 1 ? "archivo" : "archivos"} que Windows no deja leer (ruta demasiado larga): ${expediente.ilegibles.slice(0, 3).join(", ")}${expediente.ilegibles.length > 3 ? "…" : ""}.`
+    );
+  }
+  const subir = {
+    caratula,
+    negociacion,
+    expediente: expediente && "archivo" in expediente ? expediente.archivo : null,
+  };
+  for (const [tipo, archivo] of Object.entries(subir) as [keyof typeof subir, File | null][]) {
+    if (!archivo) continue;
+    const subida = await subirArchivo(res.poliza.id, tipo, archivo);
+    if (!subida.ok) avisos.push(`${ETIQUETA_ARCHIVO[tipo]} no se subió: ${subida.error}`);
+  }
+  return {
+    tipo: "guardada",
+    polizaId: res.poliza.id,
+    clienteId: res.cliente.id,
+    ...contratante,
+    numero: res.poliza.numero,
+    ...(avisos.length > 0 && { aviso: avisos.join(" ") }),
+  };
+}
+
+/**
+ * Avisos de la lectura que antes dejaban la póliza por revisar y ya no: la póliza vigor de la
+ * referencia de pago es una regla fija, y una referencia con otro formato no importa si la póliza
+ * vigor salió del número impreso.
+ */
+const YA_NO_APLICA = [
+  /^Póliza vigor \S+ calculada de la referencia de pago /,
+  /^La referencia de pago \S+ no tiene el formato esperado/,
+];
+
+/** Motivos de una póliza por revisar que todavía piden revisarla. */
+export const motivosVigentes = (motivos: string[]) => motivos.filter((m) => !YA_NO_APLICA.some((r) => r.test(m)));
+
+type PorRevisar = Extract<EstadoPoliza, { tipo: "revisar" }>;
+
+/** Por revisar solo por avisos que ya no aplican: se guarda con lo ya leído, sin volver a la IA. */
+export const seGuardaSinLeer = (estado: EstadoPoliza): estado is PorRevisar =>
+  estado.tipo === "revisar" && motivosVigentes(estado.motivos).length === 0;
+
+export async function guardarSinLeer(
+  unidad: UnidadPoliza,
+  fuente: Fuente,
+  estado: PorRevisar,
+  { ejecutivoId, senal }: { ejecutivoId: string | undefined; senal: AbortSignal }
+): Promise<EstadoPoliza> {
+  try {
+    const leer = async (ref: string) => {
+      const blob = await leerDocumento(ref, fuente);
+      return blob ? comoArchivo(blob, ref.split("::").at(-1) ?? ref) : null;
+    };
+    // Como al leerla: la carátula se elige por la ruta dentro de la póliza.
+    const dentro = (ref: string) => (ref.startsWith(`${unidad.clave}/`) ? ref.slice(unidad.clave.length + 1) : ref);
+    const caratula = caratulaDe(estado.documentos.map((ref) => ({ ruta: dentro(ref), tamano: 0, ref })));
+    // Leída antes de que las coberturas de GMM que no aparecen se llenaran con "No".
+    let inicial = estado.inicial;
+    if (inicial.ramo === "gmm_individual" || inicial.ramo === "gmm_colectivo") {
+      const especificos = { ...inicial.especificos };
+      for (const cobertura of COBERTURAS_SI_NO_GMM) especificos[cobertura] ||= "No";
+      inicial = { ...inicial, especificos };
+    }
+    return await guardarConArchivos(unidad, fuente, {
+      inicial,
+      contratante: { cliente: estado.cliente, rfc: estado.rfc, numero: estado.numero },
+      ejecutivoId,
+      caratula: caratula ? await leer(caratula.ref) : null,
+      negociacion: estado.negociacion ? await leer(estado.negociacion) : null,
+      revisar: (motivos) => ({ ...estado, inicial, motivos }),
+    });
+  } catch (e) {
+    return fallo(unidad, e, senal);
   }
 }
