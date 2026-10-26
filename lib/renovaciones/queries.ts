@@ -99,6 +99,15 @@ export async function getEmbudo({ ejecutivo }: { ejecutivo?: string } = {}) {
   });
   const renovaciones = await renovacionesDe(alcance.agenciaId, polizas);
   const desdeRenovadas = fechaUtc(hoy).getTime() - DIAS_VENCIDAS_EMBUDO * DIA_MS;
+  // Actividades sin finalizar de cada póliza o de su renovación (las anotadas al renovar).
+  const ids = polizas.flatMap((p) => [p.id, renovaciones.get(p.id)?.id ?? []].flat());
+  const pendientes = ids.length
+    ? await db.tarea.findMany({
+        where: { agenciaId: alcance.agenciaId, polizaId: { in: ids }, tipo: { not: null }, completadaAt: null, eliminadaAt: null },
+        orderBy: { createdAt: "asc" },
+        select: { polizaId: true, titulo: true },
+      })
+    : [];
 
   const tarjetas = polizas
     .map((p) => {
@@ -106,6 +115,9 @@ export async function getEmbudo({ ejecutivo }: { ejecutivo?: string } = {}) {
       return {
         ...p,
         prima_total: Number(p.prima_total),
+        actividades: pendientes
+          .filter((t) => t.polizaId === p.id || (renovacion !== null && t.polizaId === renovacion.id))
+          .map((t) => t.titulo),
         renovacion,
         dias: diasDesdeHoy(p.vigencia_fin, hoy),
         columna: columnaDe({ renovada: renovacion !== null, etapa: p.renovacionEtapa }),
@@ -191,4 +203,37 @@ export async function getRenovadasReporte({ ejecutivo }: { ejecutivo?: string } 
       return nueva ? [{ anterior, nueva }] : [];
     })
     .sort((a, b) => b.nueva.vigencia_inicio.getTime() - a.nueva.vigencia_inicio.getTime());
+}
+
+/**
+ * Pólizas por renovar para el reporte en Excel: las del tablero que aún no tienen su renovación
+ * capturada ni se dieron por perdidas (columnas Por renovar, Cotizando y Enviada), de la que vence
+ * primero a la última. `ejecutivo` filtra por responsable (id o "sin").
+ */
+export async function getPorRenovarReporte({ ejecutivo }: { ejecutivo?: string } = {}) {
+  await connection();
+  const alcance = await getAlcance();
+  const hoy = hoyISO();
+  const polizas = await db.poliza.findMany({
+    where: whereEmbudo(alcance, hoy, ejecutivo?.slice(0, 64)),
+    orderBy: [{ vigencia_fin: "asc" }, { numeroImpreso: "asc" }],
+    select: {
+      ...SELECT_RENOVADA,
+      renovacionEtapa: true,
+      renovacionNota: true,
+      tareas: {
+        where: { tipo: { not: null }, completadaAt: null, eliminadaAt: null },
+        orderBy: { createdAt: "asc" },
+        select: { titulo: true },
+      },
+    },
+  });
+  const renovaciones = await renovacionesDe(alcance.agenciaId, polizas);
+  return polizas
+    .map((p) => ({
+      ...p,
+      dias: diasDesdeHoy(p.vigencia_fin, hoy),
+      columna: columnaDe({ renovada: (renovaciones.get(p.id) ?? null) !== null, etapa: p.renovacionEtapa }),
+    }))
+    .filter((p) => p.columna !== "renovada" && p.columna !== "perdida");
 }

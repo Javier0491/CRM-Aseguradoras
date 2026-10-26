@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Ban,
+  BellRing,
   Check,
   Download,
   ExternalLink,
@@ -107,6 +108,9 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
   const etapa = COLUMNAS_EMBUDO.find(
     (c) => c.clave === columnaDe({ renovada: renovada !== null, etapa: poliza.renovacionEtapa })
   );
+  // Actividades de la póliza (cambio de agente, …): van en su propio recuadro, destacado mientras haya pendientes.
+  const actividades = tareas.filter((t) => t.tipo);
+  const actividadesPendientes = actividades.filter((t) => t.completadaAt === null).length;
   const primaEndosos = poliza.endosos.reduce((s, e) => s + (e.prima === null ? 0 : Number(e.prima)), 0);
   const conPrimaEndosos = poliza.endosos.some((e) => e.prima !== null);
 
@@ -288,6 +292,49 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
         </p>
       )}
 
+      <Card
+        className={cn(
+          "gap-0 py-0",
+          actividadesPendientes > 0 && "border-destructive/50 bg-destructive/5 ring-1 ring-destructive/20"
+        )}
+      >
+        <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
+          <CardTitle className={cn("flex items-center gap-2 text-base", actividadesPendientes > 0 && "text-destructive")}>
+            <BellRing className="size-4" /> Actividades de la póliza
+            {actividadesPendientes > 0 && (
+              <Badge variant="destructive" className="tabular-nums">
+                {actividadesPendientes} {actividadesPendientes === 1 ? "pendiente" : "pendientes"}
+              </Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Trámites por hacer (p. ej. cambio de agente). Se recuerdan a sus encargados cada pocos minutos hasta que los
+            marcan como finalizados.
+          </CardDescription>
+          <CardAction>
+            <NuevaTarea
+              hoy={hoy}
+              polizaId={poliza.id}
+              equipo={equipo}
+              usuarioId={usuario.id}
+              actividad
+              etiqueta="Agregar actividad"
+              variante={actividades.length === 0 ? "outline" : "ghost"}
+              className="h-7"
+            />
+          </CardAction>
+        </CardHeader>
+        <ListaTareas
+          tareas={actividades}
+          hoy={hoy}
+          usuarioId={usuario.id}
+          usuarioEmail={usuario.email}
+          coordina={usuario.coordinaTareas}
+          contexto="poliza"
+          vacio="Sin actividades pendientes en esta póliza."
+        />
+      </Card>
+
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-6">
           <Card acento={acento}>
@@ -466,7 +513,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
               </CardAction>
             </CardHeader>
             <ListaTareas
-              tareas={tareas}
+              tareas={tareas.filter((t) => !t.tipo)}
               hoy={hoy}
               usuarioId={usuario.id}
               usuarioEmail={usuario.email}

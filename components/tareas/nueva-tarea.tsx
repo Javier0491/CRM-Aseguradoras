@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { crearTarea } from "@/lib/tareas/actions";
+import { EVENTO_ACTIVIDADES, TIPOS_ACTIVIDAD, type TipoActividad } from "@/lib/tareas/actividades";
 import {
   MAX_DESCRIPCION_TAREA,
   MAX_RESPONSABLES_TAREA,
@@ -31,7 +33,8 @@ import { cn } from "@/lib/utils";
 /**
  * Botón y diálogo para crear una tarea. Con `clienteId` o `polizaId` queda ligada a ese registro.
  * `equipo` habilita elegir a sus encargados (uno o varios; cada uno marca su parte); sin él, la
- * tarea es de quien la crea.
+ * tarea es de quien la crea. Con `actividad` es una actividad de la póliza (cambio de agente, …): se
+ * elige su tipo en lugar de escribir el título y se recuerda con insistencia hasta finalizarla.
  */
 export function NuevaTarea({
   hoy,
@@ -40,6 +43,7 @@ export function NuevaTarea({
   equipo,
   usuarioId,
   sugerencia,
+  actividad = false,
   etiqueta = "Nueva tarea",
   variante = "outline",
   className,
@@ -51,6 +55,8 @@ export function NuevaTarea({
   usuarioId: string;
   /** Título propuesto (p. ej. "Llamar a Juan por su renovación"). */
   sugerencia?: string;
+  /** Actividad de la póliza (requiere `polizaId`). */
+  actividad?: boolean;
   etiqueta?: string;
   variante?: "default" | "outline" | "ghost";
   className?: string;
@@ -58,6 +64,7 @@ export function NuevaTarea({
   const [abierto, setAbierto] = React.useState(false);
   const [titulo, setTitulo] = React.useState(sugerencia ?? "");
   const [descripcion, setDescripcion] = React.useState("");
+  const [tipo, setTipo] = React.useState<TipoActividad | "">("");
   const [vence, setVence] = React.useState(hoy);
   const propios = equipo?.some((e) => e.id === usuarioId) ? [usuarioId] : [];
   const [responsables, setResponsables] = React.useState<string[]>(propios);
@@ -68,6 +75,7 @@ export function NuevaTarea({
   function abrir() {
     setTitulo(sugerencia ?? "");
     setDescripcion("");
+    setTipo("");
     setVence(hoy);
     setResponsables(propios);
     setErrores({});
@@ -78,16 +86,26 @@ export function NuevaTarea({
   function guardar(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (actividad && !tipo) {
+      setErrores({ titulo: "Elige el tipo de actividad." });
+      return;
+    }
     startTransition(async () => {
       const r = await crearTarea({
         titulo,
         descripcion,
         vence,
+        ...(actividad && tipo && { tipo }),
         ...(equipo && { responsables }),
         ...(polizaId ? { polizaId } : clienteId ? { clienteId } : {}),
       });
       if (r.ok) {
         setAbierto(false);
+        if (actividad) {
+          window.dispatchEvent(new Event(EVENTO_ACTIVIDADES));
+          toast.success("Actividad agregada", { description: "Se recordará hasta que la marquen como finalizada." });
+          return;
+        }
         const otros = responsables.filter((id) => id !== usuarioId).length;
         toast.success("Tarea creada", {
           description:
@@ -119,22 +137,45 @@ export function NuevaTarea({
         <DialogContent className="sm:max-w-md">
           <form onSubmit={guardar} className="space-y-4" noValidate>
             <DialogHeader>
-              <DialogTitle>Nueva tarea</DialogTitle>
-              <DialogDescription>Un pendiente con fecha; aparece en «Mis pendientes» de su responsable.</DialogDescription>
+              <DialogTitle>{actividad ? "Nueva actividad de la póliza" : "Nueva tarea"}</DialogTitle>
+              <DialogDescription>
+                {actividad
+                  ? "Un trámite pendiente (p. ej. cambio de agente). Se les recuerda a sus encargados cada pocos minutos hasta que lo finalicen."
+                  : "Un pendiente con fecha; aparece en «Mis pendientes» de su responsable."}
+              </DialogDescription>
             </DialogHeader>
-            <div className="space-y-2">
-              <Label htmlFor="tarea-titulo">¿Qué hay que hacer?</Label>
-              <Input
-                id="tarea-titulo"
-                value={titulo}
-                onChange={(e) => setTitulo(e.target.value)}
-                maxLength={MAX_TITULO_TAREA}
-                placeholder="Ej. Llamar al cliente por el pago"
-                autoFocus
-                aria-invalid={Boolean(errores.titulo)}
-              />
-              {errores.titulo && <p className="text-xs text-destructive">{errores.titulo}</p>}
-            </div>
+            {actividad ? (
+              <div className="space-y-2">
+                <Label htmlFor="actividad-tipo">Tipo</Label>
+                <Select value={tipo} onValueChange={(v) => setTipo(v as TipoActividad)}>
+                  <SelectTrigger id="actividad-tipo" className="w-full" aria-invalid={Boolean(errores.titulo)}>
+                    <SelectValue placeholder="Elige la actividad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TIPOS_ACTIVIDAD.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>
+                        {t.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errores.titulo && <p className="text-xs text-destructive">{errores.titulo}</p>}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="tarea-titulo">¿Qué hay que hacer?</Label>
+                <Input
+                  id="tarea-titulo"
+                  value={titulo}
+                  onChange={(e) => setTitulo(e.target.value)}
+                  maxLength={MAX_TITULO_TAREA}
+                  placeholder="Ej. Llamar al cliente por el pago"
+                  autoFocus
+                  aria-invalid={Boolean(errores.titulo)}
+                />
+                {errores.titulo && <p className="text-xs text-destructive">{errores.titulo}</p>}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="tarea-vence">Fecha</Label>
               <div className="flex flex-wrap items-center gap-2">
@@ -170,13 +211,16 @@ export function NuevaTarea({
               />
             )}
             <div className="space-y-2">
-              <Label htmlFor="tarea-descripcion">Notas (opcional)</Label>
+              <Label htmlFor="tarea-descripcion">
+                {actividad ? (tipo === "otro" ? "¿Qué hay que hacer?" : "Comentario (opcional)") : "Notas (opcional)"}
+              </Label>
               <Textarea
                 id="tarea-descripcion"
                 value={descripcion}
                 onChange={(e) => setDescripcion(e.target.value)}
                 maxLength={MAX_DESCRIPCION_TAREA}
                 rows={3}
+                placeholder={actividad ? "Ej. Pedir a la aseguradora el cambio a la clave 15521" : undefined}
                 aria-invalid={Boolean(errores.descripcion)}
               />
               {errores.descripcion && <p className="text-xs text-destructive">{errores.descripcion}</p>}
@@ -189,7 +233,7 @@ export function NuevaTarea({
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={pendiente}>
-                {pendiente ? <Loader2 className="animate-spin" /> : <Plus />} Crear tarea
+                {pendiente ? <Loader2 className="animate-spin" /> : <Plus />} {actividad ? "Agregar actividad" : "Crear tarea"}
               </Button>
             </DialogFooter>
           </form>

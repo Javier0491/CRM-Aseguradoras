@@ -22,6 +22,7 @@ import {
   marcarParteTarea,
   restaurarTarea,
 } from "@/lib/tareas/actions";
+import { EVENTO_ACTIVIDADES } from "@/lib/tareas/actividades";
 import { avanceTarea, grupoTarea, sumarDiasIso } from "@/lib/tareas/reglas";
 import { conDeshacer } from "@/lib/toast";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export type TareaVista = {
   titulo: string;
   descripcion: string | null;
   vence: Date;
+  /** Actividad de póliza (cambio de agente, …): se destaca hasta finalizarla. */
+  tipo?: string | null;
   completadaAt: Date | null;
   creadaPorEmail: string | null;
   /** Encargados con su parte: hecha (completadaAt) o pendiente. */
@@ -142,6 +145,7 @@ function FilaTarea({
         setError(r.error ?? "No se pudo actualizar.");
         return;
       }
+      if (t.tipo) window.dispatchEvent(new Event(EVENTO_ACTIVIDADES));
       if (!marcar) {
         toast(miParte && partes.length > 1 ? "Tu parte vuelve a estar pendiente" : "Tarea reabierta", { description: t.titulo });
         return;
@@ -164,6 +168,7 @@ function FilaTarea({
         setError(r.error ?? "No se pudo actualizar.");
         return;
       }
+      if (t.tipo) window.dispatchEvent(new Event(EVENTO_ACTIVIDADES));
       toast.success(p.hecha ? `${p.nombre}: pendiente` : `${p.nombre}: listo`, {
         description: t.titulo,
         ...conDeshacer(() => marcarParteTarea(t.id, p.id, p.hecha), "Se deshizo el cambio."),
@@ -179,6 +184,7 @@ function FilaTarea({
         setError(r.error ?? "No se pudo borrar.");
         return;
       }
+      if (t.tipo) window.dispatchEvent(new Event(EVENTO_ACTIVIDADES));
       toast("Tarea borrada", {
         description: t.titulo,
         // Deshacer la recupera tal cual: con sus encargados y su avance.
@@ -259,6 +265,11 @@ function FilaTarea({
             completada && "text-muted-foreground decoration-muted-foreground"
           )}
         >
+          {t.tipo && !completada && (
+            <span className="mr-1.5 inline-flex items-center rounded border border-destructive/40 bg-destructive/10 px-1.5 py-px align-middle text-[10px] font-semibold tracking-wide text-destructive uppercase">
+              Actividad
+            </span>
+          )}
           {t.titulo}
         </p>
         {t.descripcion && <p className="text-xs whitespace-pre-line text-muted-foreground">{t.descripcion}</p>}

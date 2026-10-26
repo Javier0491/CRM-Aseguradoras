@@ -2,6 +2,7 @@ import { ViewTransition } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  BellRing,
   CalendarClock,
   CheckCircle2,
   Download,
@@ -127,8 +128,20 @@ export function VistaRenovaciones({ embudo: { hoy, columnas, total }, agencia, f
         acciones={
           <>
             {filtro && <FiltroEjecutivo ejecutivos={filtro.ejecutivos} usuarioId={filtro.usuarioId} valor={filtro.valor} />}
+            {/* Descargas: no son páginas, así que van con <a> y no con Link. */}
             <Button asChild variant="outline">
-              {/* Descarga: no es una página, así que va con <a> y no con Link. */}
+              <a
+                href={
+                  filtro?.valor
+                    ? `/renovaciones/reporte-por-renovar?ejecutivo=${encodeURIComponent(filtro.valor)}`
+                    : "/renovaciones/reporte-por-renovar"
+                }
+                download
+              >
+                <Download /> Por renovar en Excel
+              </a>
+            </Button>
+            <Button asChild variant="outline">
               <a
                 href={filtro?.valor ? `/renovaciones/reporte?ejecutivo=${encodeURIComponent(filtro.valor)}` : "/renovaciones/reporte"}
                 download
@@ -304,6 +317,15 @@ function TarjetaRenovacion({ p, agencia, retraso }: { p: TarjetaEmbudo; agencia:
           <span className="min-w-0 font-mono wrap-anywhere">{p.numeroImpreso}</span>
           <span className="ml-auto font-medium text-foreground tabular-nums">{formatMoneda(p.prima_total)}</span>
         </p>
+        {p.actividades.length > 0 && (
+          <p
+            className="flex items-start gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-1.5 py-1 text-[11px] font-medium text-destructive"
+            title={`Actividades sin finalizar: ${p.actividades.join(" · ")}`}
+          >
+            <BellRing className="mt-px size-3 shrink-0" />
+            <span className="line-clamp-3 min-w-0 wrap-anywhere">{p.actividades.join(" · ")}</span>
+          </p>
+        )}
         <p className="text-[11px] text-muted-foreground">
           Vence el {formatFecha(p.vigencia_fin)}
           {p.ejecutivo && ` · ${p.ejecutivo.nombre}`}

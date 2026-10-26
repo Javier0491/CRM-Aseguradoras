@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { formatFecha } from "@/lib/format";
 import { enviarPush } from "@/lib/notificaciones/push";
 import type { Prisma } from "@/lib/generated/prisma/client";
+import { esTipoActividad, tituloActividad } from "@/lib/tareas/actividades";
 import { tareasVisibles } from "@/lib/tareas/queries";
 import { fechaValida, MAX_RESPONSABLES_TAREA, validarTarea, type ErroresTarea } from "@/lib/tareas/reglas";
 
@@ -20,6 +21,11 @@ export type NuevaTareaInput = {
   responsables?: string[];
   clienteId?: string;
   polizaId?: string;
+  /**
+   * Actividad de póliza (lib/tareas/actividades.ts): requiere `polizaId`; el título sale del tipo
+   * (en "Otro", de la descripción).
+   */
+  tipo?: string;
 };
 
 export type TareaResultado = { ok: true } | { ok: false; error?: string; errores?: ErroresTarea };
@@ -93,6 +99,13 @@ export async function crearTarea(raw: NuevaTareaInput): Promise<TareaCreada> {
     descripcion: typeof raw.descripcion === "string" ? raw.descripcion.trim() : "",
     vence: typeof raw.vence === "string" ? raw.vence : "",
   };
+  let tipo: string | null = null;
+  if (raw.tipo !== undefined) {
+    if (!esTipoActividad(raw.tipo) || raw.polizaId === undefined) return { ok: false, error: "Actividad inválida." };
+    if (raw.tipo === "otro" && !datos.descripcion) return { ok: false, errores: { descripcion: "Escribe qué hay que hacer." } };
+    tipo = raw.tipo;
+    datos.titulo = tituloActividad(raw.tipo, datos.descripcion);
+  }
   const errores = validarTarea(datos);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 
@@ -127,6 +140,7 @@ export async function crearTarea(raw: NuevaTareaInput): Promise<TareaCreada> {
       titulo: datos.titulo,
       descripcion: datos.descripcion || null,
       vence: new Date(`${datos.vence}T00:00:00Z`),
+      tipo,
       clienteId,
       polizaId,
       creadaPorEmail: user.email,
@@ -142,9 +156,9 @@ export async function crearTarea(raw: NuevaTareaInput): Promise<TareaCreada> {
   if (avisar.length > 0) {
     after(() =>
       enviarPush(avisar, {
-        titulo: `Nueva tarea de ${user.nombre ?? "tu equipo"}`,
+        titulo: `${tipo ? "Nueva actividad de póliza" : "Nueva tarea"} de ${user.nombre ?? "tu equipo"}`,
         cuerpo: `${datos.titulo} · vence el ${formatFecha(`${datos.vence}T00:00:00Z`)}`,
-        url: "/tareas",
+        url: tipo && polizaId ? `/polizas/${polizaId}` : "/tareas",
         etiqueta: `tarea-${tarea.id}`,
       })
     );

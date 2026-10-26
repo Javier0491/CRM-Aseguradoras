@@ -6,6 +6,7 @@ import type { UsuarioSesion } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { claveNombre, RFC_GENERICOS, tipoPersonaDeRfc } from "@/lib/clientes/reglas";
 import { db } from "@/lib/db";
+import { hoyISO } from "@/lib/format";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { validarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
 import { primaEsAnual, RAMO_DB, seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
@@ -21,6 +22,7 @@ import {
   type PolizaInput,
   type Valores,
 } from "@/lib/polizas/validacion";
+import { leerActividades, tituloActividad } from "@/lib/tareas/actividades";
 import { leerEjecutivoSolicitado, resolverEjecutivo } from "@/lib/usuarios/asignacion";
 
 /** Correo de agradecimiento de una renovación: a quién se envió o por qué no salió. */
@@ -32,6 +34,8 @@ export type GuardarPolizaResultado =
       poliza: { id: string; numero: string };
       recibos: number;
       cliente: { id: string; nombre: string; nuevo: boolean };
+      /** Actividades de la póliza que quedaron pendientes (cambio de agente, …). */
+      actividades: number;
       /** Solo en renovaciones con el agradecimiento activado. */
       agradecimiento?: AgradecimientoRenovacion;
     }
@@ -245,6 +249,10 @@ export async function registrarPoliza(
   const { agenciaId } = usuario;
   const asignado = await resolverEjecutivo(usuario, leerEjecutivoSolicitado(raw));
   if (!asignado.ok) return { ok: false, error: asignado.error };
+  const actividades = leerActividades(
+    typeof raw === "object" && raw !== null ? (raw as { actividades?: unknown }).actividades : undefined
+  );
+  if (!actividades) return { ok: false, error: "Revisa las actividades de la póliza: falta el tipo o qué hay que hacer." };
 
   // Renovación: misma aseguradora y mismo número original, póliza vigor nueva e inicio posterior
   // a la vigencia anterior. Queda en la cadena de la póliza que renueva.
@@ -342,6 +350,23 @@ export async function registrarPoliza(
         },
         select: { id: true, numeroImpreso: true, polizaVigor: true },
       });
+      // Actividades: pendientes de quien captura (si es del equipo de la agencia) hasta finalizarlas.
+      const encargado = !usuario.superadmin && usuario.agenciaPropiaId === agenciaId ? [usuario.id] : [];
+      for (const a of actividades) {
+        await tx.tarea.create({
+          data: {
+            agenciaId,
+            tipo: a.tipo,
+            titulo: tituloActividad(a.tipo, a.comentario),
+            descripcion: a.comentario || null,
+            vence: new Date(`${hoyISO()}T00:00:00Z`),
+            clienteId: cliente.id,
+            polizaId: poliza.id,
+            creadaPorEmail: usuario.email,
+            responsables: { create: encargado.map((usuarioId) => ({ usuarioId, agenciaId })) },
+          },
+        });
+      }
       await registrarBitacora(
         usuario,
         anterior
@@ -376,6 +401,7 @@ export async function registrarPoliza(
       poliza: { id: resultado.poliza.id, numero: resultado.poliza.numeroImpreso },
       recibos: recibos.length,
       cliente: resultado.cliente,
+      actividades: actividades.length,
     };
   } catch (e) {
     return errorGuardado(e, datos.numeroImpreso, "guardarPoliza");

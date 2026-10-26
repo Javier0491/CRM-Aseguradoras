@@ -62,6 +62,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ArchivoInput } from "@/components/archivos/archivo-input";
+import { ActividadesCaptura } from "@/components/captura/actividades-captura";
 import type { VincularArchivoResultado } from "@/lib/archivos/actions";
 import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib/archivos/config";
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
@@ -70,6 +71,7 @@ import { subirArchivo } from "@/lib/archivos/subir";
 import { buscarContactoPorRfc, type ContactoCliente } from "@/lib/clientes/actions";
 import { claveNombre, RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { hoyISO } from "@/lib/format";
+import { validarActividad, type ActividadCaptura } from "@/lib/tareas/actividades";
 import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
 import {
@@ -357,6 +359,9 @@ export function PolizaForm({
   const [subiendo, setSubiendo] = React.useState<TipoArchivo | null>(null);
   // Renovación: al guardar, el cliente recibe "Gracias por continuar con nosotros" (se puede apagar).
   const [agradecer, setAgradecer] = React.useState(true);
+  // Actividades de la póliza (cambio de agente, …): quedan como pendientes al guardar.
+  const [actividades, setActividades] = React.useState<ActividadCaptura[]>([]);
+  const [erroresActividades, setErroresActividades] = React.useState(false);
   const router = useRouter();
   const editando = modo.tipo === "edicion";
 
@@ -532,6 +537,8 @@ export function PolizaForm({
     // En una renovación se vuelve a los datos de la vigencia anterior, no a un formulario vacío.
     reset(valoresIniciales(modo.tipo === "renovacion" ? inicial : undefined, ejecutivoPredeterminado));
     setVigorManual(false);
+    setActividades([]);
+    setErroresActividades(false);
     limpiarAvisos();
     onReiniciar?.();
   }
@@ -578,8 +585,14 @@ export function PolizaForm({
       return;
     }
 
+    if (actividades.some((a) => validarActividad(a))) {
+      setErroresActividades(true);
+      setErrorGeneral("Completa o quita las actividades de la póliza marcadas.");
+      return;
+    }
     const res = await guardarPoliza({
       ...datos,
+      actividades,
       ...(modo.tipo === "renovacion" && { renuevaA: modo.anterior.id }),
       ...(leidaConIa && { origen: "ocr" }),
     });
@@ -915,6 +928,18 @@ export function PolizaForm({
                   />
                 </FormSection>
               )}
+
+              {!editando && (
+                <ActividadesCaptura
+                  actividades={actividades}
+                  onChange={(lista) => {
+                    setActividades(lista);
+                    limpiarAvisos();
+                  }}
+                  disabled={bloqueado || exito !== null}
+                  mostrarErrores={erroresActividades}
+                />
+              )}
             </CardContent>
           </fieldset>
         )}
@@ -931,6 +956,13 @@ export function PolizaForm({
                 {exito.cliente.nuevo ? "Cliente nuevo registrado" : "Asignada al cliente existente"}:{" "}
                 {exito.cliente.nombre}
               </p>
+              {exito.actividades > 0 && (
+                <p className="text-xs font-medium text-destructive">
+                  {exito.actividades === 1
+                    ? "1 actividad pendiente: se te recordará hasta que la finalices."
+                    : `${exito.actividades} actividades pendientes: se te recordarán hasta que las finalices.`}
+                </p>
+              )}
               {exito.enviandoAgradecimiento && (
                 <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Loader2 className="size-3.5 shrink-0 animate-spin" /> Enviando el agradecimiento con sus documentos…

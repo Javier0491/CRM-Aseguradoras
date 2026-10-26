@@ -16,6 +16,7 @@ const SELECT_TAREA = {
   titulo: true,
   descripcion: true,
   vence: true,
+  tipo: true,
   completadaAt: true,
   completadaPorEmail: true,
   creadaPorEmail: true,
@@ -109,6 +110,46 @@ export async function getMisPendientesHoy(user: UsuarioSesion, limite = 8) {
   ]);
   return { tareas, total };
 }
+
+/**
+ * Mis actividades de póliza sin finalizar (cambio de agente, …), las más antiguas primero: se
+ * recuerdan con insistencia hasta que se finalizan. Son las que tienen mi parte pendiente.
+ */
+export async function getMisActividadesPendientes(user: UsuarioSesion, limite = 5) {
+  const where: Prisma.TareaWhereInput = {
+    agenciaId: user.agenciaId,
+    eliminadaAt: null,
+    completadaAt: null,
+    tipo: { not: null },
+    ...conMiPartePendiente(user),
+  };
+  const [actividades, total] = await Promise.all([
+    db.tarea.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      take: limite,
+      select: {
+        id: true,
+        titulo: true,
+        descripcion: true,
+        createdAt: true,
+        poliza: { select: { id: true, numeroImpreso: true, cliente: { select: { nombre: true } } } },
+      },
+    }),
+    db.tarea.count({ where }),
+  ]);
+  return {
+    total,
+    actividades: actividades.map((a) => ({
+      id: a.id,
+      titulo: a.titulo,
+      descripcion: a.descripcion,
+      creada: a.createdAt.toISOString(),
+      poliza: a.poliza && { id: a.poliza.id, numero: a.poliza.numeroImpreso, cliente: a.poliza.cliente.nombre },
+    })),
+  };
+}
+export type ActividadesPendientes = Awaited<ReturnType<typeof getMisActividadesPendientes>>;
 
 /**
  * Resumen de mis tareas para el encabezado de Tareas: pendientes, vencidas, de hoy, hechas hoy

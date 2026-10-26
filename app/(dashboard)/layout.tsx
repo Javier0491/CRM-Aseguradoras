@@ -5,6 +5,7 @@ import { AmbienteEspacio } from "@/components/layout/ambiente-espacio";
 import { AppHeader } from "@/components/layout/app-header";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { TemaAgencia } from "@/components/layout/tema-agencia";
+import { RecordatorioActividades } from "@/components/tareas/recordatorio-actividades";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { COLOR_MARCA_PREDETERMINADO } from "@/lib/agencias/marca";
 import { getAgencia } from "@/lib/agencias/queries";
@@ -73,6 +74,8 @@ export default async function DashboardLayout({
               : undefined
           }
         />
+        {/* Actividades de póliza sin finalizar: se recuerdan hasta que se terminan. */}
+        <RecordatorioActividades />
         {/* Solo el SUPERADMIN llega a ver una agencia suspendida. */}
         {agencia.suspendida && (
           <p role="status" className="border-b border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">

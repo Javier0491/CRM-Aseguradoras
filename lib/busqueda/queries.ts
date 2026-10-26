@@ -5,7 +5,7 @@ import { veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import { contarPorRenovar } from "@/lib/renovaciones/queries";
-import { getMisPendientesHoy } from "@/lib/tareas/queries";
+import { getMisActividadesPendientes, getMisPendientesHoy } from "@/lib/tareas/queries";
 
 export type ResultadoBusqueda = {
   tipo: "cliente" | "poliza" | "recibo";
@@ -130,7 +130,8 @@ export async function contarRecibosEnRiesgo(alcance: Alcance, hoy: Date) {
 export async function getAvisos(user: UsuarioSesion): Promise<Aviso[]> {
   const alcance = alcanceDe(user);
   const hoy = new Date(`${hoyISO()}T00:00:00Z`);
-  const [tareas, porRenovar, vencidos, riesgo, aclarar] = await Promise.all([
+  const [actividades, tareas, porRenovar, vencidos, riesgo, aclarar] = await Promise.all([
+    getMisActividadesPendientes(user, 0),
     getMisPendientesHoy(user, 0),
     contarPorRenovar(alcance),
     db.recibo.count({ where: { AND: [recibosDe(alcance), { estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } }] } }),
@@ -138,6 +139,14 @@ export async function getAvisos(user: UsuarioSesion): Promise<Aviso[]> {
     veComisiones(user) ? db.recibo.count({ where: { agenciaId: user.agenciaId, estado: "PAGADO" } }) : Promise.resolve(0),
   ]);
   const avisos: Aviso[] = [
+    {
+      clave: "actividades",
+      titulo: "Actividades de póliza sin finalizar",
+      detalle: "Cambios de agente y demás pendientes que anotaste al capturar o renovar.",
+      cantidad: actividades.total,
+      href: "/tareas",
+      tono: "destructive",
+    },
     {
       clave: "tareas",
       titulo: "Tareas vencidas o para hoy",

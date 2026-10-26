@@ -443,6 +443,9 @@ model Tarea {
   titulo             String
   descripcion        String?
   vence              DateTime  @db.Date
+  // Actividad de póliza (clave de lib/tareas/actividades.ts: cambio_agente, …): se pide al capturar
+  // o renovar y se recuerda con insistencia hasta finalizarla. null = tarea normal.
+  tipo               String?
   // Encargados: cada uno marca su parte; sin encargados, la marca cualquiera.
   responsables       TareaResponsable[]
   clienteId          String?   @map("cliente_id")

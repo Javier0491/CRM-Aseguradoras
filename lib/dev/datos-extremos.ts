@@ -166,6 +166,8 @@ function tareas(c: Conjunto, n: number) {
       titulo: f === "demo" ? ciclo(["Llamar por la renovación", "Enviar cotización"], i) : ciclo([TITULO_TAREA_LARGO, "Ok", "Revisar siniestro 2026-000451"], i),
       descripcion: f === "demo" ? null : ciclo([TEXTO_LARGO, null, "Pedir factura"], i),
       vence: dia(ciclo([-12, 0, 3], i)),
+      // Algunas son actividades de póliza (se destacan hasta finalizarlas).
+      tipo: i % 3 === 1 ? "cambio_agente" : null,
       completadaAt: hecha ? dia(-1) : null,
       completadaPorEmail: null,
       creadaPorEmail: "laura.mendez@example.com",
@@ -568,6 +570,9 @@ export function datosRenovaciones(c: Conjunto, mover?: { id: string; columna: Co
         ejecutivo: ejecutivo(f, i) && { nombre: ejecutivo(f, i)!.nombre },
         cliente: { id: `cli${i}`, nombre: cliente(f, i), telefono: telefono(f, i), email: correo(f, i) },
         aseguradora: aseguradora(f, i),
+        // Una actividad sin finalizar en algunas (en extremos, varias y con texto largo).
+        actividades:
+          i % 3 !== 0 ? [] : f === "demo" ? ["Cambio de agente"] : ["Cambio de agente", TITULO_TAREA_LARGO, "Documentos pendientes"],
         renovacion: renovada ? { id: `ren${i}`, numeroImpreso: f === "demo" ? "0012345679" : "DAN-IND-2027-000123456-REN-04-ANEXO-B" } : null,
         dias,
         columna: columnaDe({ renovada, etapa }),
