@@ -7,6 +7,7 @@ import { hoyISO } from "@/lib/format";
 import { getEstadoConciliacion } from "@/lib/polizas/conciliacion";
 import {
   esEstatusPolizas,
+  esFiltroContacto,
   esFiltroRecibos,
   getAseguradorasOpciones,
   getPolizasListado,
@@ -23,7 +24,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
   const params = await searchParams;
   const q = typeof params.q === "string" ? params.q.slice(0, 100) : "";
   const ramo = esRamo(params.ramo) ? params.ramo : undefined;
-  const soloFaltaContacto = params.contacto === "falta";
+  const contacto = esFiltroContacto(params.contacto) ? params.contacto : "";
   const ejecutivo = typeof params.ejecutivo === "string" ? params.ejecutivo.slice(0, 64) : "";
   const estatus = esEstatusPolizas(params.estatus) ? params.estatus : "";
   const aseguradora = typeof params.aseguradora === "string" ? params.aseguradora.slice(0, 64) : "";
@@ -35,7 +36,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
     getPolizasListado({
       q,
       ramo,
-      faltaContacto: soloFaltaContacto,
+      faltaContacto: contacto || undefined,
       ejecutivo: ejecutivo || undefined,
       estatus,
       aseguradora: aseguradora || undefined,
@@ -55,7 +56,7 @@ export default async function PolizasPage({ searchParams }: PageProps<"/polizas"
       conciliacion={conciliacion}
       ejecutivos={ejecutivos}
       aseguradoras={aseguradoras.map((a) => ({ value: a.value, label: a.label }))}
-      filtros={{ q, ramo, soloFaltaContacto, ejecutivo, estatus, aseguradora, filtroRecibos, pestana, vista }}
+      filtros={{ q, ramo, contacto, ejecutivo, estatus, aseguradora, filtroRecibos, pestana, vista }}
       usuario={{ id: user.id, soloSuCartera: user.soloSuCartera, verComisiones: veComisiones(user) }}
       hoy={hoyISO()}
     />

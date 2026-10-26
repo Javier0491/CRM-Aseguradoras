@@ -24,19 +24,27 @@ type Estado = {
   ejecutivo: string;
   estatus: string;
   aseguradora: string;
-  contacto?: boolean;
+  contacto: string;
 };
 
+// Mismos casos que el aviso de cada póliza ("Falta teléfono", "Falta correo", "Falta contacto").
+const OPCIONES_CONTACTO = [
+  { value: "falta", label: "Falta teléfono o correo" },
+  { value: "telefono", label: "Solo falta teléfono" },
+  { value: "correo", label: "Solo falta correo" },
+  { value: "ambos", label: "Faltan ambos" },
+];
+
 /**
- * Búsqueda y filtros del listado de pólizas (ramo, ejecutivo, estatus y aseguradora). El estado vive
- * en la URL (?q=…&ramo=…&ejecutivo=…&estatus=…&aseguradora=…&contacto=falta), así el filtrado ocurre
+ * Búsqueda y filtros del listado de pólizas (ramo, ejecutivo, estatus, aseguradora y contacto). El estado
+ * vive en la URL (?q=…&ramo=…&ejecutivo=…&estatus=…&aseguradora=…&contacto=falta), así el filtrado ocurre
  * en la base de datos y el enlace se puede compartir (Aseguradoras enlaza aquí con su filtro puesto).
  */
 export function FiltrosPolizas({
   q: qInicial,
   ramo: ramoInicial,
   ramos,
-  faltaContacto,
+  contacto: contactoInicial,
   ejecutivo: ejecutivoInicial = "",
   ejecutivos,
   usuarioId,
@@ -48,8 +56,8 @@ export function FiltrosPolizas({
   /** Valor del enum de BD o "" para todos. */
   ramo: string;
   ramos: Opcion[];
-  /** Filtro "Falta contacto" (lo activa el aviso del listado); se conserva al buscar. */
-  faltaContacto: boolean;
+  /** "falta", "telefono", "correo", "ambos" o "" sin filtrar (el aviso del listado activa "falta"). */
+  contacto: string;
   /** Id del ejecutivo, "sin" o "" para todos. */
   ejecutivo?: string;
   /** Sin la lista no se muestra el filtro (el ejecutivo que solo ve su cartera). */
@@ -68,6 +76,7 @@ export function FiltrosPolizas({
   const [ejecutivo, setEjecutivo] = React.useState(ejecutivoInicial || TODOS);
   const [estatus, setEstatus] = React.useState(estatusInicial || TODOS);
   const [aseguradora, setAseguradora] = React.useState(aseguradoraInicial || TODOS);
+  const [contacto, setContacto] = React.useState(contactoInicial || TODOS);
   const [pendiente, startTransition] = React.useTransition();
   const temporizador = React.useRef<number | null>(null);
 
@@ -85,14 +94,14 @@ export function FiltrosPolizas({
     if (siguiente.ejecutivo !== TODOS) params.set("ejecutivo", siguiente.ejecutivo);
     if (siguiente.estatus !== TODOS) params.set("estatus", siguiente.estatus);
     if (siguiente.aseguradora !== TODOS) params.set("aseguradora", siguiente.aseguradora);
-    if (siguiente.contacto ?? faltaContacto) params.set("contacto", "falta");
+    if (siguiente.contacto !== TODOS) params.set("contacto", siguiente.contacto);
     const query = params.toString();
     startTransition(() => {
       router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
     });
   }
 
-  const actual = (): Estado => ({ q, ramo, ejecutivo, estatus, aseguradora });
+  const actual = (): Estado => ({ q, ramo, ejecutivo, estatus, aseguradora, contacto });
 
   function cambiarTexto(valor: string) {
     setQ(valor);
@@ -107,11 +116,12 @@ export function FiltrosPolizas({
     setEjecutivo(TODOS);
     setEstatus(TODOS);
     setAseguradora(TODOS);
-    navegar({ q: "", ramo: TODOS, ejecutivo: TODOS, estatus: TODOS, aseguradora: TODOS, contacto: false });
+    setContacto(TODOS);
+    navegar({ q: "", ramo: TODOS, ejecutivo: TODOS, estatus: TODOS, aseguradora: TODOS, contacto: TODOS });
   }
 
   const activos =
-    q.trim() !== "" || ramo !== TODOS || ejecutivo !== TODOS || estatus !== TODOS || aseguradora !== TODOS || faltaContacto;
+    q.trim() !== "" || ramo !== TODOS || ejecutivo !== TODOS || estatus !== TODOS || aseguradora !== TODOS || contacto !== TODOS;
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
@@ -214,6 +224,25 @@ export function FiltrosPolizas({
             </SelectContent>
           </Select>
         )}
+        <Select
+          value={contacto}
+          onValueChange={(v) => {
+            setContacto(v);
+            navegar({ ...actual(), contacto: v });
+          }}
+        >
+          <SelectTrigger className="w-full bg-card lg:w-52" aria-label="Filtrar por contacto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={TODOS}>Cualquier contacto</SelectItem>
+            {OPCIONES_CONTACTO.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {activos && (
         <Button type="button" variant="ghost" size="sm" onClick={limpiar} className="text-muted-foreground lg:ml-auto">

@@ -42,6 +42,7 @@ import {
   FILTROS_RECIBOS,
   LIMITE_LISTADO,
   type EstatusPolizas,
+  type FiltroContacto,
   type FiltroRecibos,
   type getPolizasListado,
   type getRecibosListado,
@@ -86,6 +87,14 @@ export type PestanaPolizas = (typeof PESTANAS)[number];
 export const esPestana = (v: unknown): v is PestanaPolizas =>
   typeof v === "string" && (PESTANAS as readonly string[]).includes(v);
 
+/** Qué le falta al cliente con cada filtro de contacto, para el aviso del listado. */
+const DESCRIPCION_CONTACTO: Record<FiltroContacto, string> = {
+  falta: "no tiene teléfono o correo",
+  telefono: "tiene correo pero no teléfono",
+  correo: "tiene teléfono pero no correo",
+  ambos: "no tiene teléfono ni correo",
+};
+
 export type DatosPolizas = {
   listado: Awaited<ReturnType<typeof getPolizasListado>>;
   listadoRecibos: Awaited<ReturnType<typeof getRecibosListado>>;
@@ -97,7 +106,8 @@ export type DatosPolizas = {
   filtros: {
     q: string;
     ramo?: Ramo;
-    soloFaltaContacto: boolean;
+    /** Filtro de contacto o "" sin filtrar. */
+    contacto: FiltroContacto | "";
     ejecutivo: string;
     estatus: EstatusPolizas;
     /** Id de la aseguradora o "" para todas. */
@@ -125,7 +135,8 @@ export function VistaPolizas({
   const { polizas, total: totalPolizas, totalGeneral, porVencer, faltaContacto, canceladas } = listado;
   const { recibos, total: totalRecibos, pendientes } = listadoRecibos;
   // La pestaña abierta la lee PestanasUrl de la URL (?tab=…).
-  const { q, ramo, soloFaltaContacto, ejecutivo, estatus, aseguradora, filtroRecibos, vista } = filtros;
+  const { q, ramo, contacto, ejecutivo, estatus, aseguradora, filtroRecibos, vista } = filtros;
+  const soloFaltaContacto = contacto !== "";
   const filtrando =
     q.trim() !== "" || ramo !== undefined || soloFaltaContacto || ejecutivo !== "" || estatus !== "" || aseguradora !== "";
   const verEjecutivo = !usuario.soloSuCartera;
@@ -145,7 +156,7 @@ export function VistaPolizas({
   const paramsContacto = filtrosUrl({ contacto: soloFaltaContacto ? undefined : "falta" });
   const hrefContacto = paramsContacto.size ? `/polizas?${paramsContacto}` : "/polizas";
   // El reporte exporta la cartera con los filtros activos.
-  const paramsReporte = filtrosUrl({ contacto: soloFaltaContacto ? "falta" : undefined });
+  const paramsReporte = filtrosUrl({ contacto: contacto || undefined });
   const hrefReporte = paramsReporte.size ? `/polizas/reporte-cartera?${paramsReporte}` : "/polizas/reporte-cartera";
 
   const resumen: { label: string; valor: string; icon: typeof FileText; tono: TonoResumen; href?: string }[] = [
@@ -238,7 +249,7 @@ export function VistaPolizas({
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {soloFaltaContacto
-                      ? "Mostrando solo pólizas cuyo cliente no tiene teléfono o correo. Complétalos desde Editar."
+                      ? `Mostrando solo pólizas cuyo cliente ${DESCRIPCION_CONTACTO[contacto]}. Complétalo desde Editar.`
                       : "Se capturaron sin teléfono o correo del cliente; complétalos para poder avisarle de sus recibos."}
                   </p>
                 </div>
@@ -254,11 +265,11 @@ export function VistaPolizas({
                 <FiltrosPolizas
                   // Un enlace que cambia los filtros (tarjetas, aviso de contacto) vuelve a poner los selectores;
                   // la búsqueda no entra en la llave para no perder el foco mientras se escribe.
-                  key={[ramo, ejecutivo, estatus, aseguradora, soloFaltaContacto].join("|")}
+                  key={[ramo, ejecutivo, estatus, aseguradora, contacto].join("|")}
                   q={q}
                   ramo={ramo ?? ""}
                   ramos={opcionesRamo}
-                  faltaContacto={soloFaltaContacto}
+                  contacto={contacto}
                   ejecutivo={ejecutivo}
                   ejecutivos={ejecutivos}
                   usuarioId={usuario.id}

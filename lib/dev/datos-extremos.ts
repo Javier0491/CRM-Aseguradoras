@@ -293,7 +293,7 @@ export function datosPolizas(
       })),
     },
     ejecutivos: ejecutivosOpciones(c),
-    filtros: { q: "", soloFaltaContacto: false, ejecutivo: "", estatus: "", aseguradora: "", filtroRecibos: "todos", pestana, vista },
+    filtros: { q: "", contacto: "", ejecutivo: "", estatus: "", aseguradora: "", filtroRecibos: "todos", pestana, vista },
     usuario: { id: "usr0", soloSuCartera: false, verComisiones: true },
     hoy: hoyISO(),
   };

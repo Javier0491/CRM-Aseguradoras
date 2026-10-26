@@ -4,7 +4,7 @@ import { estadoVigencia, formaPagoLabel, ramoLabel, vigenciaEstilo } from "@/com
 import { getUsuarioCrm } from "@/lib/auth/dal";
 import { hoyISO } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
-import { DIAS_POR_VENCER, esEstatusPolizas, getPolizasExportacion } from "@/lib/polizas/queries";
+import { DIAS_POR_VENCER, esEstatusPolizas, esFiltroContacto, getPolizasExportacion } from "@/lib/polizas/queries";
 
 const fechaIso = (d: Date) => d.toISOString().slice(0, 10);
 const esRamo = (v: unknown): v is Ramo => typeof v === "string" && v in ramoLabel;
@@ -21,10 +21,11 @@ export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const ramo = params.get("ramo");
   const estatus = params.get("estatus");
+  const contacto = params.get("contacto");
   const polizas = await getPolizasExportacion({
     q: params.get("q") ?? "",
     ramo: esRamo(ramo) ? ramo : undefined,
-    faltaContacto: params.get("contacto") === "falta",
+    faltaContacto: esFiltroContacto(contacto) ? contacto : undefined,
     ejecutivo: params.get("ejecutivo") || undefined,
     estatus: esEstatusPolizas(estatus) ? estatus : undefined,
     aseguradora: params.get("aseguradora") || undefined,

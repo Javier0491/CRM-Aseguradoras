@@ -40,8 +40,8 @@ export type FiltrosPolizas = {
   /** Texto libre: número de póliza, póliza vigor, cliente, RFC o asegurado. */
   q?: string;
   ramo?: Ramo;
-  /** Solo las pólizas cuyo cliente no tiene teléfono o correo. */
-  faltaContacto?: boolean;
+  /** Solo las pólizas cuyo cliente no tiene teléfono o correo (ver FiltroContacto). */
+  faltaContacto?: FiltroContacto;
   /** Ejecutivo responsable: su id, o "sin" para las que no tienen. */
   ejecutivo?: string;
   /** Estatus: en vigor (no canceladas), vigentes hoy, canceladas, o todas (""). */
@@ -74,6 +74,22 @@ const CLIENTE_SIN_CONTACTO: Prisma.PolizaWhereInput = {
   cliente: { OR: [{ telefono: "" }, { email: "" }] },
 };
 
+/**
+ * Filtro de contacto del listado: le falta alguno de los dos, o solo el teléfono, solo el correo
+ * o ambos (los mismos casos que el aviso "Falta teléfono", "Falta correo" y "Falta contacto").
+ */
+export const FILTROS_CONTACTO = ["falta", "telefono", "correo", "ambos"] as const;
+export type FiltroContacto = (typeof FILTROS_CONTACTO)[number];
+export const esFiltroContacto = (v: unknown): v is FiltroContacto =>
+  typeof v === "string" && (FILTROS_CONTACTO as readonly string[]).includes(v);
+
+const WHERE_CONTACTO: Record<FiltroContacto, Prisma.PolizaWhereInput> = {
+  falta: CLIENTE_SIN_CONTACTO,
+  telefono: { cliente: { telefono: "", NOT: { email: "" } } },
+  correo: { cliente: { email: "", NOT: { telefono: "" } } },
+  ambos: { cliente: { telefono: "", email: "" } },
+};
+
 /** Filtro del listado de pólizas, siempre acotado a lo que ve la sesión. Lo comparten el listado y su exportación. */
 function wherePolizas(alcance: Alcance, filtros: FiltrosPolizas): Prisma.PolizaWhereInput {
   const q = filtros.q?.trim().slice(0, 100);
@@ -83,7 +99,7 @@ function wherePolizas(alcance: Alcance, filtros: FiltrosPolizas): Prisma.PolizaW
     AND: [
       polizasDe(alcance),
       filtros.ramo ? { ramo: filtros.ramo } : {},
-      filtros.faltaContacto ? CLIENTE_SIN_CONTACTO : {},
+      filtros.faltaContacto ? WHERE_CONTACTO[filtros.faltaContacto] : {},
       ejecutivo ? { ejecutivoId: ejecutivo === "sin" ? null : ejecutivo } : {},
       filtros.estatus ? WHERE_ESTATUS[filtros.estatus]() : {},
       filtros.aseguradora ? { aseguradora_id: filtros.aseguradora.slice(0, 64) } : {},
