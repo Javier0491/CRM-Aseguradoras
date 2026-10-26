@@ -17,6 +17,7 @@ import {
 } from "@/lib/conciliacion/tipos";
 import type { EstadoRecibo } from "@/lib/generated/prisma/client";
 import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
+import { primaEsAnual } from "@/lib/polizas/ramos";
 import { generarRecibos, sumarMeses } from "@/lib/polizas/recibos";
 import { mesesPorFormaPago } from "@/lib/polizas/validacion";
 
@@ -101,6 +102,7 @@ export function cruzarFilas({
       vigenciaFin: isoFecha(poliza.vigencia_fin),
       primaTotal: Number(poliza.prima_total),
       mesesPorPeriodo: meses,
+      primaAnual: primaEsAnual(poliza.ramo),
     });
     const delCalendario = calendario[numero - 1];
     return {

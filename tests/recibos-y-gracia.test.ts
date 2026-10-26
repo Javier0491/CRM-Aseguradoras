@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { situacionCobro, sumarDias } from "@/lib/polizas/gracia";
-import { generarRecibos, sumarMeses } from "@/lib/polizas/recibos";
+import { aniosDeVigencia, finDePagos, generarRecibos, sumarMeses } from "@/lib/polizas/recibos";
 
 describe("sumarMeses", () => {
   it("respeta el fin de mes", () => {
@@ -33,6 +33,49 @@ describe("generarRecibos", () => {
   it("una vigencia de un mes parcial cuenta como periodo", () => {
     const r = generarRecibos({ vigenciaInicio: "2026-01-01", vigenciaFin: "2026-07-15", primaTotal: 700, mesesPorPeriodo: 3 });
     assert.equal(r.length, 3);
+  });
+  it("prima anual (Vida): se repite cada año de la vigencia", () => {
+    const r = generarRecibos({ vigenciaInicio: "2026-01-31", vigenciaFin: "2046-01-31", primaTotal: 1000, mesesPorPeriodo: 1, primaAnual: true });
+    assert.equal(r.length, 240);
+    // Los centavos sobrantes van al primer recibo de cada año.
+    assert.equal(r[0].monto, "83.37");
+    assert.equal(r[12].monto, "83.37");
+    assert.equal(r[13].monto, "83.33");
+    const primerAnio = r.slice(0, 12).reduce((s, x) => s + Math.round(Number(x.monto) * 100), 0);
+    assert.equal(primerAnio, 100000);
+    assert.equal(r[239].fechaVencimiento, "2045-12-31");
+  });
+  it("prima anual con pago anual: un recibo por año con la prima completa", () => {
+    const r = generarRecibos({ vigenciaInicio: "2026-03-15", vigenciaFin: "2095-03-15", primaTotal: 5000, mesesPorPeriodo: 12, primaAnual: true });
+    assert.equal(r.length, 69);
+    assert.ok(r.every((x) => x.monto === "5000.00"));
+  });
+});
+
+describe("finDePagos", () => {
+  it("pago limitado: los recibos terminan con el plazo de pago", () => {
+    assert.equal(finDePagos("2026-03-15", "2095-03-15", 20), "2046-03-15");
+    const r = generarRecibos({ vigenciaInicio: "2026-03-15", vigenciaFin: finDePagos("2026-03-15", "2095-03-15", 20), primaTotal: 5000, mesesPorPeriodo: 12, primaAnual: true });
+    assert.equal(r.length, 20);
+    assert.equal(r[19].fechaVencimiento, "2045-03-15");
+  });
+  it("sin plazo de pago, o mayor que la vigencia, se paga toda la vigencia", () => {
+    assert.equal(finDePagos("2026-03-15", "2046-03-15"), "2046-03-15");
+    assert.equal(finDePagos("2026-03-15", "2046-03-15", 30), "2046-03-15");
+  });
+});
+
+describe("aniosDeVigencia", () => {
+  it("años al más cercano, aunque el fin sea un día antes o después del aniversario", () => {
+    assert.equal(aniosDeVigencia("2024-03-15", "2044-03-15"), 20);
+    assert.equal(aniosDeVigencia("2024-03-15", "2044-03-14"), 20);
+    assert.equal(aniosDeVigencia("2024-03-15", "2044-03-16"), 20);
+    assert.equal(aniosDeVigencia("2026-03-15", "2095-03-15"), 69);
+  });
+  it("mínimo un año; null sin fechas válidas o con el fin antes del inicio", () => {
+    assert.equal(aniosDeVigencia("2026-01-01", "2026-04-01"), 1);
+    assert.equal(aniosDeVigencia("2026-01-01", ""), null);
+    assert.equal(aniosDeVigencia("2027-01-01", "2026-01-01"), null);
   });
 });
 

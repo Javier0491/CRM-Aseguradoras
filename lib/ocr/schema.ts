@@ -72,6 +72,7 @@ function camposEspecificos(): CampoDef[] {
   const porNombre = new Map<string, { campo: CampoDef; ramos: string[] }>();
   for (const ramo of RAMOS) {
     for (const campo of seccionesPorRamo[ramo].flatMap((s) => s.campos)) {
+      if (campo.derivado || campo.sinOcr) continue;
       const previo = porNombre.get(campo.name);
       if (previo) previo.ramos.push(ramoLabels[ramo]);
       else porNombre.set(campo.name, { campo, ramos: [ramoLabels[ramo]] });

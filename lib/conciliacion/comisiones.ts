@@ -1,6 +1,7 @@
 // Reglas de negocio de la comisión esperada (funciones puras, sin base de datos).
 
 import { edadEnRango, esTodasLasEdades } from "@/lib/comisiones/reglas";
+import { primaEsAnual } from "@/lib/polizas/ramos";
 import { generarRecibos } from "@/lib/polizas/recibos";
 import { mesesPorFormaPago } from "@/lib/polizas/validacion";
 
@@ -153,7 +154,9 @@ export function anioParaComision({
 }): AnioComision {
   const antiguedad = antiguedadDelTitular(asegurados);
   if (antiguedad && antiguedad <= vigenciaInicio.toISOString().slice(0, 10)) {
-    return { anio: anioDePoliza(new Date(`${antiguedad}T00:00:00Z`), vigenciaInicio), por: "antiguedad", antiguedad };
+    // En una vigencia de varios años (Vida) cada aniversario suma un año más.
+    const anio = anioDePoliza(new Date(`${antiguedad}T00:00:00Z`), vigenciaInicio) + anioDePoliza(vigenciaInicio, fechaRecibo) - 1;
+    return { anio, por: "antiguedad", antiguedad };
   }
   return { anio: anioDePoliza(primeraVigencia, fechaRecibo), por: "vigencias", antiguedad: null };
 }
@@ -176,24 +179,35 @@ export type BaseComision = {
 /**
  * Prima neta de un recibo: prima neta de la vigencia ÷ número de recibos de su forma de pago,
  * con el mismo reparto de centavos que el calendario de recibos (el sobrante va al primero).
+ * En Vida la prima neta es anual y se reparte entre los recibos de un año.
  * null si la póliza no tiene prima neta capturada: la comisión no se puede calcular.
  */
 export function primaNetaDelRecibo(
-  poliza: { prima_neta: { toString(): string } | null; vigencia_inicio: Date; vigencia_fin: Date; forma_pago: keyof typeof mesesPorFormaPago },
+  poliza: {
+    ramo: string;
+    prima_neta: { toString(): string } | null;
+    vigencia_inicio: Date;
+    vigencia_fin: Date;
+    forma_pago: keyof typeof mesesPorFormaPago;
+  },
   numero: number
 ): BaseComision | null {
   if (poliza.prima_neta === null) return null;
   const neta = Number(poliza.prima_neta.toString());
   if (!Number.isFinite(neta) || neta <= 0) return null;
+  const meses = mesesPorFormaPago[poliza.forma_pago];
+  const primaAnual = primaEsAnual(poliza.ramo);
   const reparto = generarRecibos({
     vigenciaInicio: poliza.vigencia_inicio.toISOString().slice(0, 10),
     vigenciaFin: poliza.vigencia_fin.toISOString().slice(0, 10),
     primaTotal: neta,
-    mesesPorPeriodo: mesesPorFormaPago[poliza.forma_pago],
+    mesesPorPeriodo: meses,
+    primaAnual,
   });
   // Un recibo fuera del calendario (p. ej. auto-creado) toma la parte de un recibo normal.
   const parte = reparto[numero - 1] ?? reparto[reparto.length - 1];
-  return { primaNeta: Number(parte.monto), recibos: reparto.length };
+  const recibos = primaAnual ? Math.max(1, Math.round(12 / meses)) : reparto.length;
+  return { primaNeta: Number(parte.monto), recibos };
 }
 
 /**

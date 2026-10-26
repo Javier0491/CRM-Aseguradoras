@@ -43,7 +43,8 @@ export default async function EditarPolizaPage({ params }: PageProps<"/polizas/[
           tipo: "edicion",
           polizaId: poliza.id,
           numero: poliza.numero,
-          bloqueados: poliza.conCobros ? CAMPOS_CALENDARIO : [],
+          // El plazo de pago (Vida) también define cuántos recibos hay.
+          bloqueados: poliza.conCobros ? [...CAMPOS_CALENDARIO, "plazoPago"] : [],
           cancelada: poliza.cancelada,
         }}
       />

@@ -24,7 +24,7 @@ import {
   type AseguradoValores,
 } from "@/lib/polizas/asegurados";
 import { extraerPolizaVigor, extraerPolizaVigorDeReferencia } from "@/lib/polizas/polizaParser";
-import { normalizarRfc, normalizarTelefono, validarCampo, type Valores } from "@/lib/polizas/validacion";
+import { normalizarRfc, normalizarTelefono, plazoDerivado, validarCampo, type Valores } from "@/lib/polizas/validacion";
 
 const minuscula = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
@@ -200,8 +200,14 @@ export function normalizarExtraccion(
   }
 
   const especificos = ramo
-    ? extraerCampos(obj.especificos, seccionesPorRamo[ramo].flatMap((s) => s.campos), advertencias)
+    ? extraerCampos(
+        obj.especificos,
+        seccionesPorRamo[ramo].flatMap((s) => s.campos).filter((c) => !c.derivado && !c.sinOcr),
+        advertencias
+      )
     : {};
+  const plazo = ramo ? plazoDerivado(ramo, generales) : null;
+  if (plazo !== null) especificos.plazo = plazo;
 
   if (!ramo) advertencias.push("No se pudo determinar el ramo; selecciónalo manualmente.");
   // Una cobertura de GMM que no aparece en los documentos no está contratada.

@@ -89,6 +89,7 @@ import {
   camposSumaAsegurada,
   COBERTURAS_SI_NO_GMM,
   normalizarOpcion,
+  primaEsAnual,
   RAMOS,
   RAMOS_CON_CENSO,
   ramoLabels,
@@ -99,7 +100,7 @@ import {
   type Opcion,
   type Ramo,
 } from "@/lib/polizas/ramos";
-import { normalizarRfc, rfcValido, validarPoliza, type Errores, type Valores } from "@/lib/polizas/validacion";
+import { normalizarRfc, plazoDerivado, rfcValido, validarPoliza, type Errores, type Valores } from "@/lib/polizas/validacion";
 import { cn } from "@/lib/utils";
 
 export type PolizaFormInicial = {
@@ -230,6 +231,18 @@ const CAMPOS_POLIZA = [
   "primaNeta",
 ];
 const NOMBRES_GENERALES = new Set(camposGenerales.map((c) => c.name));
+
+// En Vida la prima de la carátula es anual y se repite cada año de la vigencia.
+const PRIMAS_ANUALES: Record<string, Partial<CampoDef>> = {
+  primaTotal: {
+    label: "Prima total anual",
+    hint: "Prima de un año; se repite cada año de la vigencia y se reparte entre los recibos del año.",
+  },
+  primaNeta: {
+    label: "Prima neta anual",
+    hint: "En MetLife, la «Prima anual total de coberturas»: sin recargos ni derecho de póliza. Es la base de la comisión.",
+  },
+};
 
 // Todos los campos con "" explícito: `reset()` no vacía un campo cuyo valor nuevo es
 // undefined (conserva el anterior), así que "Limpiar" necesita cada clave presente.
@@ -422,6 +435,16 @@ export function PolizaForm({
   const sumaDelRamo = SUMA_ASEGURADA[ramo];
   const sumaIlimitada = useWatch({ control, name: "sumaIlimitada" }) && Boolean(sumaDelRamo);
 
+  // El plazo de Vida no se captura: son los años entre el inicio y el fin de vigencia.
+  const vigenciaInicio = useWatch({ control, name: "generales.vigenciaInicio" }) ?? "";
+  const vigenciaFin = useWatch({ control, name: "generales.vigenciaFin" }) ?? "";
+  React.useEffect(() => {
+    const plazo = plazoDerivado(ramo, { vigenciaInicio, vigenciaFin });
+    if (plazo !== null && getValues(`especificos.${ramo}.plazo`) !== plazo) {
+      setValue(`especificos.${ramo}.plazo`, plazo, { shouldValidate: submitCount > 0 });
+    }
+  }, [ramo, vigenciaInicio, vigenciaFin, getValues, setValue, submitCount]);
+
   function cambiarSumaIlimitada(activa: boolean) {
     setValue("sumaIlimitada", activa, { shouldDirty: true });
     if (activa) {
@@ -488,9 +511,10 @@ export function PolizaForm({
   );
   const camposPoliza = CAMPOS_POLIZA.filter(
     (n) => (verComisiones || n !== "comisionPersonalizadaPct") && !(sinPolizaVigor && n === "polizaVigor")
-  ).map(
-    (n) => generalesDefs.find((c) => c.name === n)!
-  );
+  ).map((n) => {
+    const campo = generalesDefs.find((c) => c.name === n)!;
+    return primaEsAnual(ramo) ? { ...campo, ...PRIMAS_ANUALES[n] } : campo;
+  });
   const camposContratante = generalesDefs.filter((c) => !CAMPOS_POLIZA.includes(c.name));
 
   function limpiarAvisos() {
@@ -836,7 +860,12 @@ export function PolizaForm({
                             }
                             valor={field.value ?? ""}
                             error={fieldState.error?.message}
-                            disabled={bloqueado || bloqueadoPorSuma}
+                            disabled={
+                              bloqueado ||
+                              bloqueadoPorSuma ||
+                              campo.derivado ||
+                              (modo.tipo === "edicion" && modo.bloqueados.includes(campo.name))
+                            }
                             inputRef={field.ref}
                             onBlur={field.onBlur}
                             onChange={(v) => {

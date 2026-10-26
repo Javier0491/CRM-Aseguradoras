@@ -75,6 +75,28 @@ export const maxLongitud = (campo: CampoDef) => (campo.type === "textarea" ? MAX
  */
 export const RAMOS_CON_CENSO: readonly Ramo[] = ["gmm_colectivo"];
 
+/**
+ * Ramos cuya prima capturada es ANUAL: la vigencia puede durar muchos años (fin del plan de
+ * Vida) y la prima se repite cada año en los recibos.
+ */
+export const RAMOS_PRIMA_ANUAL: readonly Ramo[] = ["vida_individual", "vida_grupo"];
+/** Acepta el ramo del formulario ("vida_individual") o el de la base de datos ("VIDA_INDIVIDUAL"). */
+export const primaEsAnual = (ramo: string) => RAMOS_PRIMA_ANUAL.some((r) => r === ramo || RAMO_DB[r] === ramo);
+
+/** Planes de Vida Individual que se sugieren al capturar (MetLife). */
+export const PLANES_VIDA = [
+  "MetaLife",
+  "MetaLife Mujer",
+  "TotaLife",
+  "PerfectLife",
+  "Horizonte",
+  "EducaLife",
+  "TempoLife",
+  "Seguro Básico Estandarizado de Vida",
+  "Met4U",
+  "Met99",
+] as const;
+
 export type Opcion = { value: string; label: string };
 
 export type CampoDef = {
@@ -273,9 +295,23 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
     {
       titulo: "Plan",
       campos: [
-        { name: "plan", label: "Tipo de plan", type: "select", required: true, options: ["Temporal", "Ordinario de vida", "Dotal", "Vida con ahorro"] },
+        { name: "plan", label: "Plan", type: "text", required: true, placeholder: "Ej. PerfectLife", sugerencias: PLANES_VIDA },
         { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
-        { name: "plazo", label: "Plazo (años)", type: "number", required: true, placeholder: "Ej. 20" },
+        {
+          name: "plazo",
+          label: "Plazo (años)",
+          type: "number",
+          placeholder: "Se calcula con la vigencia",
+          hint: "Años entre el inicio y el fin de vigencia.",
+          derivado: true,
+        },
+        {
+          name: "plazoPago",
+          label: "Plazo de pago (años)",
+          type: "number",
+          placeholder: "Toda la vigencia",
+          hint: "Años en que se pagan primas (pago limitado); los recibos se generan solo en esos años. Vacío si se paga toda la vigencia.",
+        },
         { name: "moneda", label: "Moneda", type: "select", required: true, options: ["MXN", "USD", "UDIS"] },
         { name: "fumador", label: "Fumador", type: "select", required: true, options: ["No", "Sí"] },
         { name: "coberturasAdicionales", label: "Coberturas adicionales", type: "text", placeholder: "Ej. Invalidez, muerte accidental", wide: true },

@@ -1,5 +1,6 @@
 // Validación compartida por el formulario (cliente) y la Server Action (servidor).
 import { sanitizarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
+import { aniosDeVigencia } from "@/lib/polizas/recibos";
 import {
   camposGenerales,
   camposSumaAsegurada,
@@ -20,7 +21,9 @@ const RAIZ_RFC = /^[A-ZÑ&]{3,4}\d{6}/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const POLIZA_VIGOR = /^[A-Z0-9]+$/;
-const MAX_ANIOS_VIGENCIA = 30;
+// Vida puede durar hasta la vejez del asegurado (Met99, MetaLife Mujer a 69 años); el tope
+// solo frena un año mal tecleado (2206 en vez de 2026), que generaría miles de recibos.
+const MAX_ANIOS_VIGENCIA = 100;
 
 export const normalizarRfc = (v: string) => v.replace(/[\s-]/g, "").toUpperCase();
 /** RFC de persona física (13, o 10 sin homoclave) o moral (12, o 9) con formato válido. */
@@ -122,6 +125,13 @@ export function validarPoliza(
       errores.vigenciaFin = `La vigencia no puede exceder ${MAX_ANIOS_VIGENCIA} años`;
     }
   }
+  // Pago limitado: años enteros y no más que la vigencia.
+  const { plazo, plazoPago } = especificos;
+  if (plazoPago && !errores.plazoPago) {
+    const pago = parseNumero(plazoPago);
+    if (!Number.isInteger(pago) || pago < 1) errores.plazoPago = "Debe ser un número entero de años";
+    else if (plazo && pago > parseNumero(plazo)) errores.plazoPago = "No puede ser mayor que el plazo de la póliza";
+  }
   if (primaTotal && !errores.primaTotal && parseNumero(primaTotal) <= 0) {
     errores.primaTotal = "Debe ser mayor a cero";
   }
@@ -141,6 +151,16 @@ export function validarPrimaNeta(valor: string | undefined, primaTotal: number |
   if (Math.round(n * 100) / 100 !== n) return "Máximo dos decimales";
   if (primaTotal !== null && n > primaTotal) return "No puede ser mayor que la prima total";
   return null;
+}
+
+/**
+ * Plazo (años) de los ramos que lo tienen (Vida Individual): no se captura, son los años entre
+ * el inicio y el fin de vigencia. null si el ramo no tiene plazo o la vigencia no es válida.
+ */
+export function plazoDerivado(ramo: Ramo, generales: Valores): string | null {
+  if (!seccionesPorRamo[ramo].some((s) => s.campos.some((c) => c.name === "plazo"))) return null;
+  const anios = aniosDeVigencia(generales.vigenciaInicio ?? "", generales.vigenciaFin ?? "");
+  return anios === null ? null : String(anios);
 }
 
 export type PolizaInput = {
@@ -180,6 +200,8 @@ export function sanitizarPolizaInput(raw: unknown): PolizaInput | null {
   const e = tomar(especificos, seccionesPorRamo[r].flatMap((s) => s.campos));
   const a = sanitizarAsegurados(asegurados);
   if (!g || !e || !a) return null;
+  const plazo = plazoDerivado(r, g);
+  if (plazo !== null) e.plazo = plazo;
 
   // La bandera solo aplica a ramos con suma asegurada; con ella, la cantidad se descarta.
   const campos = camposSumaAsegurada(r);

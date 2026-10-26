@@ -91,6 +91,15 @@ describe("titular y antigüedad", () => {
     });
     assert.deepEqual(r, { anio: 17, por: "antiguedad", antiguedad: "2008-12-22" });
   });
+  it("en una vigencia de varios años cada aniversario suma un año por antigüedad", () => {
+    const r = anioParaComision({
+      asegurados,
+      vigenciaInicio: d("2025-07-13"),
+      primeraVigencia: d("2025-07-13"),
+      fechaRecibo: d("2027-08-01"),
+    });
+    assert.deepEqual(r, { anio: 19, por: "antiguedad", antiguedad: "2008-12-22" });
+  });
   it("sin antigüedad, desde la primera vigencia de la cadena", () => {
     const r = anioParaComision({
       asegurados: [],
@@ -103,10 +112,15 @@ describe("titular y antigüedad", () => {
 });
 
 describe("primaNetaDelRecibo y comisionEsperada", () => {
-  const poliza = { prima_neta: 1000, vigencia_inicio: d("2026-01-01"), vigencia_fin: d("2027-01-01"), forma_pago: "TRIMESTRAL" as const };
+  const poliza = { ramo: "AUTOS", prima_neta: 1000, vigencia_inicio: d("2026-01-01"), vigencia_fin: d("2027-01-01"), forma_pago: "TRIMESTRAL" as const };
   it("reparte la prima neta entre los recibos de la forma de pago", () => {
     assert.deepEqual(primaNetaDelRecibo(poliza, 1), { primaNeta: 250, recibos: 4 });
     assert.deepEqual(primaNetaDelRecibo(poliza, 9), { primaNeta: 250, recibos: 4 });
+  });
+  it("en Vida la prima neta es anual: se reparte entre los recibos de un año, cada año", () => {
+    const vida = { ...poliza, ramo: "VIDA_INDIVIDUAL", vigencia_fin: d("2046-01-01") };
+    assert.deepEqual(primaNetaDelRecibo(vida, 1), { primaNeta: 250, recibos: 4 });
+    assert.deepEqual(primaNetaDelRecibo(vida, 80), { primaNeta: 250, recibos: 4 });
   });
   it("sin prima neta no se puede calcular", () => {
     assert.equal(primaNetaDelRecibo({ ...poliza, prima_neta: null }, 1), null);

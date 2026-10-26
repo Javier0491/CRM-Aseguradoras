@@ -8,8 +8,8 @@ import { claveNombre, RFC_GENERICOS, tipoPersonaDeRfc } from "@/lib/clientes/reg
 import { db } from "@/lib/db";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { validarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
-import { RAMO_DB, seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
-import { generarRecibos } from "@/lib/polizas/recibos";
+import { primaEsAnual, RAMO_DB, seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
+import { finDePagos, generarRecibos } from "@/lib/polizas/recibos";
 import {
   mesesPorFormaPago,
   normalizarRfc,
@@ -73,16 +73,22 @@ const aseguradosData = (asegurados: AseguradoValores[]) =>
     antiguedad: a.antiguedad || null,
   }));
 
-const calendario = (g: Valores) =>
+/** Años de pago de una póliza de pago limitado (Vida); undefined si se paga toda la vigencia. */
+const aniosDePago = (especificos: Valores) =>
+  especificos.plazoPago ? parseNumero(especificos.plazoPago) : undefined;
+
+const calendario = (g: Valores, input: PolizaInput) =>
   generarRecibos({
     vigenciaInicio: g.vigenciaInicio,
-    vigenciaFin: g.vigenciaFin,
+    // En pago limitado los recibos terminan con el plazo de pago, no con la vigencia.
+    vigenciaFin: finDePagos(g.vigenciaInicio, g.vigenciaFin, aniosDePago(input.especificos)),
     primaTotal: parseNumero(g.primaTotal),
     mesesPorPeriodo: mesesPorFormaPago[g.formaPago as FormaPago],
+    primaAnual: primaEsAnual(input.ramo),
   });
 
-const recibosData = (g: Valores) =>
-  calendario(g).map((r) => ({
+const recibosData = (g: Valores, input: PolizaInput) =>
+  calendario(g, input).map((r) => ({
     numero: r.numero,
     monto: r.monto,
     fecha_vencimiento: fecha(r.fechaVencimiento),
@@ -304,7 +310,7 @@ export async function registrarPoliza(
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const datos = columnasPoliza(input, g);
-  const recibos = recibosData(g);
+  const recibos = recibosData(g, input);
 
   try {
     const resultado = await db.$transaction(async (tx) => {
@@ -458,29 +464,42 @@ export async function actualizarPoliza(
   if (Object.keys(errores).length > 0) return { ok: false, errores };
 
   const datos = columnasPoliza(input, g);
+  const datosAnteriores = (actual.datos_ramo ?? {}) as Record<string, unknown>;
+  const pagoAnterior = typeof datosAnteriores.plazoPago === "number" ? datosAnteriores.plazoPago : undefined;
+  const cambiaPlazoPago = pagoAnterior !== aniosDePago(input.especificos);
   const cambiaCalendario =
     iso(actual.vigencia_inicio) !== g.vigenciaInicio ||
     iso(actual.vigencia_fin) !== g.vigenciaFin ||
     actual.forma_pago !== g.formaPago ||
-    Number(actual.prima_total) !== parseNumero(g.primaTotal);
+    Number(actual.prima_total) !== parseNumero(g.primaTotal) ||
+    cambiaPlazoPago;
   const conCobros = actual.recibos.some((r) => r.estado !== "PENDIENTE" || r.auto_creado);
+  // Pasar de un ramo con prima anual (Vida) a otro cambia el reparto: sin cobros se rehace.
+  const regenerar =
+    cambiaCalendario || (!conCobros && primaEsAnual(actual.ramo) !== primaEsAnual(input.ramo));
   if (cambiaCalendario && conCobros) {
     const cancelada = actual.recibos.some((r) => r.estado === "CANCELADO");
     const mensaje = cancelada
       ? "La póliza está cancelada: reactívala primero para cambiarlo."
       : "La póliza ya tiene recibos cobrados: revierte primero su conciliación para cambiarlo.";
+    const campos = cambiaPlazoPago
+      ? "la vigencia, la forma de pago, la prima total ni el plazo de pago"
+      : "la vigencia, la forma de pago ni la prima total";
     return {
       ok: false,
       error: cancelada
-        ? "No se puede cambiar la vigencia, la forma de pago ni la prima total de una póliza cancelada."
-        : "No se puede cambiar la vigencia, la forma de pago ni la prima total de una póliza con recibos cobrados.",
+        ? `No se puede cambiar ${campos} de una póliza cancelada.`
+        : `No se puede cambiar ${campos} de una póliza con recibos cobrados.`,
       errores: Object.fromEntries(
-        CAMPOS_CALENDARIO.filter((c) => {
-          if (c === "vigenciaInicio") return iso(actual.vigencia_inicio) !== g.vigenciaInicio;
-          if (c === "vigenciaFin") return iso(actual.vigencia_fin) !== g.vigenciaFin;
-          if (c === "formaPago") return actual.forma_pago !== g.formaPago;
-          return Number(actual.prima_total) !== parseNumero(g.primaTotal);
-        }).map((c) => [c, mensaje])
+        [
+          ...CAMPOS_CALENDARIO.filter((c) => {
+            if (c === "vigenciaInicio") return iso(actual.vigencia_inicio) !== g.vigenciaInicio;
+            if (c === "vigenciaFin") return iso(actual.vigencia_fin) !== g.vigenciaFin;
+            if (c === "formaPago") return actual.forma_pago !== g.formaPago;
+            return Number(actual.prima_total) !== parseNumero(g.primaTotal);
+          }),
+          ...(cambiaPlazoPago ? ["plazoPago"] : []),
+        ].map((c) => [c, mensaje])
       ),
     };
   }
@@ -499,10 +518,10 @@ export async function actualizarPoliza(
           data: aseguradosData(input.asegurados).map((a) => ({ ...a, agenciaId, poliza_id: polizaId })),
         });
       }
-      if (cambiaCalendario) {
+      if (regenerar) {
         // Sin cobros todos los recibos siguen pendientes: se rehace el calendario completo.
         await tx.recibo.deleteMany({ where: { agenciaId, poliza_id: polizaId } });
-        await tx.recibo.createMany({ data: recibosData(g).map((r) => ({ ...r, agenciaId, poliza_id: polizaId })) });
+        await tx.recibo.createMany({ data: recibosData(g, input).map((r) => ({ ...r, agenciaId, poliza_id: polizaId })) });
       }
 
       const cambios = Object.keys(ETIQUETAS_CAMBIO).filter(
@@ -517,7 +536,7 @@ export async function actualizarPoliza(
           descripcion:
             `Editó la póliza ${datos.numeroImpreso}` +
             (cambios.length ? `: ${cambios.map((k) => ETIQUETAS_CAMBIO[k]).join(", ")}` : " (asegurados o contratante)") +
-            (cambiaCalendario ? "; se regeneraron los recibos" : ""),
+            (regenerar ? "; se regeneraron los recibos" : ""),
           datos: {
             antes: Object.fromEntries(cambios.map((k) => [k, comparable(actual[k as keyof typeof actual])])),
             despues: Object.fromEntries(cambios.map((k) => [k, comparable(nuevo[k as keyof typeof nuevo])])),
@@ -529,5 +548,5 @@ export async function actualizarPoliza(
   } catch (e) {
     return errorGuardado(e, datos.numeroImpreso, "actualizarPoliza");
   }
-  return { ok: true, poliza: { id: polizaId, numero: datos.numeroImpreso }, recibosRegenerados: cambiaCalendario };
+  return { ok: true, poliza: { id: polizaId, numero: datos.numeroImpreso }, recibosRegenerados: regenerar };
 }

@@ -84,7 +84,7 @@ CAMPOS GENERALES
   Interpreta las fechas en formato mexicano (día/mes/año), también con el mes abreviado
   ("31/mar/2026" → 2026-03-31). Ignora las horas. No confundas la vigencia con la fecha de emisión.
 - primaTotal: el importe TOTAL a pagar por toda la vigencia (incluye prima neta, recargos, derecho
-  de póliza e IVA). Según la aseguradora se rotula "Prima total", "Importe total", "Total",
+  de póliza e IVA); en Vida, el ANUAL (ver VIDA). Según la aseguradora se rotula "Prima total", "Importe total", "Total",
   "Precio Total" o "Total a pagar". No uses la prima neta ni el importe de un solo recibo
   ("1er REC.", "Subsecuentes"). Número sin símbolo ni separadores de miles (ej. 48320.40).
 - CUADRE DE IMPORTES: en la carátula los importes van en una fila o columna con su etiqueta encima
@@ -93,8 +93,8 @@ CAMPOS GENERALES
   del texto, que puede venir revuelto. Comprueba que prima neta + financiamiento + gastos de
   expedición − bonificación + IVA = total; si no cuadra, revisa la lectura y, si sigue sin
   cuadrar, anótalo en "advertencias".
-- primaNeta: la PRIMA NETA de toda la vigencia, ANTES de recargos por pago fraccionado, derecho de
-  póliza (gastos de expedición) e IVA. Suele rotularse "Prima neta". Es la base de la comisión del
+- primaNeta: la PRIMA NETA de toda la vigencia (en Vida, la anual: ver VIDA), ANTES de recargos por
+  pago fraccionado, derecho de póliza (gastos de expedición) e IVA. Suele rotularse "Prima neta". Es la base de la comisión del
   agente, así que nunca pongas aquí la prima total ni el importe de un recibo; si no aparece
   impresa, devuelve null (no la calcules restando conceptos).
 - formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL. Ignora el
@@ -199,6 +199,30 @@ Cada aseguradora rotula distinto los datos del vehículo. Unifícalos así:
   (AXA: "Daños Materiales 24,600.00 | 1,230.00", deducible de $1,230), calcula el porcentaje sobre
   la suma asegurada de esa cobertura (1230 / 24600 × 100 = 5) y anota en "advertencias" que
   venía como monto. Si no hay suma asegurada numérica para calcularlo, devuelve null.
+
+VIDA (INDIVIDUAL Y GRUPO): PRIMAS, PLAN Y VIGENCIA
+En Vida la vigencia suele durar muchos años y las primas de la carátula son ANUALES: el sistema
+repite la prima cada año de la vigencia. Por eso aquí cambian las reglas de primas y vigencia:
+- primaNeta: la "Prima anual total de coberturas" (la suma de las primas anuales de todas las
+  coberturas, antes de recargo por pago fraccionado, derecho de póliza e IVA). Si no aparece con ese
+  nombre, usa la "Prima neta" anual. Nunca el importe de un recibo.
+- primaTotal: la prima ANUAL total a pagar, con recargos y derecho de póliza ("Prima anual total",
+  "Prima total anual", "Total"). No el importe de un recibo ni la suma de todos los años.
+- vigenciaInicio: la fecha de inicio de vigencia de la póliza (no la de emisión ni la del
+  último aniversario).
+- vigenciaFin: la fecha en que TERMINA la cobertura del plan ("Fin de vigencia", "Vencimiento",
+  "Término de vigencia"), aunque sea décadas después del inicio. No uses el próximo aniversario ni
+  el fin de la vigencia de un recibo. Si no hay fecha de fin impresa pero sí el plazo del seguro en
+  años ("Plazo: 20 años"), es la única excepción a "no deduzcas": vigenciaFin = vigenciaInicio + ese
+  número de años, y anota en "advertencias" que el fin de vigencia se calculó con el plazo.
+- plazoPago (Vida Individual): los años en que se pagan primas cuando son menos que la vigencia
+  (pago limitado: "Plazo de pago: 20 años", "Pagos limitados a 10 años"). null si se paga durante
+  toda la vigencia o si el plazo de pago viene como edad ("pagos hasta los 65 años"); en ese caso
+  anótalo en "advertencias".
+- plan (Vida Individual): el nombre comercial del plan sin la clave numérica ni la aseguradora
+  ("PLAN: 0123 PERFECT LIFE 20" → "PerfectLife"), escrito como en los valores habituales si
+  coincide con uno ("Meta Life Mujer" → "MetaLife Mujer"; "SEGURO BASICO ESTANDARIZADO" → "Seguro
+  Básico Estandarizado de Vida"). Si es otro plan, transcríbelo tal cual.
 
 HOGAR: ETIQUETAS SEGÚN LA ASEGURADORA
 - domicilioRiesgo: la dirección del inmueble asegurado ("Datos del inmueble", "Ubicación",
