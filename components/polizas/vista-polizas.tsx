@@ -158,6 +158,10 @@ export function VistaPolizas({
   // El reporte exporta la cartera con los filtros activos.
   const paramsReporte = filtrosUrl({ contacto: contacto || undefined });
   const hrefReporte = paramsReporte.size ? `/polizas/reporte-cartera?${paramsReporte}` : "/polizas/reporte-cartera";
+  // Las pólizas sin contacto con los filtros activos; sin filtro de contacto, las que no tienen teléfono o correo.
+  const hrefSinContacto = paramsReporte.size
+    ? `/polizas/reporte-sin-contacto?${paramsReporte}`
+    : "/polizas/reporte-sin-contacto";
 
   const resumen: { label: string; valor: string; icon: typeof FileText; tono: TonoResumen; href?: string }[] = [
     // Quita los filtros y vuelve al listado completo.
@@ -253,6 +257,13 @@ export function VistaPolizas({
                       : "Se capturaron sin teléfono o correo del cliente; complétalos para poder avisarle de sus recibos."}
                   </p>
                 </div>
+                {faltaContacto > 0 && (
+                  <Button asChild size="sm" variant="outline">
+                    <a href={hrefSinContacto} download title="Excel con las pólizas a las que les falta contacto">
+                      <Download /> Descargar Excel
+                    </a>
+                  </Button>
+                )}
                 <Button asChild size="sm" variant={soloFaltaContacto ? "outline" : "default"}>
                   <Link href={hrefContacto} scroll={false}>
                     {soloFaltaContacto ? "Ver todas" : "Ver pólizas"}
