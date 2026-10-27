@@ -270,7 +270,8 @@ export type DocumentoCandidato = { ruta: string; tamano: number };
 
 /**
  * Elige qué documentos de la póliza se leen con IA: las carátulas (o, si no hay, los PDF de la
- * póliza), más un recibo o factura para la referencia de pago. Sin carátula ni póliza se toman
+ * póliza), más un recibo o factura para la referencia de pago; la póliza de grupo (con formato de
+ * negociación) no lleva factura: le bastan la carátula y el formato. Sin carátula ni póliza se toman
  * hasta tres documentos que no sean de apoyo. Respeta los límites de la lectura (10 MB cada uno,
  * 25 MB en total, como máximo 4 documentos).
  */
@@ -293,7 +294,8 @@ export function elegirDocumentos<T extends DocumentoCandidato>(docs: T[]): T[] {
 
   const elegidos: T[] = [];
   let total = 0;
-  for (const d of [...principales, ...otros, ...recibos.slice(0, 1)]) {
+  const grupo = negociacionDe(docs) !== null;
+  for (const d of [...principales, ...otros, ...(grupo ? [] : recibos.slice(0, 1))]) {
     if (elegidos.length >= 4 || total + d.tamano > OCR_MAX_BYTES_TOTAL) continue;
     elegidos.push(d);
     total += d.tamano;

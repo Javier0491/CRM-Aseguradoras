@@ -96,6 +96,8 @@ export function CapturaWorkspace({
       <div className="xl:sticky xl:top-20">
         <OcrDropzone
           key={ronda}
+          // GMM Colectivo solo lleva carátula y formato de negociación: no se le suma la factura.
+          permitirAgregar={ramo !== "gmm_colectivo"}
           onProcesando={(procesando) => {
             setExtrayendo(procesando);
             // Un documento nuevo reemplaza al anterior aunque su lectura falle.
@@ -117,6 +119,7 @@ export function CapturaWorkspace({
             <OcrDropzone
               key={`complemento-${ronda}`}
               contexto="gmm_colectivo"
+              permitirAgregar={false}
               titulo="Subir Formato de Negociación / Orden de Emisión (Opcional)"
               descripcion="Complementa la carátula: la IA toma la empresa contratante, la póliza, las vigencias y resume las reglas del plan en Condiciones del Subgrupo."
               onProcesando={(procesando) => {

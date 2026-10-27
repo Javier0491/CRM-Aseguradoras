@@ -258,4 +258,13 @@ describe("carga masiva: expediente y formato de negociación", () => {
     // No se manda como si fuera la carátula.
     assert.deepEqual(elegirDocumentos(docs).map((d) => d.ruta), ["Caratula/M0064834_Caratula.pdf"]);
   });
+
+  it("la póliza de grupo no manda a leer la factura", () => {
+    const elegidos = elegirDocumentos([
+      archivo("Caratula/M0064834_Caratula.pdf"),
+      archivo("Formato de Negociación/M0064834_Formato_de_negociación_GM6036.pdf"),
+      archivo("FACT_GUAH_77605195_.zip/Factura/FACT_GUAH_81961568_M0064834_C.pdf"),
+    ]);
+    assert.deepEqual(elegidos.map((d) => d.ruta), ["Caratula/M0064834_Caratula.pdf"]);
+  });
 });

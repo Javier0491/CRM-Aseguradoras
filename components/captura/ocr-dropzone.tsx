@@ -80,9 +80,15 @@ export function OcrDropzone({
   titulo = "Captura inteligente",
   descripcion = "Sube la carátula de la póliza (y, si hace falta, el recibo u otros documentos) y la IA cruzará los datos clave.",
   contexto,
+  permitirAgregar = true,
 }: {
   titulo?: string;
   descripcion?: string;
+  /**
+   * Ofrece sumar otro documento (la factura, …) a lo leído. GMM Colectivo no lo usa: le bastan la
+   * carátula y el formato de negociación, cada uno en su panel.
+   */
+  permitirAgregar?: boolean;
   /** Contexto de la lectura para la IA (p. ej. formato de negociación de GMM Colectivo). */
   contexto?: ContextoOcr;
   /**
@@ -266,6 +272,7 @@ export function OcrDropzone({
 
   const archivos = estado.status === "idle" ? [] : estado.archivos;
   const puedeAgregar =
+    permitirAgregar &&
     estado.status !== "procesando" && archivos.length > 0 && archivos.length < OCR_MAX_ARCHIVOS;
 
   return (
