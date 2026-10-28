@@ -173,10 +173,11 @@ export function cruzarFilas({
 
     // 2. Por número de recibo, o el más antiguo pendiente de la cadena. Un recibo PAGADO (se
     // aplicó con diferencia) solo se vuelve a tomar si el renglón dice cuál es: sin número, el
-    // renglón podría ser el pago de otro recibo y no debe correr los recibos al reprocesar.
+    // renglón podría ser el pago de otro recibo y no debe correr los recibos al reprocesar. Uno
+    // pagado a mano espera su conciliación como si siguiera pendiente.
     recibo ??= recibosCadena
       .filter((r) => r.estado !== "CONCILIADO" && !usados.has(r.id))
-      .filter((r) => r.estado === "PENDIENTE" || fila.recibo !== undefined)
+      .filter((r) => r.estado === "PENDIENTE" || r.estado === "PAGADO_MANUAL" || fila.recibo !== undefined)
       // Un recibo con otro folio es otro recibo, aunque coincida el número.
       .filter((r) => !fila.folio || r.folio === null)
       .filter((r) => fila.recibo === undefined || r.numero === fila.recibo)

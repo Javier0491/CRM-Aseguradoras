@@ -19,6 +19,8 @@ export const ACCIONES_BITACORA = {
   "poliza.prima_neta": "Cambió prima neta",
   "poliza.cancelar": "Canceló póliza",
   "poliza.reactivar": "Reactivó póliza",
+  "recibo.pagado_manual": "Marcó recibos como pagados",
+  "recibo.desmarcar_pagado": "Desmarcó recibos pagados a mano",
   "endoso.crear": "Registró endoso",
   "endoso.eliminar": "Eliminó endoso",
   "renovacion.etapa": "Movió renovación",

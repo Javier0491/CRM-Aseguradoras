@@ -25,6 +25,10 @@ const aseguradoras = [
   { nombre: "Chubb", color_hex: "#8C8C8C" },
   { nombre: "ABA Seguros", color_hex: "#003DA5" },
   { nombre: "SURA", color_hex: "#0033A0" },
+  { nombre: "Seguros Atlas", color_hex: "#E4352A" },
+  // Colores aproximados de cada marca; ajústalos si no coinciden.
+  { nombre: "ANA Seguros", color_hex: "#0057A8" },
+  { nombre: "Insignia Life", color_hex: "#6B2C91" },
   // Gastos Médicos (catálogo de redes médicas, lib/polizas/redes-medicas.ts).
   // Colores aproximados de cada marca; ajústalos si no coinciden.
   { nombre: "Plan Seguro", color_hex: "#0B5CAB" },

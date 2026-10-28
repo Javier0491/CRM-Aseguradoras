@@ -15,16 +15,6 @@ export const REDES_MEDICAS: Readonly<Record<string, readonly string[]>> = {
 /** Todas las redes del catálogo, sin repetir (p. ej. "Amplio" está en MetLife y Mapfre). */
 export const TODAS_LAS_REDES: readonly string[] = [...new Set(Object.values(REDES_MEDICAS).flat())];
 
-const clave = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
-
-/** Redes de una aseguradora por su nombre (sin importar mayúsculas ni acentos), o null si no está en el catálogo. */
-export function redesDeAseguradora(nombre: string | undefined): readonly string[] | null {
-  if (!nombre) return null;
-  const buscado = clave(nombre);
-  const encontrada = Object.keys(REDES_MEDICAS).find((a) => clave(a) === buscado);
-  return encontrada ? REDES_MEDICAS[encontrada] : null;
-}
-
 /** Catálogo en texto para las instrucciones de la IA, una línea por aseguradora. */
 export const catalogoRedesTexto = () =>
   Object.entries(REDES_MEDICAS)

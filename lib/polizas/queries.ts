@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import type { Prisma, Ramo } from "@/lib/generated/prisma/client";
 import type { Opcion } from "@/lib/polizas/ramos";
+import { enSeguimiento } from "@/lib/polizas/seguimiento";
 
 export const LIMITE_LISTADO = 200;
 
@@ -207,9 +208,10 @@ export async function getRecibosListado(filtro: FiltroRecibos = "todos") {
   const enSieteDias = new Date(hoy.getTime() + 7 * 86_400_000);
   const porFiltro: Record<FiltroRecibos, Prisma.ReciboWhereInput> = {
     todos: {},
-    pendientes: { estado: "PENDIENTE" },
-    vencidos: { estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } },
-    semana: { estado: "PENDIENTE", fecha_vencimiento: { gte: hoy, lte: enSieteDias } },
+    // Solo los que llevan seguimiento: no los históricos ni los de pólizas vencidas o canceladas.
+    pendientes: enSeguimiento(hoy),
+    vencidos: { ...enSeguimiento(hoy), fecha_vencimiento: { lt: hoy } },
+    semana: { ...enSeguimiento(hoy), fecha_vencimiento: { gte: hoy, lte: enSieteDias } },
   };
   const where: Prisma.ReciboWhereInput = { AND: [recibosDe(alcance), porFiltro[filtro]] };
   const [recibos, total, pendientes] = await Promise.all([
@@ -223,10 +225,13 @@ export async function getRecibosListado(filtro: FiltroRecibos = "todos") {
         monto: true,
         fecha_vencimiento: true,
         estado: true,
+        historico: true,
         poliza: {
           select: {
             id: true,
             numeroImpreso: true,
+            vigencia_fin: true,
+            canceladaAt: true,
             _count: { select: { recibos: true } },
             cliente: { select: { nombre: true } },
             aseguradora: { select: { nombre: true, color_hex: true, diasGracia: true } },
@@ -236,7 +241,7 @@ export async function getRecibosListado(filtro: FiltroRecibos = "todos") {
     }),
     db.recibo.count({ where }),
     db.recibo.aggregate({
-      where: { AND: [recibosDe(alcance), { estado: "PENDIENTE" }] },
+      where: { AND: [recibosDe(alcance), enSeguimiento(hoy)] },
       _count: true,
       _sum: { monto: true },
     }),
@@ -311,6 +316,7 @@ export async function getPolizaDetalle(id: string) {
           estado: true,
           folio: true,
           auto_creado: true,
+          historico: true,
         },
       },
       endosos: {

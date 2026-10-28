@@ -27,6 +27,7 @@ enum Ramo {
 enum FormaPago {
   ANUAL
   SEMESTRAL
+  CUATRIMESTRAL
   TRIMESTRAL
   MENSUAL
 }
@@ -36,6 +37,9 @@ enum FormaPago {
 enum EstadoRecibo {
   PENDIENTE
   PAGADO
+  // Marcado como pagado a mano (cobrado fuera de la conciliación). No entra a aclaraciones; si un
+  // estado de cuenta lo reporta por su número, se concilia.
+  PAGADO_MANUAL
   CONCILIADO
   CANCELADO
 }
@@ -624,6 +628,9 @@ model Recibo {
   // Lo creó la conciliación porque el estado de cuenta lo reporta cobrado y no existía en el
   // CRM. Su monto es estimado (prima de la póliza entre sus recibos) si el archivo no lo trae.
   auto_creado       Boolean      @default(false)
+  // Venció más de 30 días antes de capturar la póliza (vigencias pasadas o cargadas tarde): no
+  // lleva seguimiento de cobranza ni cuenta como vencido (lib/polizas/seguimiento.ts).
+  historico         Boolean      @default(false)
 
   cambios_lote LoteCambio[]
   notas        NotaAclaracion[]

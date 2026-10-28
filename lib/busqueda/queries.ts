@@ -4,6 +4,7 @@ import { alcanceDe, clientesDe, polizasDe, recibosDe, type Alcance } from "@/lib
 import { veComisiones, type UsuarioSesion } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
+import { enSeguimiento } from "@/lib/polizas/seguimiento";
 import { contarPorRenovar } from "@/lib/renovaciones/queries";
 import { getMisActividadesPendientes, getMisPendientesHoy } from "@/lib/tareas/queries";
 
@@ -110,7 +111,7 @@ export async function contarRecibosEnRiesgo(alcance: Alcance, hoy: Date) {
     where: {
       AND: [
         recibosDe(alcance),
-        { estado: "PENDIENTE" },
+        enSeguimiento(hoy),
         {
           OR: [...porGracia].map(([dias, ids]) => ({
             poliza: { aseguradora_id: { in: ids } },
@@ -134,7 +135,7 @@ export async function getAvisos(user: UsuarioSesion): Promise<Aviso[]> {
     getMisActividadesPendientes(user, 0),
     getMisPendientesHoy(user, 0),
     contarPorRenovar(alcance),
-    db.recibo.count({ where: { AND: [recibosDe(alcance), { estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } }] } }),
+    db.recibo.count({ where: { AND: [recibosDe(alcance), enSeguimiento(hoy), { fecha_vencimiento: { lt: hoy } }] } }),
     contarRecibosEnRiesgo(alcance, hoy),
     veComisiones(user) ? db.recibo.count({ where: { agenciaId: user.agenciaId, estado: "PAGADO" } }) : Promise.resolve(0),
   ]);

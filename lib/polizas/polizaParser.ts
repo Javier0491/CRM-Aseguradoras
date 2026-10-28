@@ -6,6 +6,9 @@ const PREFIJO_LETRAS = /^(?:[A-Z]+(?:\s*[-_/.]\s*|\s+))+/;
 // Consecutivo de renovación al final: "-01", "-02", "/03".
 const SUFIJO_RENOVACION = /\s*[-_/]\s*\d{2}$/;
 const NO_ALFANUMERICO = /[^A-Z0-9]/g;
+// Seguros Atlas: sucursal-línea-producto-póliza y, al final, endoso, año de emisión y reexpedición
+// ("G00-4-1-32253-0-0-1"). Sus recibos solo traen los cuatro primeros.
+const ATLAS_CON_ENDOSO = /^([A-Z]\d{2}-\d+-\d+-\d+)(?:-\d+){3}$/;
 
 /**
  * Obtiene la póliza raíz ("póliza vigor") a partir del número impreso en la carátula.
@@ -19,12 +22,14 @@ const NO_ALFANUMERICO = /[^A-Z0-9]/g;
  *   "GMM-1234567-01"  → "1234567"
  *   "AUT-AB12345-03"  → "AB12345"
  *   "QUA-AU-7710452"  → "7710452"
+ *   "G00-4-1-32253-0-0-1" → "G004132253" (Atlas, sin endoso ni reexpedición)
  *
  * Si la limpieza dejara la cadena vacía (lectura atípica), se devuelve el número
  * impreso completo sin separadores para no perder la referencia.
  */
 export function extraerPolizaVigor(numeroImpreso: string): string {
-  const normalizado = numeroImpreso.trim().toUpperCase();
+  const impreso = numeroImpreso.trim().toUpperCase().replace(/\s*-\s*/g, "-");
+  const normalizado = ATLAS_CON_ENDOSO.exec(impreso)?.[1] ?? impreso;
 
   const nucleo = normalizado
     .replace(PREFIJO_LETRAS, "")

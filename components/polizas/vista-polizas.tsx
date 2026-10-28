@@ -14,6 +14,7 @@ import {
   AseguradosResumen,
   EstadoVigenciaIndicador,
   esCobrado,
+  estadoHistorico,
   estadoRecibo,
   FaltaContacto,
   formaPagoLabel,
@@ -21,6 +22,7 @@ import {
   RamoBadge,
   Vencimiento,
 } from "@/components/polizas/poliza-ui";
+import { MarcarRecibos } from "@/components/polizas/marcar-recibos";
 import { TarjetaPolizaListado } from "@/components/polizas/tarjeta-poliza-listado";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,6 +39,7 @@ import { TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
 import type { Ramo } from "@/lib/generated/prisma/client";
 import type { EstadoConciliacion } from "@/lib/polizas/conciliacion";
+import { sinSeguimiento } from "@/lib/polizas/seguimiento";
 import {
   DIAS_POR_VENCER,
   FILTROS_RECIBOS,
@@ -474,9 +477,10 @@ export function VistaPolizas({
                   </TableHeader>
                   <TableBody>
                     {recibos.map((r) => {
-                      const estado = estadoRecibo[r.estado];
+                      const historico = sinSeguimiento(r, r.poliza, hoy);
+                      const estado = historico ? estadoHistorico : estadoRecibo[r.estado];
                       return (
-                        <TableRow key={r.id}>
+                        <TableRow key={r.id} className={cn(historico && "text-muted-foreground")}>
                           <TableCell className="max-w-52 min-w-36 pl-5 font-mono text-xs whitespace-normal wrap-anywhere">
                             <Link href={`/polizas/${r.poliza.id}`} className="hover:text-primary hover:underline">
                               {r.poliza.numeroImpreso}
@@ -500,15 +504,22 @@ export function VistaPolizas({
                               estado={r.estado}
                               hoy={hoy}
                               diasGracia={r.poliza.aseguradora.diasGracia}
+                              sinSeguimiento={historico}
                             />
                           </TableCell>
                           <TableCell className="text-right font-medium tabular-nums">
                             {formatMoneda(Number(r.monto))}
                           </TableCell>
                           <TableCell className="pr-5">
-                            <Badge variant="outline" className={cn(estado.className)}>
-                              {estado.label}
-                            </Badge>
+                            <div className="flex flex-wrap items-center gap-1">
+                              <Badge variant="outline" className={cn(estado.className)}>
+                                {estado.label}
+                              </Badge>
+                              {r.estado === "PENDIENTE" && <MarcarRecibos ids={[r.id]} pagado etiqueta="Pagado" />}
+                              {r.estado === "PAGADO_MANUAL" && (
+                                <MarcarRecibos ids={[r.id]} pagado={false} etiqueta="Deshacer" />
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

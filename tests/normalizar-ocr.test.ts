@@ -34,3 +34,29 @@ describe("lectura con IA: póliza vigor de la referencia de pago", () => {
     assert.ok(r.advertencias.some((a) => a.includes("no tiene el formato esperado")));
   });
 });
+
+describe("lectura con IA: Vida de Seguros Atlas", () => {
+  const r = normalizarExtraccion(
+    {
+      ramo: "Vida Individual",
+      generales: {
+        aseguradora: "Seguros Atlas",
+        numeroImpreso: "G00-4-1-32253-0-0-1",
+        vigenciaInicio: "2023-04-05",
+        vigenciaFin: "2033-04-05",
+        primaNeta: 1741.6,
+        primaTotal: 1828.68,
+      },
+      especificos: { plan: "MAXIPRO 2002", plazoPago: null },
+      asegurados_lista: [],
+    },
+    ["MetLife", "Seguros Atlas"]
+  );
+  it("el plan toma la forma del catálogo y el plazo sale de la vigencia", () => {
+    assert.equal(r.especificos.plan, "MaxiPro 2002");
+    assert.equal(r.especificos.plazo, "10");
+  });
+  it("la póliza vigor no lleva el endoso ni la reexpedición", () => {
+    assert.equal(r.generales.polizaVigor, "G004132253");
+  });
+});

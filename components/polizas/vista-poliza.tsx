@@ -29,12 +29,14 @@ import {
   AseguradoraTag,
   EstadoVigenciaBadge,
   esCobrado,
+  estadoHistorico,
   estadoRecibo,
   estadoVigencia,
   formaPagoLabel,
   ramoLabel,
   Vencimiento,
 } from "@/components/polizas/poliza-ui";
+import { MarcarRecibos } from "@/components/polizas/marcar-recibos";
 import { MoverEtapa } from "@/components/renovaciones/mover-etapa";
 import { ListaTareas } from "@/components/tareas/lista-tareas";
 import { NuevaTarea } from "@/components/tareas/nueva-tarea";
@@ -57,6 +59,7 @@ import {
   type TipoArchivo,
 } from "@/lib/archivos/config";
 import { etiquetaPolizaVigor } from "@/lib/aseguradoras/poliza-vigor";
+import { sinSeguimiento } from "@/lib/polizas/seguimiento";
 import { LIMITE_HISTORIAL, type getHistorialPoliza } from "@/lib/bitacora/historial-poliza";
 import { normalizarHex } from "@/lib/color";
 import { formatFecha, formatMoneda, formatNumero } from "@/lib/format";
@@ -100,6 +103,10 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
   // La comisión solo la ve el SUPERADMIN.
   const { verComisiones } = usuario;
   const cancelada = poliza.canceladaAt !== null;
+  // Recibos pendientes cuya fecha ya pasó: se pueden marcar como pagados de una vez.
+  const vencidosPendientes = poliza.recibos
+    .filter((r) => r.estado === "PENDIENTE" && r.fecha_vencimiento.toISOString().slice(0, 10) < hoy)
+    .map((r) => r.id);
   // Los paneles del expediente llevan el color de la aseguradora (como sus tarjetas en el catálogo).
   const acento = normalizarHex(poliza.aseguradora.color_hex) ?? "var(--color-primary)";
   const estado = estadoVigencia(poliza.vigencia_fin, hoy, DIAS_POR_VENCER, poliza.canceladaAt);
@@ -399,6 +406,15 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             <CardHeader className="border-b px-5 py-4 [.border-b]:pb-4">
               <CardTitle className="text-base">Recibos</CardTitle>
               <AvanceRecibos estados={poliza.recibos.map((r) => r.estado)} />
+              {vencidosPendientes.length > 1 && (
+                <CardAction>
+                  <MarcarRecibos
+                    ids={vencidosPendientes}
+                    pagado
+                    etiqueta={`Marcar ${vencidosPendientes.length} vencidos como pagados`}
+                  />
+                </CardAction>
+              )}
             </CardHeader>
             <Table>
               <TableHeader>
@@ -411,9 +427,10 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
               </TableHeader>
               <TableBody>
                 {poliza.recibos.map((r) => {
-                  const estadoR = estadoRecibo[r.estado];
+                  const historico = sinSeguimiento(r, poliza, hoy);
+                  const estadoR = historico ? estadoHistorico : estadoRecibo[r.estado];
                   return (
-                    <TableRow key={r.id} className={cn(r.estado === "CANCELADO" && "text-muted-foreground")}>
+                    <TableRow key={r.id} className={cn((r.estado === "CANCELADO" || historico) && "text-muted-foreground")}>
                       <TableCell className="max-w-52 pl-5 text-muted-foreground tabular-nums whitespace-normal wrap-anywhere">
                         {r.numero}/{poliza.recibos.length}
                         {r.folio && <p className="font-mono text-[11px]">folio {r.folio}</p>}
@@ -429,15 +446,20 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
                           estado={r.estado}
                           hoy={hoy}
                           diasGracia={poliza.aseguradora.diasGracia}
+                          sinSeguimiento={historico}
                         />
                       </TableCell>
                       <TableCell className="text-right font-medium tabular-nums">
                         {formatMoneda(Number(r.monto))}
                       </TableCell>
                       <TableCell className="pr-5">
-                        <Badge variant="outline" className={estadoR.className}>
-                          {estadoR.label}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-1">
+                          <Badge variant="outline" className={estadoR.className}>
+                            {estadoR.label}
+                          </Badge>
+                          {r.estado === "PENDIENTE" && <MarcarRecibos ids={[r.id]} pagado etiqueta="Pagado" />}
+                          {r.estado === "PAGADO_MANUAL" && <MarcarRecibos ids={[r.id]} pagado={false} etiqueta="Deshacer" />}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

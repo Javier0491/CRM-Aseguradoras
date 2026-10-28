@@ -19,6 +19,7 @@ export const ramoLabel: Record<Ramo, string> = {
 export const formaPagoLabel: Record<FormaPago, string> = {
   ANUAL: "Anual",
   SEMESTRAL: "Semestral",
+  CUATRIMESTRAL: "Cuatrimestral",
   TRIMESTRAL: "Trimestral",
   MENSUAL: "Mensual",
 };
@@ -26,12 +27,17 @@ export const formaPagoLabel: Record<FormaPago, string> = {
 export const estadoRecibo: Record<EstadoRecibo, { label: string; className: string }> = {
   PENDIENTE: { label: "Pendiente", className: "border-warning/30 bg-warning/10 text-warning" },
   PAGADO: { label: "Pagado", className: "border-success/30 bg-success/10 text-success" },
+  PAGADO_MANUAL: { label: "Pagado a mano", className: "border-success/30 bg-success/10 text-success" },
   CONCILIADO: { label: "Conciliado", className: "border-primary/30 bg-primary/10 text-primary" },
   CANCELADO: { label: "Cancelado", className: "border-border bg-muted text-muted-foreground" },
 };
 
-/** Recibo cobrado: pagado (con diferencia de comisión por aclarar) o conciliado. */
-export const esCobrado = (estado: EstadoRecibo) => estado === "PAGADO" || estado === "CONCILIADO";
+/** Recibo pendiente sin seguimiento (histórico o de una póliza que ya terminó): se muestra atenuado. */
+export const estadoHistorico = { label: "Histórico", className: "border-border bg-muted text-muted-foreground" };
+
+/** Recibo cobrado: pagado (con diferencia de comisión por aclarar), pagado a mano o conciliado. */
+export const esCobrado = (estado: EstadoRecibo) =>
+  estado === "PAGADO" || estado === "PAGADO_MANUAL" || estado === "CONCILIADO";
 
 /**
  * Aseguradora con su color. Un nombre largo se recorta al espacio disponible (el completo queda en el
@@ -54,21 +60,26 @@ export function AseguradoraTag({ nombre, color }: { nombre: string; color: strin
 /**
  * Fecha de pago de un recibo y, si sigue pendiente, su situación según los días de gracia de la
  * aseguradora: por vencer, en periodo de gracia (con la fecha límite) o en riesgo de cancelación.
+ * Un recibo sin seguimiento (`sinSeguimiento`) no lleva esa nota.
  */
 export function Vencimiento({
   fecha,
   estado,
   hoy,
   diasGracia,
+  sinSeguimiento = false,
 }: {
   fecha: Date;
   estado: EstadoRecibo;
   hoy: string;
   diasGracia: number;
+  sinSeguimiento?: boolean;
 }) {
   const dias = diasDesdeHoy(fecha, hoy);
   let nota: React.ReactNode = null;
-  if (estado === "PENDIENTE") {
+  if (sinSeguimiento) {
+    nota = <span className="text-muted-foreground">Sin seguimiento de cobranza</span>;
+  } else if (estado === "PENDIENTE") {
     const { situacion, fechaLimite, diasRestantes } = situacionCobro(fecha.toISOString().slice(0, 10), diasGracia, hoy);
     if (situacion === "riesgo") {
       nota = <span className="font-medium text-destructive">Riesgo de cancelación · venció hace {-dias} d</span>;

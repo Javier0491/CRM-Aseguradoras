@@ -9,8 +9,9 @@ import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import { EstadoRecibo, Prisma } from "@/lib/generated/prisma/client";
 import { validarAsegurados, type AseguradoValores } from "@/lib/polizas/asegurados";
-import { primaEsAnual, RAMO_DB, seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
+import { admiteVariosTitulares, primaEsAnual, RAMO_DB, seccionesPorRamo, type FormaPago, type Ramo } from "@/lib/polizas/ramos";
 import { finDePagos, generarRecibos } from "@/lib/polizas/recibos";
+import { esHistorico } from "@/lib/polizas/seguimiento";
 import {
   mesesPorFormaPago,
   normalizarRfc,
@@ -91,12 +92,14 @@ const calendario = (g: Valores, input: PolizaInput) =>
     primaAnual: primaEsAnual(input.ramo),
   });
 
-const recibosData = (g: Valores, input: PolizaInput) =>
+/** Recibos de la póliza; los que vencieron mucho antes de `capturada` (YYYY-MM-DD) quedan históricos. */
+const recibosData = (g: Valores, input: PolizaInput, capturada: string) =>
   calendario(g, input).map((r) => ({
     numero: r.numero,
     monto: r.monto,
     fecha_vencimiento: fecha(r.fechaVencimiento),
     estado: EstadoRecibo.PENDIENTE,
+    historico: esHistorico(r.fechaVencimiento, capturada),
   }));
 
 /** Columnas de la póliza que salen del formulario (sin cliente, recibos ni asegurados). */
@@ -205,7 +208,7 @@ async function validarFormulario(agenciaId: string, input: PolizaInput, g: Valor
   const aseguradoras = await db.aseguradora.findMany({ where: { agenciaId }, select: { id: true } });
   return {
     ...validarPoliza(input.ramo, g, input.especificos, aseguradoras.map((a) => a.id), input.sumaAseguradaIlimitada),
-    ...validarAsegurados(input.asegurados),
+    ...validarAsegurados(input.asegurados, { variosTitulares: admiteVariosTitulares(input.ramo) }),
   };
 }
 
@@ -318,7 +321,7 @@ export async function registrarPoliza(
   const errores = await validarFormulario(agenciaId, input, g);
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const datos = columnasPoliza(input, g);
-  const recibos = recibosData(g, input);
+  const recibos = recibosData(g, input, hoyISO());
 
   try {
     const resultado = await db.$transaction(async (tx) => {
@@ -469,6 +472,7 @@ export async function actualizarPoliza(
       datos_ramo: true,
       cliente_id: true,
       ejecutivoId: true,
+      created_at: true,
       recibos: { select: { estado: true, auto_creado: true } },
     },
   });
@@ -507,7 +511,9 @@ export async function actualizarPoliza(
     const cancelada = actual.recibos.some((r) => r.estado === "CANCELADO");
     const mensaje = cancelada
       ? "La póliza está cancelada: reactívala primero para cambiarlo."
-      : "La póliza ya tiene recibos cobrados: revierte primero su conciliación para cambiarlo.";
+      : actual.recibos.some((r) => r.estado === "PAGADO_MANUAL")
+        ? "La póliza tiene recibos marcados como pagados a mano: desmárcalos primero para cambiarlo."
+        : "La póliza ya tiene recibos cobrados: revierte primero su conciliación para cambiarlo.";
     const campos = cambiaPlazoPago
       ? "la vigencia, la forma de pago, la prima total ni el plazo de pago"
       : "la vigencia, la forma de pago ni la prima total";
@@ -547,7 +553,7 @@ export async function actualizarPoliza(
       if (regenerar) {
         // Sin cobros todos los recibos siguen pendientes: se rehace el calendario completo.
         await tx.recibo.deleteMany({ where: { agenciaId, poliza_id: polizaId } });
-        await tx.recibo.createMany({ data: recibosData(g, input).map((r) => ({ ...r, agenciaId, poliza_id: polizaId })) });
+        await tx.recibo.createMany({ data: recibosData(g, input, iso(actual.created_at)).map((r) => ({ ...r, agenciaId, poliza_id: polizaId })) });
       }
 
       const cambios = Object.keys(ETIQUETAS_CAMBIO).filter(

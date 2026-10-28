@@ -95,9 +95,12 @@ export function edadAl(fechaNacimiento: string, al: string): number | null {
 
 /**
  * Valida la lista. Las claves del resultado usan la ruta del formulario,
- * p. ej. "asegurados.2.nombre".
+ * p. ej. "asegurados.2.nombre". Con `variosTitulares` (Vida Grupo) cada asegurado puede ser titular.
  */
-export function validarAsegurados(asegurados: readonly AseguradoValores[]): Record<string, string> {
+export function validarAsegurados(
+  asegurados: readonly AseguradoValores[],
+  { variosTitulares = false }: { variosTitulares?: boolean } = {}
+): Record<string, string> {
   const errores: Record<string, string> = {};
   const error = (i: number, campo: keyof AseguradoValores, msg: string) => {
     errores[`asegurados.${i}.${campo}`] = msg;
@@ -112,7 +115,7 @@ export function validarAsegurados(asegurados: readonly AseguradoValores[]): Reco
     if (!a.nombre.trim()) error(i, "nombre", "Campo obligatorio");
     if (!(PARENTESCOS as readonly string[]).includes(a.parentesco)) {
       error(i, "parentesco", "Selecciona el parentesco");
-    } else if (a.parentesco === "Titular" && ++titulares > 1) {
+    } else if (a.parentesco === "Titular" && ++titulares > 1 && !variosTitulares) {
       error(i, "parentesco", "Solo puede haber un titular");
     }
     const edad = a.edad.trim();

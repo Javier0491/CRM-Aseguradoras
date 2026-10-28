@@ -85,8 +85,8 @@ import {
   type AseguradoValores,
 } from "@/lib/polizas/asegurados";
 import { extraerPolizaVigor } from "@/lib/polizas/polizaParser";
-import { redesDeAseguradora } from "@/lib/polizas/redes-medicas";
 import {
+  admiteVariosTitulares,
   camposGenerales,
   camposSumaAsegurada,
   COBERTURAS_SI_NO_GMM,
@@ -96,6 +96,7 @@ import {
   RAMOS_CON_CENSO,
   ramoLabels,
   seccionesPorRamo,
+  sugerenciasDeAseguradora,
   SUMA_ASEGURADA,
   TEXTO_SUMA_ILIMITADA,
   type CampoDef,
@@ -242,7 +243,7 @@ const PRIMAS_ANUALES: Record<string, Partial<CampoDef>> = {
   },
   primaNeta: {
     label: "Prima neta anual",
-    hint: "En MetLife, la «Prima anual total de coberturas»: sin recargos ni derecho de póliza. Es la base de la comisión.",
+    hint: "En MetLife, la «Prima anual total de coberturas»; en Atlas, el total de «Coberturas y Primas». Sin recargos ni derecho de póliza: es la base de la comisión.",
   },
 };
 
@@ -378,7 +379,7 @@ export function PolizaForm({
       // En los ramos con censo la lista no se usa, así que no se valida.
       const erroresAsegurados = RAMOS_CON_CENSO.includes(values.ramo)
         ? {}
-        : validarAsegurados(values.asegurados);
+        : validarAsegurados(values.asegurados, { variosTitulares: admiteVariosTitulares(values.ramo) });
       const errorExpediente = values.expediente
         ? await validarArchivo("expediente", values.expediente)
         : null;
@@ -865,12 +866,8 @@ export function PolizaForm({
                                 </span>
                               ) : undefined
                             }
-                            // Las redes médicas se sugieren según la aseguradora elegida.
-                            sugerencias={
-                              campo.sugerenciasPorAseguradora
-                                ? (redesDeAseguradora(nombreAseguradora) ?? campo.sugerencias)
-                                : campo.sugerencias
-                            }
+                            // Las redes médicas y los planes de Vida se sugieren según la aseguradora elegida.
+                            sugerencias={sugerenciasDeAseguradora(campo, nombreAseguradora)}
                             valor={field.value ?? ""}
                             error={fieldState.error?.message}
                             disabled={
@@ -1368,6 +1365,7 @@ function AseguradosFieldArray({
   const errorLista = useFormState({ control, name: "asegurados" }).errors.asegurados?.root?.message;
   const contratante = (useWatch({ control, name: "generales.cliente" }) ?? "").replace(/\s+/g, " ").trim();
   const asegurados = useWatch({ control, name: "asegurados" });
+  const variosTitulares = admiteVariosTitulares(useWatch({ control, name: "ramo" }));
 
   // El switch no guarda estado propio: está activo mientras el asegurado sea el contratante
   // como titular. Si alguien edita el nombre o el parentesco, se apaga solo.
@@ -1429,8 +1427,8 @@ function AseguradosFieldArray({
           size="sm"
           disabled={disabled}
           onClick={() => {
-            // El primero se propone como titular.
-            append(aseguradoVacio(fields.length === 0 ? "Titular" : ""));
+            // El primero se propone como titular; en Vida Grupo, todos (cada uno tiene su certificado).
+            append(aseguradoVacio(fields.length === 0 || variosTitulares ? "Titular" : ""));
             onCambio();
           }}
         >

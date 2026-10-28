@@ -166,6 +166,9 @@ describe("póliza vigor", () => {
     assert.equal(extraerPolizaVigor("GMM-1234567-01"), "1234567");
     assert.equal(extraerPolizaVigor("AUT-AB12345-03"), "AB12345");
     assert.equal(extraerPolizaVigor("QUA-AU-7710452"), "7710452");
+    // Atlas: la carátula agrega endoso y reexpedición; sus recibos traen solo los cuatro primeros.
+    assert.equal(extraerPolizaVigor("G00-4-1-32253-0-0-1"), "G004132253");
+    assert.equal(extraerPolizaVigor("G00-4-1-32253"), "G004132253");
   });
   it("desde la referencia de pago", () => {
     assert.equal(extraerPolizaVigorDeReferencia("MEDICA00000I12345670"), "1234567");

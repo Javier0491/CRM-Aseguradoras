@@ -18,6 +18,7 @@ import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import { Prisma } from "@/lib/generated/prisma/client";
 import { NO_CANCELADA } from "@/lib/polizas/queries";
+import { enSeguimiento } from "@/lib/polizas/seguimiento";
 import { contarPorRenovar, renovacionesDe } from "@/lib/renovaciones/queries";
 import { getMisPendientesHoy } from "@/lib/tareas/queries";
 
@@ -374,13 +375,14 @@ export async function getParaHoy(user: UsuarioSesion) {
   const [tareas, renovaciones, vencidos, riesgo, semana, aclaraciones, cumples] = await Promise.all([
     getMisPendientesHoy(user, 6),
     contarPorRenovar(alcance),
-    db.recibo.count({ where: { AND: [recibosDe(alcance), { estado: "PENDIENTE", fecha_vencimiento: { lt: hoy } }] } }),
+    db.recibo.count({ where: { AND: [recibosDe(alcance), enSeguimiento(hoy), { fecha_vencimiento: { lt: hoy } }] } }),
     contarRecibosEnRiesgo(alcance, hoy),
     db.recibo.aggregate({
       where: {
         AND: [
           recibosDe(alcance),
-          { estado: "PENDIENTE", fecha_vencimiento: { gte: hoy, lte: new Date(hoy.getTime() + 7 * DIA_MS) } },
+          enSeguimiento(hoy),
+          { fecha_vencimiento: { gte: hoy, lte: new Date(hoy.getTime() + 7 * DIA_MS) } },
         ],
       },
       _count: true,

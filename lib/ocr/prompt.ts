@@ -80,6 +80,13 @@ CAMPOS GENERALES
   endoso, de inciso ni de recibo, ni el "No. de cliente".
   SURA imprime la póliza en tres casillas, "Oficina", "Ramo" y "Póliza No." (ej. 3 | 420 |
   200004966): numeroImpreso es SOLO el valor de "Póliza No." (200004966), sin oficina ni ramo.
+  Seguros Atlas imprime "Póliza: G00-4-1-32253-0-0-1" (sucursal, línea, producto, póliza, y al
+  final endoso y reexpedición): numeroImpreso son solo los cuatro primeros, "G00-4-1-32253", como
+  en sus recibos.
+  ANA Seguros rotula "No. de Póliza", "No.Cliente", "Inciso No." y "Endoso" en una columna y sus
+  valores en otra: numeroImpreso es el de "No. de Póliza" (ej. 005385116, con sus ceros), nunca el
+  "No.Cliente" (ej. 002886744), el inciso (0000) ni el endoso (000000).
+  Insignia Life imprime "Póliza: 101-0000011161-00": transcríbelo completo, con guiones y ceros.
 - vigenciaInicio / vigenciaFin: fechas "desde" y "hasta" de la vigencia, en formato YYYY-MM-DD.
   Interpreta las fechas en formato mexicano (día/mes/año), también con el mes abreviado
   ("31/mar/2026" → 2026-03-31). Ignora las horas. No confundas la vigencia con la fecha de emisión.
@@ -97,8 +104,8 @@ CAMPOS GENERALES
   pago fraccionado, derecho de póliza (gastos de expedición) e IVA. Suele rotularse "Prima neta". Es la base de la comisión del
   agente, así que nunca pongas aquí la prima total ni el importe de un recibo; si no aparece
   impresa, devuelve null (no la calcules restando conceptos).
-- formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, TRIMESTRAL o MENSUAL. Ignora el
-  medio de pago que la acompañe: "Mensual - Débito" → MENSUAL.
+- formaPago: ANUAL (también "contado" o pago único), SEMESTRAL, CUATRIMESTRAL (tres pagos al año),
+  TRIMESTRAL o MENSUAL. Ignora el medio de pago que la acompañe: "Mensual - Débito" → MENSUAL.
 
 REFERENCIA DE PAGO Y PÓLIZA VIGOR
 En algunas aseguradoras la póliza vigor se calcula a partir de la referencia de pago.
@@ -150,6 +157,8 @@ ASEGURADOS
   Esposo o esposa es Conyuge; hijo o hija es Hijo. Solo puede haber un Titular.
 - Si es una póliza individual (ej. Autos o RC Profesional), extrae al único asegurado como
   "Titular" en el arreglo.
+- En Vida Grupo cada empleado del "Registro de asegurados" es Titular de su certificado (columna
+  Parentesco "T"): extráelos a todos como "Titular"; aquí sí puede haber varios.
 - Si un dato de una persona no aparece, devuélvelo en null; no lo calcules ni lo inventes (no
   deduzcas la edad a partir de la fecha de nacimiento).
 
@@ -200,6 +209,21 @@ Cada aseguradora rotula distinto los datos del vehículo. Unifícalos así:
   la suma asegurada de esa cobertura (1230 / 24600 × 100 = 5) y anota en "advertencias" que
   venía como monto. Si no hay suma asegurada numérica para calcularlo, devuelve null.
 
+AUTOS EN ANA SEGUROS
+La carátula de ANA ("PÓLIZA DE SEGURO AUTOMÓVILES", A.N.A. Compañía de Seguros) pone todas las
+etiquetas juntas y sus valores en bloque aparte; empareja cada valor con su etiqueta en la página.
+- cliente: el "Nombre y Dirección del Contratante y/o Asegurado". Si dice "X Y/O Y", el cliente es
+  la primera persona (X); anota la segunda en "advertencias".
+- formaPago: "Cuatrimestral" → CUATRIMESTRAL (un pago "Inicial" y dos "Subsecuente").
+- primaNeta, primaTotal: "Prima Neta" y "Prima Total". Cuadre: Prima Neta + Recargos + Gastos +
+  I.V.A. − Bonificación = Prima Total. "Inicial" y "Subsecuente" son importes de recibo: no los uses.
+- marca y modelo salen de "Descripción" ("FORD FUSION SE LUXURY PLUS AUTOMATICA" → marca FORD); el
+  "Modelo" de 4 dígitos es el año. "Clave" (ej. D0280032) y "No.Motor" no son la serie.
+- uso: "Uso" o "Servicio" (PARTICULAR → Particular). cobertura: "Cobertura" (AMPLIA → Amplia).
+- deducibleDanos y deducibleRobo: el porcentaje de "Daños Materiales" y "Robo Total" (3% ¹ → 3).
+  Con "VALOR COMERCIAL" la suma de Daños Materiales va en null.
+- Las hojas siguientes repiten la carátula (copias) y traen los recibos: no sumes sus importes.
+
 VIDA (INDIVIDUAL Y GRUPO): PRIMAS, PLAN Y VIGENCIA
 En Vida la vigencia suele durar muchos años y las primas de la carátula son ANUALES: el sistema
 repite la prima cada año de la vigencia. Por eso aquí cambian las reglas de primas y vigencia:
@@ -223,6 +247,50 @@ repite la prima cada año de la vigencia. Por eso aquí cambian las reglas de pr
   ("PLAN: 0123 PERFECT LIFE 20" → "PerfectLife"), escrito como en los valores habituales si
   coincide con uno ("Meta Life Mujer" → "MetaLife Mujer"; "SEGURO BASICO ESTANDARIZADO" → "Seguro
   Básico Estandarizado de Vida"). Si es otro plan, transcríbelo tal cual.
+
+VIDA EN SEGUROS ATLAS
+La carátula de Atlas ("PÓLIZA DE SEGURO DE VIDA INDIVIDUAL") trae sus importes en un recuadro y
+atrás vienen la tabla de valores garantizados, los recibos (copia del asegurado y del agente) y
+cartas de la aseguradora:
+- primaNeta: el TOTAL de la columna "Prima" de la tabla "Coberturas y Primas" (el renglón sin
+  etiqueta al pie de la tabla; ej. 1,230.00 + 0.00 + 406.00 + 105.60 = 1,741.60). NO uses el
+  "Prima Neta" del recuadro: Atlas separa ahí el "Recargo fijo" (Prima Neta 891.60 + Recargo fijo
+  850.00 = 1,741.60). Debe coincidir con la "Prima anual" de los valores garantizados y con la
+  Prima Neta de un recibo × los recibos del año (870.80 × 2 en semestral).
+- primaTotal: el "Total a pagar" del recuadro de la carátula (anual: Prima Neta + Recargo Pago
+  Fraccionado + Recargo fijo). No el "1er.Recibo" ni el "Recibo Subsecuente".
+- vigenciaInicio / vigenciaFin: "Vigencia desde" y "Hasta" de la carátula ("las 12:00 Hrs. del
+  05/04/2023" → 2023-04-05); el "Hasta" ya es el fin del plan. No uses las vigencias de los recibos.
+- plazoPago: "Plazo pago primas años". Si es igual a "Plazo del seguro en años", devuelve null.
+- plan: el valor de "Plan" ("MAXIPRO 2002" → "MaxiPro 2002"), no el "Producto" (Tradicionales).
+- sumaAsegurada: la de la cobertura básica por fallecimiento, el primer renglón de "Coberturas y
+  Primas" ("Temporal 10", "Ordinario"…).
+- coberturasAdicionales: los demás renglones con su significado de "Notas y Aclaraciones" (ej. "DI 3
+  (muerte accidental y pérdida de miembros), BIPA (invalidez total y permanente), Ayudando en vida").
+- fumador: "Endoso para no fumadores" o "Fumador: No" en los valores garantizados → "No".
+- Beneficiarios: en la hoja "Beneficiarios" ("SOFIA PALAFOX VILLEGAS (Madre) 50.00 %"); el
+  beneficiario principal es el primero, con su parentesco y porcentaje.
+- El asegurado ("Asegurado:", con su "Nacimiento" y "Edad") puede ser distinto del contratante
+  ("Contratante y Domicilio"): va en asegurados_lista como Titular.
+- Ignora la "Comisión" de la copia del agente del recibo y el "Agente", "Idaseg" y "Control interno".
+
+VIDA GRUPO EN INSIGNIA LIFE
+La póliza de Insignia Life ("POLIZA DE SEGURO", Línea de Negocio "EXP GLOBAL POR RIESGO") es Vida
+Grupo de empleados. Trae la carátula, el "Anexo de coberturas por categorías", los recibos y el
+"Registro de asegurados":
+- primaNeta y primaTotal: "Prima Neta" y "Prima Total" de la carátula (Prima Neta + Derechos +
+  Recargos Pago Fraccionado = Prima Total); coinciden con el "Total Póliza" del registro.
+- formaPago: confírmala con la serie del recibo ("1 / 12" → MENSUAL). "AJUSTE ANUAL" es el tipo de
+  administración y "GLOBAL SIN DIVIDENDOS" el tipo de experiencia: no son la forma de pago.
+- numeroAsegurados: los "Incisos" del "Total Póliza" (o los renglones del registro).
+- reglaSuma: "CANTIDAD UNIFORME" → Uniforme. sumaAsegurada: la de la cobertura básica
+  ("TEMPORAL") por asegurado (ej. 1,000,000), no la "Total Básica Inicial" (la de todos) ni la
+  "Máxima sin requisitos de Asegurabilidad".
+- coberturasAdicionales: las demás coberturas del anexo (ej. "CAIF, AET, MTEA o pérdida de
+  miembros B, SA invalidez espera 6 M").
+- moneda: "NACIONAL" → MXN.
+- Asegurados: los del "Registro de asegurados", cada uno como Titular, con su edad, sexo (F/M) y
+  fecha de nacimiento (columnas Día Mes Año: "25 07 1999" → 1999-07-25).
 
 HOGAR: ETIQUETAS SEGÚN LA ASEGURADORA
 - domicilioRiesgo: la dirección del inmueble asegurado ("Datos del inmueble", "Ubicación",

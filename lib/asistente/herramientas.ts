@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import type { Prisma, Ramo as RamoDb } from "@/lib/generated/prisma/client";
 import { RAMO_DB, RAMOS, ramoDesdeDb, ramoLabels } from "@/lib/polizas/ramos";
+import { enSeguimiento } from "@/lib/polizas/seguimiento";
 import { sumarDias } from "@/lib/plataforma/cobranza";
 
 // Herramientas con las que el asistente consulta la cartera. Todas filtran por el alcance de la
@@ -36,7 +37,7 @@ async function resumenCartera(alcance: Alcance) {
   const hoy = diaDb(hoyISO());
   const en30 = diaDb(sumarDias(hoyISO(), 30));
   const vigentes = { ...polizasDe(alcance), canceladaAt: null, vigencia_fin: { gte: hoy } };
-  const pendientes = { AND: [recibosDe(alcance), { estado: "PENDIENTE" as const }] };
+  const pendientes = { AND: [recibosDe(alcance), enSeguimiento(hoy)] };
   const [porRamo, vencidos, porVencer, renovaciones] = await Promise.all([
     db.poliza.groupBy({ by: ["ramo"], where: vigentes, _count: true, _sum: { prima_total: true } }),
     db.recibo.aggregate({ where: { AND: [pendientes, { fecha_vencimiento: { lt: hoy } }] }, _count: true, _sum: { monto: true } }),
@@ -213,7 +214,7 @@ async function recibosPendientes(alcance: Alcance, args: Record<string, unknown>
     where: {
       AND: [
         recibosDe(alcance),
-        { estado: "PENDIENTE", poliza: { canceladaAt: null } },
+        enSeguimiento(diaDb(hoyIso)),
         { fecha_vencimiento: dias === 0 ? { lt: diaDb(hoyIso) } : { lte: diaDb(sumarDias(hoyIso, dias)) } },
       ],
     },

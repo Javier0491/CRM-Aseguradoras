@@ -3,6 +3,7 @@
 import { usaFolioInterno } from "@/lib/aseguradoras/poliza-vigor";
 import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 import {
+  admiteVariosTitulares,
   camposGenerales,
   camposSumaAsegurada,
   COBERTURAS_SI_NO_GMM,
@@ -86,7 +87,7 @@ function extraerCampos(
 }
 
 /** Lista de asegurados de la IA, en el formato del formulario. */
-function extraerAsegurados(fuente: unknown, advertencias: string[]): AseguradoValores[] {
+function extraerAsegurados(fuente: unknown, advertencias: string[], variosTitulares: boolean): AseguradoValores[] {
   if (!Array.isArray(fuente)) return [];
   const lista: AseguradoValores[] = [];
   for (const item of fuente.slice(0, MAX_ASEGURADOS)) {
@@ -118,7 +119,7 @@ function extraerAsegurados(fuente: unknown, advertencias: string[]): AseguradoVa
   }
 
   // Lo que no pase la validación se precarga igual y se avisa, como con los demás campos.
-  const errores = validarAsegurados(lista);
+  const errores = validarAsegurados(lista, { variosTitulares });
   for (const clave of Object.keys(errores)) {
     const [, i, campo] = clave.split(".");
     if (campo === "fecha_nacimiento") {
@@ -226,7 +227,7 @@ export function normalizarExtraccion(
 
   // En los ramos con censo los asegurados no se capturan uno por uno.
   const asegurados =
-    ramo && RAMOS_CON_CENSO.includes(ramo) ? [] : extraerAsegurados(obj.asegurados_lista, advertencias);
+    ramo && RAMOS_CON_CENSO.includes(ramo) ? [] : extraerAsegurados(obj.asegurados_lista, advertencias, admiteVariosTitulares(ramo));
 
   return { ramo, generales, especificos, referenciaPago, sumaAseguradaIlimitada, asegurados, advertencias };
 }

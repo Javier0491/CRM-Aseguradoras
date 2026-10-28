@@ -49,6 +49,8 @@ export const ramoLabels: Record<Ramo, string> = {
 export const FORMAS_PAGO = [
   { value: "ANUAL", label: "Anual", meses: 12 },
   { value: "SEMESTRAL", label: "Semestral", meses: 6 },
+  // Tres pagos al año (p. ej. ANA Seguros en Autos).
+  { value: "CUATRIMESTRAL", label: "Cuatrimestral", meses: 4 },
   { value: "TRIMESTRAL", label: "Trimestral", meses: 3 },
   { value: "MENSUAL", label: "Mensual", meses: 1 },
 ] as const;
@@ -76,6 +78,14 @@ export const maxLongitud = (campo: CampoDef) => (campo.type === "textarea" ? MAX
 export const RAMOS_CON_CENSO: readonly Ramo[] = ["gmm_colectivo"];
 
 /**
+ * Ramos colectivos cuyos asegurados se capturan uno por uno y cada uno es titular de su
+ * certificado (p. ej. los empleados de una póliza de Vida Grupo de Insignia Life).
+ */
+export const RAMOS_VARIOS_TITULARES: readonly Ramo[] = ["vida_grupo"];
+export const admiteVariosTitulares = (ramo: Ramo | null | undefined) =>
+  ramo != null && RAMOS_VARIOS_TITULARES.includes(ramo);
+
+/**
  * Ramos cuya prima capturada es ANUAL: la vigencia puede durar muchos años (fin del plan de
  * Vida) y la prima se repite cada año en los recibos.
  */
@@ -83,19 +93,25 @@ export const RAMOS_PRIMA_ANUAL: readonly Ramo[] = ["vida_individual", "vida_grup
 /** Acepta el ramo del formulario ("vida_individual") o el de la base de datos ("VIDA_INDIVIDUAL"). */
 export const primaEsAnual = (ramo: string) => RAMOS_PRIMA_ANUAL.some((r) => r === ramo || RAMO_DB[r] === ramo);
 
-/** Planes de Vida Individual que se sugieren al capturar (MetLife). */
-export const PLANES_VIDA = [
-  "MetaLife",
-  "MetaLife Mujer",
-  "TotaLife",
-  "PerfectLife",
-  "Horizonte",
-  "EducaLife",
-  "TempoLife",
-  "Seguro Básico Estandarizado de Vida",
-  "Met4U",
-  "Met99",
-] as const;
+/**
+ * Planes de Vida Individual que se sugieren al capturar, por aseguradora. Las claves deben
+ * coincidir con el nombre de la aseguradora registrada (prisma/seed.ts).
+ */
+export const PLANES_VIDA: Readonly<Record<string, readonly string[]>> = {
+  MetLife: [
+    "MetaLife",
+    "MetaLife Mujer",
+    "TotaLife",
+    "PerfectLife",
+    "Horizonte",
+    "EducaLife",
+    "TempoLife",
+    "Seguro Básico Estandarizado de Vida",
+    "Met4U",
+    "Met99",
+  ],
+  "Seguros Atlas": ["MaxiPro 2002"],
+};
 
 export type Opcion = { value: string; label: string };
 
@@ -126,6 +142,17 @@ export type CampoDef = {
 
 const sinAcentos = (s: string) =>
   s.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+
+/**
+ * Sugerencias del campo para la aseguradora elegida (por nombre, sin importar mayúsculas ni
+ * acentos). Si el campo no las separa por aseguradora, o esta no está en su catálogo, las generales.
+ */
+export function sugerenciasDeAseguradora(campo: CampoDef, aseguradora: string | undefined) {
+  const porAseguradora = campo.sugerenciasPorAseguradora;
+  if (!porAseguradora || !aseguradora) return campo.sugerencias;
+  const clave = Object.keys(porAseguradora).find((a) => sinAcentos(a) === sinAcentos(aseguradora));
+  return clave ? porAseguradora[clave] : campo.sugerencias;
+}
 
 /** Forma canónica de un valor si coincide con una sugerencia del campo; si no, el valor tal cual. */
 export function valorSugerido(campo: CampoDef, valor: string): string {
@@ -295,7 +322,15 @@ export const seccionesPorRamo: Record<Ramo, SeccionDef[]> = {
     {
       titulo: "Plan",
       campos: [
-        { name: "plan", label: "Plan", type: "text", required: true, placeholder: "Ej. PerfectLife", sugerencias: PLANES_VIDA },
+        {
+          name: "plan",
+          label: "Plan",
+          type: "text",
+          required: true,
+          placeholder: "Ej. PerfectLife",
+          sugerencias: [...new Set(Object.values(PLANES_VIDA).flat())],
+          sugerenciasPorAseguradora: PLANES_VIDA,
+        },
         { name: "sumaAsegurada", label: "Suma asegurada", type: "currency", required: true, placeholder: "0.00" },
         {
           name: "plazo",

@@ -212,10 +212,14 @@ function reciboListado(f: Fila, i: number): DatosPolizas["listadoRecibos"]["reci
     numero: (i % 12) + 1,
     monto: dec(f === "demo" ? 1_545.03 : ciclo([46_913_580.27, 29.17, 102_884.16], i)),
     fecha_vencimiento: dia(ciclo([-40, -5, 0, 6, 30], i)),
-    estado: ciclo(["PENDIENTE", "PENDIENTE", "PAGADO", "CONCILIADO", "CANCELADO"] as const, i),
+    estado: ciclo(["PENDIENTE", "PENDIENTE", "PAGADO", "PAGADO_MANUAL", "CONCILIADO", "CANCELADO"] as const, i),
+    // Cada tercer recibo viene de una póliza cargada tarde: histórico.
+    historico: i % 3 === 2,
     poliza: {
       id: `pol${i}`,
       numeroImpreso: numero(f, i),
+      vigencia_fin: dia(ciclo([300, 90, -20], i)),
+      canceladaAt: null,
       _count: { recibos: f === "demo" ? 12 : ciclo([360, 12, 1], i) },
       cliente: { nombre: cliente(f, i) },
       aseguradora: { ...aseguradora(f, i), diasGracia: ciclo([30, 0, 120], i) },
@@ -389,6 +393,7 @@ export function datosPoliza(c: Conjunto): DatosPoliza {
         estado: c === "vacio" ? "CANCELADO" : i < nRecibos - 3 ? ciclo(["CONCILIADO", "PAGADO"] as const, i) : ciclo(["PENDIENTE", "PENDIENTE", "CANCELADO"] as const, i),
         folio: extremo && i % 3 === 0 ? `FOL-2026-${String(i).padStart(10, "0")}-COMPLEMENTO-A` : null,
         auto_creado: extremo && i % 5 === 4,
+        historico: extremo && i < 2,
       })),
       endosos: rango(nEndosos).map((i) => ({
         id: `end${i}`,
