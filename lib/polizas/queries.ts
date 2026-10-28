@@ -189,7 +189,7 @@ export async function getPolizasExportacion(filtros: FiltrosPolizas = {}) {
       forma_pago: true,
       canceladaAt: true,
       ejecutivo: { select: { nombre: true } },
-      cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
+      cliente: { select: { id: true, nombre: true, rfc: true, telefono: true, email: true } },
       aseguradora: { select: { nombre: true } },
       asegurados: { where: { parentesco: "Titular" }, select: { nombre: true }, take: 1 },
     },

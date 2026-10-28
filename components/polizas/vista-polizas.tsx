@@ -262,7 +262,7 @@ export function VistaPolizas({
                 </div>
                 {faltaContacto > 0 && (
                   <Button asChild size="sm" variant="outline">
-                    <a href={hrefSinContacto} download title="Excel con las pólizas a las que les falta contacto">
+                    <a href={hrefSinContacto} download title="Excel con los clientes a los que les falta contacto, una vez cada uno">
                       <Download /> Descargar Excel
                     </a>
                   </Button>
