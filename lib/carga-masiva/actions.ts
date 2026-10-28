@@ -8,6 +8,7 @@ import { validarContacto } from "@/lib/clientes/reglas";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import { registrarPoliza, type GuardarPolizaResultado } from "@/lib/polizas/guardar";
+import { RAMOS_SIN_CONTACTO_DB } from "@/lib/polizas/ramos";
 import { normalizarTelefono } from "@/lib/polizas/validacion";
 
 const SESION = "Tu sesión expiró o no tienes permiso para la carga masiva.";
@@ -60,14 +61,21 @@ export type ContactoCargado = {
   polizas: number;
 };
 
-/** Contacto de los clientes de las pólizas que se cargaron, para completar los que falten. */
+/**
+ * Contacto de los clientes de las pólizas que se cargaron, para completar los que falten. Deja
+ * fuera a los que solo tienen pólizas colectivas, que se manejan sin contacto.
+ */
 export async function contactosDeClientes(ids: unknown): Promise<ContactoCargado[]> {
   const user = await getAdmin();
   if (!user || !Array.isArray(ids)) return [];
   const validos = [...new Set(ids.filter((id): id is string => typeof id === "string" && ID.test(id)))].slice(0, 5_000);
   if (validos.length === 0) return [];
   const clientes = await db.cliente.findMany({
-    where: { agenciaId: user.agenciaId, id: { in: validos } },
+    where: {
+      agenciaId: user.agenciaId,
+      id: { in: validos },
+      polizas: { some: { ramo: { notIn: [...RAMOS_SIN_CONTACTO_DB] } } },
+    },
     select: { id: true, nombre: true, rfc: true, telefono: true, email: true, _count: { select: { polizas: true } } },
     orderBy: { nombre: "asc" },
   });

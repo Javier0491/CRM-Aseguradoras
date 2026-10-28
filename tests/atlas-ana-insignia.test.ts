@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { normalizarExtraccion } from "@/lib/ocr/normalizar";
 import { aseguradoVacio, validarAsegurados } from "@/lib/polizas/asegurados";
+import { requiereContacto } from "@/lib/polizas/ramos";
 import { generarRecibos } from "@/lib/polizas/recibos";
 import { mesesPorFormaPago } from "@/lib/polizas/validacion";
 
@@ -62,5 +63,14 @@ describe("Vida Grupo (Insignia Life): cada empleado es titular", () => {
     );
     assert.deepEqual(r.asegurados.map((a) => a.parentesco), ["Titular", "Titular"]);
     assert.ok(!r.advertencias.some((a) => a.includes("titular")));
+  });
+});
+
+describe("pólizas colectivas sin contacto", () => {
+  it("GMM Colectivo y Vida Grupo no piden teléfono ni correo", () => {
+    for (const ramo of ["gmm_colectivo", "vida_grupo", "GMM_COLECTIVO", "VIDA_GRUPO"]) assert.equal(requiereContacto(ramo), false);
+  });
+  it("los demás ramos sí", () => {
+    for (const ramo of ["autos", "GMM_INDIVIDUAL", "VIDA_INDIVIDUAL"]) assert.equal(requiereContacto(ramo), true);
   });
 });

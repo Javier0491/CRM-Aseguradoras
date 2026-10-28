@@ -7,7 +7,7 @@ import { getAgenciaId } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import { hoyISO } from "@/lib/format";
 import type { Prisma, Ramo } from "@/lib/generated/prisma/client";
-import type { Opcion } from "@/lib/polizas/ramos";
+import { RAMOS_SIN_CONTACTO_DB, type Opcion } from "@/lib/polizas/ramos";
 import { enSeguimiento } from "@/lib/polizas/seguimiento";
 
 export const LIMITE_LISTADO = 200;
@@ -70,8 +70,14 @@ const WHERE_ESTATUS: Record<Exclude<EstatusPolizas, "">, () => Prisma.PolizaWher
   canceladas: () => ({ canceladaAt: { not: null } }),
 };
 
+/** Las colectivas (GMM Colectivo, Vida Grupo) no llevan contacto: nunca cuentan como "falta contacto". */
+const REQUIERE_CONTACTO = {
+  ramo: { notIn: [...RAMOS_SIN_CONTACTO_DB] },
+} as const satisfies Prisma.PolizaWhereInput;
+
 /** Cliente sin teléfono o sin correo: se capturó sin ellos y hay que completarlos. */
 const CLIENTE_SIN_CONTACTO: Prisma.PolizaWhereInput = {
+  ...REQUIERE_CONTACTO,
   cliente: { OR: [{ telefono: "" }, { email: "" }] },
 };
 
@@ -86,9 +92,9 @@ export const esFiltroContacto = (v: unknown): v is FiltroContacto =>
 
 const WHERE_CONTACTO: Record<FiltroContacto, Prisma.PolizaWhereInput> = {
   falta: CLIENTE_SIN_CONTACTO,
-  telefono: { cliente: { telefono: "", NOT: { email: "" } } },
-  correo: { cliente: { email: "", NOT: { telefono: "" } } },
-  ambos: { cliente: { telefono: "", email: "" } },
+  telefono: { ...REQUIERE_CONTACTO, cliente: { telefono: "", NOT: { email: "" } } },
+  correo: { ...REQUIERE_CONTACTO, cliente: { email: "", NOT: { telefono: "" } } },
+  ambos: { ...REQUIERE_CONTACTO, cliente: { telefono: "", email: "" } },
 };
 
 /** Filtro del listado de pólizas, siempre acotado a lo que ve la sesión. Lo comparten el listado y su exportación. */

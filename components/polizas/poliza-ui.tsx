@@ -3,6 +3,7 @@ import { normalizarHex } from "@/lib/color";
 import type { EstadoRecibo, FormaPago, Ramo } from "@/lib/generated/prisma/client";
 import { diasDesdeHoy, formatFecha, formatNumero } from "@/lib/format";
 import { situacionCobro } from "@/lib/polizas/gracia";
+import { requiereContacto } from "@/lib/polizas/ramos";
 
 export const ramoLabel: Record<Ramo, string> = {
   AUTOS: "Autos",
@@ -253,11 +254,14 @@ export function AseguradosResumen({
   );
 }
 
-/** Aviso de un cliente capturado sin teléfono o sin correo. No muestra nada si tiene ambos. */
-export function FaltaContacto({ telefono, email }: { telefono: string; email: string }) {
+/**
+ * Aviso de un cliente capturado sin teléfono o sin correo. No muestra nada si tiene ambos ni en
+ * las pólizas colectivas, que se manejan sin contacto.
+ */
+export function FaltaContacto({ telefono, email, ramo }: { telefono: string; email: string; ramo: string }) {
   const sinTelefono = !telefono.trim();
   const sinCorreo = !email.trim();
-  if (!sinTelefono && !sinCorreo) return null;
+  if ((!sinTelefono && !sinCorreo) || !requiereContacto(ramo)) return null;
   const label = sinTelefono && sinCorreo ? "Falta contacto" : sinTelefono ? "Falta teléfono" : "Falta correo";
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">

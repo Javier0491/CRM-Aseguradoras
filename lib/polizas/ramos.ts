@@ -86,6 +86,16 @@ export const admiteVariosTitulares = (ramo: Ramo | null | undefined) =>
   ramo != null && RAMOS_VARIOS_TITULARES.includes(ramo);
 
 /**
+ * Pólizas colectivas: se emiten a nombre de la empresa y se manejan sin teléfono ni correo del
+ * cliente, así que no llevan el aviso «Falta contacto».
+ */
+export const RAMOS_SIN_CONTACTO: readonly Ramo[] = ["gmm_colectivo", "vida_grupo"];
+/** Valores del enum de la base de datos, para filtrar las consultas. */
+export const RAMOS_SIN_CONTACTO_DB = RAMOS_SIN_CONTACTO.map((r) => RAMO_DB[r]);
+/** Acepta el ramo del formulario ("vida_grupo") o el de la base de datos ("VIDA_GRUPO"). */
+export const requiereContacto = (ramo: string) => !RAMOS_SIN_CONTACTO.some((r) => r === ramo || RAMO_DB[r] === ramo);
+
+/**
  * Ramos cuya prima capturada es ANUAL: la vigencia puede durar muchos años (fin del plan de
  * Vida) y la prima se repite cada año en los recibos.
  */
@@ -175,8 +185,8 @@ export const normalizarOpcion = (o: string | Opcion): Opcion =>
 export const camposGenerales: CampoDef[] = [
   { name: "cliente", label: "Cliente / Contratante", type: "text", required: true, placeholder: "Nombre o razón social", wide: true },
   { name: "rfcCliente", label: "RFC del cliente", type: "text", required: true, placeholder: "12 o 13 caracteres", hint: "Se usa para identificar al cliente si ya existe." },
-  { name: "telefono", label: "Teléfono", type: "tel", placeholder: "10 dígitos", hint: "Opcional: si falta, la póliza queda marcada como «Falta contacto»." },
-  { name: "email", label: "Correo electrónico", type: "email", placeholder: "cliente@correo.mx", wide: true, hint: "Opcional: si falta, la póliza queda marcada como «Falta contacto»." },
+  { name: "telefono", label: "Teléfono", type: "tel", placeholder: "10 dígitos", hint: "Opcional: si falta, la póliza queda marcada como «Falta contacto» (salvo las colectivas)." },
+  { name: "email", label: "Correo electrónico", type: "email", placeholder: "cliente@correo.mx", wide: true, hint: "Opcional: si falta, la póliza queda marcada como «Falta contacto» (salvo las colectivas)." },
   { name: "aseguradora", label: "Aseguradora", type: "select", required: true, options: [] },
   { name: "numeroImpreso", label: "Número impreso", type: "text", required: true, placeholder: "Ej. AUT-987654-03", hint: "Tal como aparece en la carátula." },
   { name: "polizaVigor", label: "Póliza vigor", type: "text", required: true, placeholder: "Ej. 987654", hint: "Clave de cobranza; se calcula desde el número impreso.", derivado: true },

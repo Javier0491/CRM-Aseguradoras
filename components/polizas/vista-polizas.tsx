@@ -372,7 +372,7 @@ export function VistaPolizas({
                                     {p.cliente.nombre}
                                   </p>
                                   <p className="font-mono text-[11px] text-muted-foreground">{p.cliente.rfc}</p>
-                                  <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} />
+                                  <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} ramo={p.ramo} />
                                 </div>
                               </div>
                             </TableCell>
