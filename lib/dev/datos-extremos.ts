@@ -197,6 +197,7 @@ function polizaListado(f: Fila, i: number): DatosPolizas["listado"]["polizas"][n
     forma_pago: ciclo(FORMAS, i),
     created_at: dia(-300 + i),
     canceladaAt: f === "extremos" && i % 5 === 1 ? dia(-20) : null,
+    agente: f === "extremos" && i % 4 === 2 ? "Agente Promotor con un nombre larguísimo de Prueba" : null,
     ejecutivo: ejecutivo(f, i),
     cliente: { nombre: cliente(f, i), rfc: ciclo(RFCS, i), telefono: telefono(f, i), email: correo(f, i) },
     aseguradora: aseguradora(f, i),

@@ -70,9 +70,13 @@ const WHERE_ESTATUS: Record<Exclude<EstatusPolizas, "">, () => Prisma.PolizaWher
   canceladas: () => ({ canceladaAt: { not: null } }),
 };
 
-/** Las colectivas (GMM Colectivo, Vida Grupo) no llevan contacto: nunca cuentan como "falta contacto". */
+/**
+ * Las colectivas (GMM Colectivo, Vida Grupo) no llevan contacto, y las de agente las atiende su
+ * agente (su expediente está completo): nunca cuentan como "falta contacto".
+ */
 const REQUIERE_CONTACTO = {
   ramo: { notIn: [...RAMOS_SIN_CONTACTO_DB] },
+  agente: null,
 } as const satisfies Prisma.PolizaWhereInput;
 
 /** Cliente sin teléfono o sin correo: se capturó sin ellos y hay que completarlos. */
@@ -153,6 +157,7 @@ export async function getPolizasListado(filtros: FiltrosPolizas = {}) {
         forma_pago: true,
         created_at: true,
         canceladaAt: true,
+        agente: true,
         ejecutivo: { select: { nombre: true } },
         cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
         aseguradora: { select: { nombre: true, color_hex: true } },

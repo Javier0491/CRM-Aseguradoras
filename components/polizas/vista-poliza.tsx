@@ -77,6 +77,11 @@ import type { OpcionEquipo } from "@/lib/usuarios/queries";
 import { cn } from "@/lib/utils";
 
 /** Dato de contacto que no se capturó: se resalta para completarlo. */
+/** Dato de contacto vacío en una póliza de agente: no es un pendiente, lo tiene el agente. */
+function SinContactoAgente() {
+  return <span className="text-xs text-muted-foreground">Lo atiende el agente</span>;
+}
+
 function SinDato({ children }: { children: React.ReactNode }) {
   return <span className="font-sans font-medium text-warning">{children}</span>;
 }
@@ -132,8 +137,18 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
       ),
     },
     { label: "RFC", valor: poliza.cliente.rfc, mono: true },
-    { label: "Teléfono", valor: poliza.cliente.telefono || <SinDato>Falta teléfono</SinDato>, mono: true },
-    { label: "Correo", valor: poliza.cliente.email || <SinDato>Falta correo · complétalo en Editar</SinDato> },
+    {
+      label: "Teléfono",
+      // Las pólizas de agente las atiende su agente: no se marca como pendiente.
+      valor: poliza.cliente.telefono || (poliza.agente ? <SinContactoAgente /> : <SinDato>Falta teléfono</SinDato>),
+      mono: true,
+    },
+    {
+      label: "Correo",
+      valor:
+        poliza.cliente.email ||
+        (poliza.agente ? <SinContactoAgente /> : <SinDato>Falta correo · complétalo en Editar</SinDato>),
+    },
     { label: "Vigencia", valor: `${formatFecha(poliza.vigencia_inicio)} – ${formatFecha(poliza.vigencia_fin)}` },
     { label: "Ejecutivo", valor: poliza.ejecutivo?.nombre ?? <span className="text-muted-foreground">Sin asignar</span> },
     { label: "Agente", valor: poliza.agente ?? <span className="text-muted-foreground">No es de agente</span> },

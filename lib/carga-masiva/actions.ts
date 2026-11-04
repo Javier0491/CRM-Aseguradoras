@@ -63,7 +63,7 @@ export type ContactoCargado = {
 
 /**
  * Contacto de los clientes de las pólizas que se cargaron, para completar los que falten. Deja
- * fuera a los que solo tienen pólizas colectivas, que se manejan sin contacto.
+ * fuera a los que solo tienen pólizas colectivas o de agente, que se manejan sin contacto.
  */
 export async function contactosDeClientes(ids: unknown): Promise<ContactoCargado[]> {
   const user = await getAdmin();
@@ -74,7 +74,7 @@ export async function contactosDeClientes(ids: unknown): Promise<ContactoCargado
     where: {
       agenciaId: user.agenciaId,
       id: { in: validos },
-      polizas: { some: { ramo: { notIn: [...RAMOS_SIN_CONTACTO_DB] } } },
+      polizas: { some: { ramo: { notIn: [...RAMOS_SIN_CONTACTO_DB] }, agente: null } },
     },
     select: { id: true, nombre: true, rfc: true, telefono: true, email: true, _count: { select: { polizas: true } } },
     orderBy: { nombre: "asc" },

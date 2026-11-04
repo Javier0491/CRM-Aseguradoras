@@ -255,13 +255,23 @@ export function AseguradosResumen({
 }
 
 /**
- * Aviso de un cliente capturado sin teléfono o sin correo. No muestra nada si tiene ambos ni en
- * las pólizas colectivas, que se manejan sin contacto.
+ * Aviso de un cliente capturado sin teléfono o sin correo. No muestra nada si tiene ambos, en las
+ * pólizas colectivas, que se manejan sin contacto, ni en las de agente, que las atiende su agente.
  */
-export function FaltaContacto({ telefono, email, ramo }: { telefono: string; email: string; ramo: string }) {
+export function FaltaContacto({
+  telefono,
+  email,
+  ramo,
+  agente,
+}: {
+  telefono: string;
+  email: string;
+  ramo: string;
+  agente?: string | null;
+}) {
   const sinTelefono = !telefono.trim();
   const sinCorreo = !email.trim();
-  if ((!sinTelefono && !sinCorreo) || !requiereContacto(ramo)) return null;
+  if ((!sinTelefono && !sinCorreo) || !requiereContacto(ramo) || agente) return null;
   const label = sinTelefono && sinCorreo ? "Falta contacto" : sinTelefono ? "Falta teléfono" : "Falta correo";
   return (
     <span className="inline-flex items-center gap-1 rounded-md border border-warning/30 bg-warning/10 px-1.5 py-0.5 text-[11px] font-medium text-warning">

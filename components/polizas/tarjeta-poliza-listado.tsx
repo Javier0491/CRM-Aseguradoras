@@ -138,7 +138,7 @@ export function TarjetaPolizaListado({
                 </span>
               )}
               <span className="ml-auto">
-                <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} ramo={p.ramo} />
+                <FaltaContacto telefono={p.cliente.telefono} email={p.cliente.email} ramo={p.ramo} agente={p.agente} />
               </span>
             </div>
           )}
