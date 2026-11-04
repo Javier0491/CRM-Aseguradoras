@@ -196,6 +196,8 @@ export const camposGenerales: CampoDef[] = [
   { name: "primaNeta", label: "Prima neta", type: "currency", required: true, placeholder: "0.00", hint: "Sin IVA, recargos ni derecho de póliza. Es la base de la comisión." },
   { name: "formaPago", label: "Forma de pago", type: "select", required: true, options: FORMAS_PAGO.map(({ value, label }) => ({ value, label })) },
   { name: "comisionPersonalizadaPct", label: "Comisión personalizada (%)", type: "percent", placeholder: "Opcional", hint: "Solo si la póliza negoció un % distinto a la matriz de comisiones.", sinOcr: true },
+  // Se muestra solo con el botón «Póliza de agente»; vacío = la póliza es de la agencia.
+  { name: "agente", label: "Nombre del agente", type: "text", placeholder: "Nombre del agente", sinOcr: true },
 ];
 
 /**

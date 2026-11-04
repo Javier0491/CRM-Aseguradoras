@@ -333,6 +333,7 @@ export function datosPoliza(c: Conjunto): DatosPoliza {
       forma_pago: c === "masivo" || c === "extremos" ? "MENSUAL" : "TRIMESTRAL",
       created_at: dia(-340),
       comision_personalizada_pct: extremo ? dec(12.75) : null,
+      agente: extremo ? "María Guadalupe Hernández de la Fuente y Villaseñor (Agente Promotor Asociado)" : c === "vacio" ? null : "Juan Pérez",
       datos_ramo:
         f === "demo"
           ? { sumaAseguradaValor: "5000000", sumaAseguradaUnidad: "MXN", deducibleValor: "15000", deducibleUnidad: "MXN", coaseguro: "10", otrasCoberturas: "Emergencia en el extranjero, Maternidad" }

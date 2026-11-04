@@ -11,6 +11,7 @@ import {
   PieChart,
   TrendingUp,
   Users,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -42,7 +43,12 @@ import {
   PERIODOS_REPORTE,
   type PeriodoReporte,
 } from "@/lib/reportes/periodos";
-import { DIAS_POR_VENCER_REPORTE, getReportes } from "@/lib/reportes/queries";
+import {
+  DIAS_POR_VENCER_REPORTE,
+  getPolizasDelAnio,
+  getReportes,
+  LIMITE_POLIZAS_ANIO,
+} from "@/lib/reportes/queries";
 
 export const metadata: Metadata = {
   title: "Reportes",
@@ -148,8 +154,10 @@ function DistribucionCard({
 
 export default async function ReportesPage({ searchParams }: PageProps<"/reportes">) {
   await requireUsuarioCrm();
-  const { periodo: periodoParam } = await searchParams;
+  const { periodo: periodoParam, anio: anioParam } = await searchParams;
   const periodo: PeriodoReporte = esPeriodoReporte(periodoParam) ? periodoParam : PERIODO_REPORTE_PREDETERMINADO;
+  // Año elegido en "Crecimiento por año": se listan sus pólizas.
+  const anioNum = typeof anioParam === "string" && /^\d{4}$/.test(anioParam) ? Number(anioParam) : null;
 
   const {
     hoy,
@@ -163,6 +171,10 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
     primaPorVencer,
     crecimiento,
   } = await getReportes(periodo);
+  const anioElegido = anioNum !== null && crecimiento.some((c) => c.anio === anioNum) ? anioNum : null;
+  const delAnio = anioElegido !== null ? await getPolizasDelAnio(anioElegido) : null;
+  const periodoUrl = periodo === PERIODO_REPORTE_PREDETERMINADO ? undefined : periodo;
+  const cerrarAnioHref = `/reportes${periodoUrl ? `?periodo=${periodoUrl}` : ""}#crecimiento`;
   const fechaHoy = new Date(`${hoy}T00:00:00Z`);
   const nombrePeriodo = {
     mes: nombreMes.format(fechaHoy),
@@ -264,10 +276,92 @@ export default async function ReportesPage({ searchParams }: PageProps<"/reporte
           {crecimiento.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Todavía no hay pólizas emitidas.</p>
           ) : (
-            <CrecimientoChart datos={crecimiento} />
+            <CrecimientoChart datos={crecimiento} anioSeleccionado={anioElegido ?? undefined} periodo={periodoUrl} />
           )}
         </CardContent>
       </Card>
+
+      {anioElegido !== null && delAnio && (
+        <Card id="polizas-anio" className="animate-entrar scroll-mt-20 gap-0 pb-0">
+          <CardHeader className="pb-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="size-4 text-primary" /> Pólizas de {anioElegido}
+                </CardTitle>
+                <CardDescription>
+                  {polizasTexto(delAnio.total)} · {formatMoneda(delAnio.prima)} de prima emitida. Pólizas cuya vigencia
+                  inicia en {anioElegido}
+                  {anioElegido === new Date(`${hoy}T00:00:00Z`).getUTCFullYear() ? " (hasta hoy)" : ""}.
+                </CardDescription>
+              </div>
+              <Button asChild variant="ghost" size="sm" className="shrink-0 text-muted-foreground">
+                <Link href={cerrarAnioHref} scroll={false}>
+                  <X /> Cerrar
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          {delAnio.polizas.length === 0 ? (
+            <p className="px-6 pb-8 text-center text-sm text-muted-foreground">No hay pólizas emitidas en {anioElegido}.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="pl-6">Póliza</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Aseguradora</TableHead>
+                  <TableHead>Ejecutivo</TableHead>
+                  <TableHead>Agente</TableHead>
+                  <TableHead>Vigencia</TableHead>
+                  <TableHead className="pr-6 text-right">Prima</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {delAnio.polizas.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="pl-6">
+                      <Link href={`/polizas/${p.id}`} className="font-mono text-xs hover:text-primary hover:underline">
+                        {p.numeroImpreso}
+                      </Link>
+                      <div className="mt-1 flex flex-wrap items-center gap-1">
+                        <RamoBadge ramo={p.ramo} />
+                        {p.canceladaAt && <span className="text-[11px] text-destructive">Cancelada</span>}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <p className="truncate font-medium" title={p.cliente.nombre}>
+                        {p.cliente.nombre}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <AseguradoraTag nombre={p.aseguradora.nombre} color={p.aseguradora.color_hex} />
+                    </TableCell>
+                    <TableCell className="max-w-[140px] truncate text-sm">
+                      {p.ejecutivo?.nombre ?? <span className="text-xs text-muted-foreground">Sin asignar</span>}
+                    </TableCell>
+                    <TableCell className="max-w-[140px] truncate text-sm" title={p.agente ?? undefined}>
+                      {p.agente ?? <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell className="text-xs whitespace-nowrap text-muted-foreground tabular-nums">
+                      {formatFecha(p.vigencia_inicio)} – {formatFecha(p.vigencia_fin)}
+                    </TableCell>
+                    <TableCell className="pr-6 text-right font-medium tabular-nums">
+                      {formatMoneda(p.prima_total)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {delAnio.total > delAnio.polizas.length && (
+            <p className="border-t px-6 py-3 text-xs text-muted-foreground">
+              Mostrando {formatNumero(delAnio.polizas.length)} de {formatNumero(delAnio.total)} pólizas (máximo{" "}
+              {formatNumero(LIMITE_POLIZAS_ANIO)}).
+            </p>
+          )}
+        </Card>
+      )}
 
       <div id="distribucion" className="grid scroll-mt-20 items-start gap-6 lg:grid-cols-2">
         <DistribucionCard

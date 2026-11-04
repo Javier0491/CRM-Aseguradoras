@@ -279,6 +279,7 @@ export async function getPolizaDetalle(id: string) {
       forma_pago: true,
       created_at: true,
       comision_personalizada_pct: true,
+      agente: true,
       datos_ramo: true,
       sumaAseguradaIlimitada: true,
       canceladaAt: true,

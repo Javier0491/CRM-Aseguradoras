@@ -15,6 +15,7 @@ import {
   Pencil,
   RefreshCcw,
   ShieldCheck,
+  UserRound,
 } from "lucide-react";
 
 import { ArchivoUploader } from "@/components/archivos/archivo-uploader";
@@ -135,6 +136,7 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
     { label: "Correo", valor: poliza.cliente.email || <SinDato>Falta correo · complétalo en Editar</SinDato> },
     { label: "Vigencia", valor: `${formatFecha(poliza.vigencia_inicio)} – ${formatFecha(poliza.vigencia_fin)}` },
     { label: "Ejecutivo", valor: poliza.ejecutivo?.nombre ?? <span className="text-muted-foreground">Sin asignar</span> },
+    { label: "Agente", valor: poliza.agente ?? <span className="text-muted-foreground">No es de agente</span> },
     { label: "Prima total", valor: formatMoneda(Number(poliza.prima_total)) },
     {
       label: "Prima neta",
@@ -221,6 +223,11 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
             <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
               <AseguradoraTag nombre={poliza.aseguradora.nombre} color={poliza.aseguradora.color_hex} />
               <Badge variant="outline">{ramoLabel[poliza.ramo]}</Badge>
+              {poliza.agente && (
+                <Badge variant="outline" className="max-w-full border-primary/40 text-primary" title="Póliza de agente">
+                  <UserRound /> <span className="truncate">Agente: {poliza.agente}</span>
+                </Badge>
+              )}
               <Button asChild variant="outline" size="sm">
                 <Link href={`/polizas/${poliza.id}/editar`}>
                   <Pencil /> Editar

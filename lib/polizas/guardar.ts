@@ -120,6 +120,7 @@ function columnasPoliza(input: PolizaInput, g: Valores) {
     comision_personalizada_pct: g.comisionPersonalizadaPct
       ? parseNumero(g.comisionPersonalizadaPct).toFixed(2)
       : null,
+    agente: g.agente?.trim() || null,
   };
 }
 
@@ -423,6 +424,7 @@ const ETIQUETAS_CAMBIO: Record<string, string> = {
   forma_pago: "forma de pago",
   sumaAseguradaIlimitada: "suma ilimitada",
   comision_personalizada_pct: "comisión personalizada",
+  agente: "agente",
   datos_ramo: "datos del ramo",
   cliente_id: "cliente",
   ejecutivoId: "ejecutivo",
@@ -469,6 +471,7 @@ export async function actualizarPoliza(
       forma_pago: true,
       sumaAseguradaIlimitada: true,
       comision_personalizada_pct: true,
+      agente: true,
       datos_ramo: true,
       cliente_id: true,
       ejecutivoId: true,

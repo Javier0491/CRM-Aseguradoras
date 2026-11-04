@@ -508,7 +508,7 @@ function ResultadoExtraccion({
 }) {
   const filas = [
     { campo: "ramo", label: "Ramo", valor: datos.ramo ? ramoLabels[datos.ramo] : undefined },
-    ...camposGenerales.map((c) => ({
+    ...camposGenerales.filter((c) => c.name !== "agente").map((c) => ({
       campo: c.name,
       label: c.name === "polizaVigor" ? etiquetaPolizaVigor(datos.generales.aseguradora) : c.label,
       valor: datos.generales[c.name] ? mostrarValor(c.name, datos.generales[c.name]) : undefined,

@@ -335,6 +335,8 @@ model Poliza {
   // Porcentaje de comisión negociado para esta póliza (p. ej. colectivos de MetLife cuya
   // comisión depende de la edad de los integrantes). Si existe, reemplaza al EsquemaComision.
   comision_personalizada_pct Decimal?  @db.Decimal(5, 2)
+  // Póliza de agente: nombre del agente que la trae (null = es de la agencia).
+  agente                     String?
   created_at                 DateTime  @default(now())
 
   // Ejecutivo responsable de la póliza (cartera y producción por ejecutivo).

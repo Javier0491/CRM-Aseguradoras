@@ -203,6 +203,8 @@ type FormValues = {
   expediente: File | null;
   /** Ejecutivo responsable ("" = sin asignar). */
   ejecutivoId: string;
+  /** Botón «Póliza de agente»: con él se pide el nombre del agente (generales.agente). */
+  deAgente: boolean;
 };
 
 /** La bandera solo cuenta en ramos que tienen suma asegurada. */
@@ -269,6 +271,7 @@ function valoresIniciales(inicial?: PolizaFormInicial, ejecutivoPredeterminado =
     sumaIlimitada: inicial?.sumaAseguradaIlimitada ?? false,
     expediente: null,
     ejecutivoId: inicial?.ejecutivoId ?? ejecutivoPredeterminado,
+    deAgente: Boolean(inicial?.generales?.agente?.trim()),
   };
 }
 
@@ -276,7 +279,8 @@ function valoresIniciales(inicial?: PolizaFormInicial, ejecutivoPredeterminado =
 function datosDelFormulario(values: FormValues, conEjecutivo: boolean) {
   return {
     ramo: values.ramo,
-    generales: values.generales,
+    // Sin el botón de agente la póliza es de la agencia: el nombre no se guarda.
+    generales: { ...values.generales, agente: values.deAgente ? (values.generales.agente ?? "") : "" },
     especificos: values.especificos[values.ramo],
     // En los ramos con censo los asegurados no se capturan uno por uno.
     asegurados: RAMOS_CON_CENSO.includes(values.ramo) ? [] : values.asegurados,
@@ -376,6 +380,7 @@ export function PolizaForm({
         aseguradoras.map((a) => a.value),
         esSumaIlimitada(values)
       );
+      if (values.deAgente && !values.generales.agente?.trim()) errores.agente = "Escribe el nombre del agente";
       // En los ramos con censo la lista no se usa, así que no se valida.
       const erroresAsegurados = RAMOS_CON_CENSO.includes(values.ramo)
         ? {}
@@ -440,6 +445,7 @@ export function PolizaForm({
   const conCenso = RAMOS_CON_CENSO.includes(ramo);
   const sumaDelRamo = SUMA_ASEGURADA[ramo];
   const sumaIlimitada = useWatch({ control, name: "sumaIlimitada" }) && Boolean(sumaDelRamo);
+  const deAgente = useWatch({ control, name: "deAgente" });
 
   // El plazo de Vida no se captura: son los años entre el inicio y el fin de vigencia.
   const vigenciaInicio = useWatch({ control, name: "generales.vigenciaInicio" }) ?? "";
@@ -521,7 +527,8 @@ export function PolizaForm({
     const campo = generalesDefs.find((c) => c.name === n)!;
     return primaEsAnual(ramo) ? { ...campo, ...PRIMAS_ANUALES[n] } : campo;
   });
-  const camposContratante = generalesDefs.filter((c) => !CAMPOS_POLIZA.includes(c.name));
+  const campoAgente = generalesDefs.find((c) => c.name === "agente")!;
+  const camposContratante = generalesDefs.filter((c) => !CAMPOS_POLIZA.includes(c.name) && c.name !== "agente");
 
   function limpiarAvisos() {
     setErrorGeneral(null);
@@ -810,6 +817,33 @@ export function PolizaForm({
                     )}
                   />
                 )}
+                <Controller
+                  name="deAgente"
+                  control={control}
+                  render={({ field }) => (
+                    <div className="space-y-2">
+                      <Label htmlFor="poliza-de-agente" className="text-xs">
+                        Póliza de agente
+                      </Label>
+                      <div className="flex h-9 items-center gap-2">
+                        <Switch
+                          id="poliza-de-agente"
+                          ref={field.ref}
+                          checked={field.value}
+                          onCheckedChange={(v) => {
+                            field.onChange(v);
+                            if (!v) clearErrors("generales.agente");
+                            limpiarAvisos();
+                          }}
+                          disabled={bloqueado}
+                        />
+                        <span className="text-sm text-muted-foreground">{field.value ? "Sí, es de agente" : "No"}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Actívalo si la póliza la trae un agente.</p>
+                    </div>
+                  )}
+                />
+                {deAgente && renderGeneral({ ...campoAgente, required: true })}
               </FormSection>
 
               <FormSection titulo="Contratante">{camposContratante.map(renderGeneral)}</FormSection>

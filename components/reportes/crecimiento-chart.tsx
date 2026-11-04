@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useReducedMotion } from "framer-motion";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -47,13 +49,33 @@ export function Crecimiento({ valor, className }: { valor: number | null; classN
   );
 }
 
+/** Enlace al reporte con las pólizas de `anio` abiertas (conserva el periodo elegido). */
+export function hrefAnioReporte(anio: number, periodo?: string) {
+  const params = new URLSearchParams();
+  if (periodo) params.set("periodo", periodo);
+  params.set("anio", String(anio));
+  return `/reportes?${params.toString()}#polizas-anio`;
+}
+
 /**
  * Prima emitida por año en columnas de una sola serie (el acento corporativo). El año en curso va
  * más tenue porque solo cuenta hasta hoy. Las pólizas y el crecimiento van en el tooltip y en la
- * tabla de abajo: una sola escala en el eje.
+ * tabla de abajo: una sola escala en el eje. Al picar un año (columna o renglón) se abren sus pólizas.
  */
-export function CrecimientoChart({ datos }: { datos: AnioCrecimiento[] }) {
+export function CrecimientoChart({
+  datos,
+  anioSeleccionado,
+  periodo,
+}: {
+  datos: AnioCrecimiento[];
+  /** Año cuyas pólizas se están mostrando: su columna queda resaltada. */
+  anioSeleccionado?: number;
+  /** Periodo del reporte distinto al predeterminado, para conservarlo al elegir un año. */
+  periodo?: string;
+}) {
   const reducir = useReducedMotion();
+  const router = useRouter();
+  const abrirAnio = (anio: number) => router.push(hrefAnioReporte(anio, periodo));
 
   return (
     <div className="space-y-4">
@@ -88,9 +110,19 @@ export function CrecimientoChart({ datos }: { datos: AnioCrecimiento[] }) {
               animationBegin={250}
               animationDuration={800}
               animationEasing="ease-out"
+              cursor="pointer"
+              onClick={(_, i) => {
+                const d = datos[i];
+                if (d) abrirAnio(d.anio);
+              }}
             >
               {datos.map((d) => (
-                <Cell key={d.anio} fill="var(--primary)" fillOpacity={d.enCurso ? 0.5 : 1} />
+                <Cell
+                  key={d.anio}
+                  fill="var(--primary)"
+                  // Con un año elegido, los demás se atenúan.
+                  fillOpacity={(d.enCurso ? 0.5 : 1) * (anioSeleccionado && anioSeleccionado !== d.anio ? 0.35 : 1)}
+                />
               ))}
               {datos.length <= MAX_ETIQUETAS && (
                 <LabelList
@@ -118,9 +150,19 @@ export function CrecimientoChart({ datos }: { datos: AnioCrecimiento[] }) {
           </thead>
           <tbody className="tabular-nums">
             {[...datos].reverse().map((d) => (
-              <tr key={d.anio} className="border-b last:border-0">
+              <tr
+                key={d.anio}
+                className={cn("border-b last:border-0", d.anio === anioSeleccionado && "bg-primary/5 font-medium")}
+              >
                 <td className="py-1.5">
-                  {d.anio}
+                  <Link
+                    href={hrefAnioReporte(d.anio, periodo)}
+                    title={`Ver las pólizas de ${d.anio}`}
+                    aria-current={d.anio === anioSeleccionado ? "true" : undefined}
+                    className="rounded-sm text-primary hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+                  >
+                    {d.anio}
+                  </Link>
                   {d.enCurso && <span className="ml-1.5 text-muted-foreground">a la fecha*</span>}
                 </td>
                 <td className="py-1.5 text-right">{formatNumero(d.polizas)}</td>
@@ -156,6 +198,7 @@ function TooltipCrecimiento({ active, payload }: { active?: boolean; payload?: {
           </span>
         </p>
       )}
+      <p className="mt-1 text-[11px] text-muted-foreground">Clic para ver sus pólizas</p>
     </div>
   );
 }

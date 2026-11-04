@@ -33,6 +33,7 @@ async function cargar(id: string) {
       datos_ramo: true,
       sumaAseguradaIlimitada: true,
       comision_personalizada_pct: true,
+      agente: true,
       cliente: { select: { nombre: true, rfc: true, telefono: true, email: true } },
       asegurados: {
         orderBy: { orden: "asc" },
@@ -73,6 +74,7 @@ function aFormulario(p: PolizaFormulario, { incluirComision }: { incluirComision
       formaPago: p.forma_pago,
       comisionPersonalizadaPct:
         incluirComision && p.comision_personalizada_pct !== null ? String(Number(p.comision_personalizada_pct)) : "",
+      agente: p.agente ?? "",
     },
     especificos,
     asegurados: p.asegurados.map((a) => ({

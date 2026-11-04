@@ -122,6 +122,50 @@ export async function getReportes(periodo: PeriodoReporte) {
   };
 }
 
+/** Máximo de pólizas que muestra la lista de un año del crecimiento. */
+export const LIMITE_POLIZAS_ANIO = 200;
+
+/**
+ * Pólizas visibles emitidas en `anio` (inician vigencia en él), las mismas que cuenta "Crecimiento
+ * por año": las que inician después de hoy aún no se emiten.
+ */
+export async function getPolizasDelAnio(anio: number) {
+  await connection();
+  const alcance = await getAlcance();
+  const hoy = new Date(`${hoyISO()}T00:00:00Z`);
+  const finDeAnio = new Date(Date.UTC(anio, 11, 31));
+  const where: Prisma.PolizaWhereInput = {
+    ...polizasDe(alcance),
+    vigencia_inicio: { gte: new Date(Date.UTC(anio, 0, 1)), lte: finDeAnio < hoy ? finDeAnio : hoy },
+  };
+  const [polizas, resumen] = await Promise.all([
+    db.poliza.findMany({
+      where,
+      orderBy: [{ vigencia_inicio: "asc" }, { numeroImpreso: "asc" }],
+      take: LIMITE_POLIZAS_ANIO,
+      select: {
+        id: true,
+        numeroImpreso: true,
+        ramo: true,
+        vigencia_inicio: true,
+        vigencia_fin: true,
+        prima_total: true,
+        canceladaAt: true,
+        agente: true,
+        cliente: { select: { nombre: true } },
+        aseguradora: { select: { nombre: true, color_hex: true } },
+        ejecutivo: { select: { nombre: true } },
+      },
+    }),
+    db.poliza.aggregate({ where, _count: { _all: true }, _sum: { prima_total: true } }),
+  ]);
+  return {
+    polizas: polizas.map((p) => ({ ...p, prima_total: Number(p.prima_total) })),
+    total: resumen._count._all,
+    prima: Number(resumen._sum.prima_total ?? 0),
+  };
+}
+
 /** Pólizas visibles que componen los números del reporte, para exportarlas a CSV. */
 export async function getPolizasReporte(alcance: Alcance, periodo: PeriodoReporte) {
   await connection();

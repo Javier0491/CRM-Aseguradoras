@@ -31,6 +31,7 @@ const CAMPOS_DETALLE: Record<string, { etiqueta: string; formato?: (v: string) =
   prima_total: { etiqueta: "Prima total", formato: (v) => formatMoneda(Number(v)) },
   prima_neta: { etiqueta: "Prima neta", formato: (v) => formatMoneda(Number(v)) },
   forma_pago: { etiqueta: "Forma de pago" },
+  agente: { etiqueta: "Agente" },
 };
 const CAMPOS_COMISION: typeof CAMPOS_DETALLE = {
   comision_personalizada_pct: { etiqueta: "Comisión personalizada", formato: (v) => `${v}%` },
