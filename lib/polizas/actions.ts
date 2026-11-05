@@ -14,7 +14,7 @@ import {
   type EditarPolizaResultado,
   type GuardarPolizaResultado,
 } from "@/lib/polizas/guardar";
-import { enviarAgradecimientoRenovacion } from "@/lib/polizas/agradecimiento";
+import { enviarAgradecimientoRenovacion, esRenovacion } from "@/lib/polizas/agradecimiento";
 import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
@@ -41,23 +41,28 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
 
 /**
  * "Gracias por continuar con nosotros" al cliente de una renovación, con su carátula y su
- * expediente: el formulario lo pide al terminar de subir los archivos. Solo para pólizas que se
- * registraron como renovación; sale una sola vez por póliza. Un fallo no deshace la renovación.
+ * expediente: el formulario lo pide al terminar de subir los archivos y el detalle de la póliza
+ * tiene un botón para mandarlo después. Vale para las que se capturaron con "Renovar" y para las
+ * que se sumaron solas a la cadena de la anterior; sale una sola vez por póliza. Un fallo no
+ * deshace la renovación.
  */
 export async function enviarAgradecimientoDeRenovacion(polizaId: string): Promise<AgradecimientoRenovacion> {
   const user = await getUsuarioCrm();
   if (!user) return { enviado: false, motivo: "tu sesión expiró." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { enviado: false, motivo: "datos inválidos." };
-  const poliza = await db.poliza.findFirst({ where: { id: polizaId, ...polizasDe(alcanceDe(user)) }, select: { id: true } });
-  const renovo = await db.bitacora.findFirst({
-    where: { agenciaId: user.agenciaId, accion: "poliza.renovar", entidad_id: polizaId },
-    select: { id: true },
+  const poliza = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
+    select: { id: true, cadenaId: true, vigencia_inicio: true, canceladaAt: true },
   });
-  if (!poliza || !renovo) return { enviado: false, motivo: "la póliza no es una renovación." };
-  return enviarAgradecimientoRenovacion(polizaId, user.agenciaId).catch((e) => {
+  if (!poliza) return { enviado: false, motivo: "la póliza ya no existe." };
+  if (poliza.canceladaAt) return { enviado: false, motivo: "la póliza está cancelada." };
+  if (!(await esRenovacion(poliza, user.agenciaId))) return { enviado: false, motivo: "la póliza no es una renovación." };
+  const r = await enviarAgradecimientoRenovacion(polizaId, user.agenciaId).catch((e) => {
     console.error("[enviarAgradecimientoDeRenovacion]", e instanceof Error ? e.message : e);
     return { enviado: false as const, motivo: "no se pudo enviar el correo." };
   });
+  if (r.enviado) revalidatePath(`/polizas/${polizaId}`);
+  return r;
 }
 
 /** Corrige una póliza existente (ver actualizarPoliza). */

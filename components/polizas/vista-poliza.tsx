@@ -22,6 +22,7 @@ import { ArchivoUploader } from "@/components/archivos/archivo-uploader";
 import { BarraAccionesMovil } from "@/components/layout/barra-acciones-movil";
 import { EliminarEndoso } from "@/components/polizas/eliminar-endoso";
 import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
+import { EnviarAgradecimiento } from "@/components/polizas/enviar-agradecimiento";
 import { GestionPoliza } from "@/components/polizas/gestion-poliza";
 import { HistorialPoliza } from "@/components/polizas/historial-poliza";
 import { PrimaNeta } from "@/components/polizas/prima-neta";
@@ -94,6 +95,8 @@ export type DatosPoliza = {
   renovada: Awaited<ReturnType<typeof getRenovacion>>;
   /** Póliza a la que renueva. */
   anterior: Awaited<ReturnType<typeof getPolizaAnterior>>;
+  /** Solo si la póliza es una renovación: si ya se le envió al cliente el agradecimiento. */
+  agradecimiento: { enviado: { destinatario: string; fecha: Date } | null } | null;
   historial: Awaited<ReturnType<typeof getHistorialPoliza>>;
   tareas: Awaited<ReturnType<typeof getTareasDe>>;
   /** Para asignar tareas; no viene para quien solo ve su cartera. */
@@ -105,7 +108,18 @@ export type DatosPoliza = {
 };
 
 /** Expediente de la póliza: datos, recibos, endosos, historial, tareas y documentos. La página carga los datos. */
-export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equipo, agencia, usuario, hoy }: DatosPoliza) {
+export function VistaPoliza({
+  poliza,
+  renovada,
+  anterior,
+  agradecimiento,
+  historial,
+  tareas,
+  equipo,
+  agencia,
+  usuario,
+  hoy,
+}: DatosPoliza) {
   // La comisión solo la ve el SUPERADMIN.
   const { verComisiones } = usuario;
   const cancelada = poliza.canceladaAt !== null;
@@ -248,6 +262,13 @@ export function VistaPoliza({ poliza, renovada, anterior, historial, tareas, equ
                   <Pencil /> Editar
                 </Link>
               </Button>
+              {agradecimiento && !cancelada && (
+                <EnviarAgradecimiento
+                  polizaId={poliza.id}
+                  email={poliza.cliente.email}
+                  enviado={agradecimiento.enviado}
+                />
+              )}
               {renovada ? (
                 <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
                   <Link href={`/polizas/${renovada.id}`} title="Esta póliza ya se renovó">

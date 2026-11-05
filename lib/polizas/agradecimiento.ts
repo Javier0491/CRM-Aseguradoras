@@ -51,6 +51,35 @@ async function documentosDe(docs: Documento[]) {
 }
 
 /**
+ * ¿La póliza es una renovación? Lo es si se capturó con "Renovar" o si se sumó sola a la cadena de
+ * otra póliza (mismo número original y aseguradora) que empezó antes.
+ */
+export async function esRenovacion(
+  poliza: { id: string; cadenaId: string; vigencia_inicio: Date },
+  agenciaId: string
+): Promise<boolean> {
+  const [anterior, renovo] = await Promise.all([
+    db.poliza.findFirst({
+      where: { agenciaId, id: { not: poliza.id }, cadenaId: poliza.cadenaId, vigencia_inicio: { lt: poliza.vigencia_inicio } },
+      select: { id: true },
+    }),
+    db.bitacora.findFirst({
+      where: { agenciaId, accion: "poliza.renovar", entidad_id: poliza.id },
+      select: { id: true },
+    }),
+  ]);
+  return anterior !== null || renovo !== null;
+}
+
+/** A quién y cuándo se le envió el agradecimiento de esta póliza, si ya salió. */
+export async function getAgradecimientoEnviado(polizaId: string, agenciaId: string) {
+  return db.avisoEnviado.findFirst({
+    where: { agenciaId, tipo: TIPO, referencia_id: polizaId },
+    select: { destinatario: true, created_at: true },
+  });
+}
+
+/**
  * Correo "Gracias por continuar con nosotros" al cliente registrado de una póliza recién renovada:
  * le confirma el número y la vigencia nuevos. Sale de la dirección universal con la marca de la
  * agencia; las respuestas van a su correo de servicio y su correo de copia recibe copia oculta.

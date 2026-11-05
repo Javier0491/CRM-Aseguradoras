@@ -6,6 +6,7 @@ import { getAgencia } from "@/lib/agencias/queries";
 import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { getHistorialPoliza } from "@/lib/bitacora/historial-poliza";
 import { hoyISO } from "@/lib/format";
+import { esRenovacion, getAgradecimientoEnviado } from "@/lib/polizas/agradecimiento";
 import { getPolizaAnterior, getRenovacion } from "@/lib/polizas/formulario";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
 import { getTareasDe } from "@/lib/tareas/queries";
@@ -22,19 +23,26 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   const user = await requireUsuarioCrm();
   // La comisión solo la ve el SUPERADMIN.
   const verComisiones = veComisiones(user);
-  const [renovada, anterior, historial, tareas, equipo, agencia] = await Promise.all([
+  const [renovada, anterior, historial, tareas, equipo, agencia, renovacion, agradecimiento] = await Promise.all([
     getRenovacion(poliza),
     getPolizaAnterior(poliza),
     getHistorialPoliza(poliza, verComisiones),
     getTareasDe({ polizaId: poliza.id }),
     user.soloSuCartera ? Promise.resolve(undefined) : getEquipo(user.agenciaId),
     getAgencia(user.agenciaId),
+    esRenovacion(poliza, user.agenciaId),
+    getAgradecimientoEnviado(poliza.id, user.agenciaId),
   ]);
   return (
     <VistaPoliza
       poliza={poliza}
       renovada={renovada}
       anterior={anterior}
+      agradecimiento={
+        renovacion
+          ? { enviado: agradecimiento && { destinatario: agradecimiento.destinatario, fecha: agradecimiento.created_at } }
+          : null
+      }
       historial={historial}
       tareas={tareas}
       equipo={equipo}
