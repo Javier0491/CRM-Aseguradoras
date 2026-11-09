@@ -95,8 +95,11 @@ export type DatosPoliza = {
   renovada: Awaited<ReturnType<typeof getRenovacion>>;
   /** Póliza a la que renueva. */
   anterior: Awaited<ReturnType<typeof getPolizaAnterior>>;
-  /** Solo si la póliza es una renovación: si ya se le envió al cliente el agradecimiento. */
-  agradecimiento: { enviado: { destinatario: string; fecha: Date } | null } | null;
+  /**
+   * Correo que le entrega al cliente su póliza: el agradecimiento si es una renovación, o el aviso
+   * de póliza nueva si no; y si ya se le envió.
+   */
+  correoCliente: { clase: "renovacion" | "nueva"; enviado: { destinatario: string; fecha: Date } | null };
   historial: Awaited<ReturnType<typeof getHistorialPoliza>>;
   tareas: Awaited<ReturnType<typeof getTareasDe>>;
   /** Para asignar tareas; no viene para quien solo ve su cartera. */
@@ -112,7 +115,7 @@ export function VistaPoliza({
   poliza,
   renovada,
   anterior,
-  agradecimiento,
+  correoCliente,
   historial,
   tareas,
   equipo,
@@ -262,11 +265,12 @@ export function VistaPoliza({
                   <Pencil /> Editar
                 </Link>
               </Button>
-              {agradecimiento && !cancelada && (
+              {!cancelada && (
                 <EnviarAgradecimiento
                   polizaId={poliza.id}
+                  clase={correoCliente.clase}
                   email={poliza.cliente.email}
-                  enviado={agradecimiento.enviado}
+                  enviado={correoCliente.enviado}
                 />
               )}
               {renovada ? (

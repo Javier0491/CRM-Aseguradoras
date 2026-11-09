@@ -86,38 +86,63 @@ export function mensajeAviso(tipo: TipoAviso, d: DatosAviso): { asunto: string; 
   };
 }
 
-/**
- * Agradecimiento al capturar la renovación de una póliza: le confirma al cliente el número y la
- * vigencia nuevos y lo invita a escribir al correo de servicio de la agencia.
- */
-export function mensajeAgradecimientoRenovacion(d: {
+/** Datos de los correos al cliente que le entregan su póliza (renovada o nueva). */
+export type DatosEntregaPoliza = {
   agencia: string;
   poliza: string;
   /** Ramo legible ("Gastos Médicos Mayores"). */
   ramo?: string;
   aseguradora: string;
-  /** Vigencia nueva (YYYY-MM-DD). */
+  /** Vigencia (YYYY-MM-DD). */
   inicio: string;
   fin: string;
   correoServicio?: string;
   /** Lo que va adjunto ("la carátula", "el expediente completo") y lo que va como enlace. */
   documentos?: { adjuntos: string[]; enlaces: { que: string; url: string }[] };
-}): { asunto: string; titulo: string; mensaje: string } {
+};
+
+/** Vigencia, documentos y despedida: lo que comparten los correos que entregan la póliza. */
+function cuerpoEntregaPoliza(d: DatosEntregaPoliza): string[] {
   const unir = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} y ${xs.at(-1)}` : (xs[0] ?? ""));
   const adjuntos = d.documentos?.adjuntos ?? [];
   const enlaces = d.documentos?.enlaces ?? [];
+  return [
+    `Póliza ${d.poliza}, vigente del ${formatFecha(d.inicio)} al ${formatFecha(d.fin)}.`,
+    ...(adjuntos.length > 0 ? [`Te adjuntamos ${unir(adjuntos)} de tu póliza para que los descargues y los tengas a la mano.`] : []),
+    ...enlaces.map((e) => `Descarga ${e.que} de tu póliza aquí (el enlace está disponible 7 días): ${e.url}`),
+    d.correoServicio
+      ? `Si tienes cualquier duda o necesitas algo, escríbenos a ${d.correoServicio} y con gusto te atenderemos.`
+      : "Si tienes cualquier duda o necesitas algo, responde a este correo y con gusto te atenderemos.",
+    "Saludos cordiales.",
+  ];
+}
+
+/**
+ * Agradecimiento al capturar la renovación de una póliza: le confirma al cliente el número y la
+ * vigencia nuevos y lo invita a escribir al correo de servicio de la agencia.
+ */
+export function mensajeAgradecimientoRenovacion(d: DatosEntregaPoliza): { asunto: string; titulo: string; mensaje: string } {
   return {
     asunto: `Gracias por continuar con nosotros: tu póliza ${d.poliza} ya está renovada`,
     titulo: "¡Gracias por continuar con nosotros!",
     mensaje: [
       `Tu póliza${d.ramo ? ` de ${d.ramo}` : ""} con ${d.aseguradora} ya quedó renovada. Te agradecemos la confianza de seguir con ${d.agencia}: es un gusto seguir protegiéndote.`,
-      `Póliza ${d.poliza}, vigente del ${formatFecha(d.inicio)} al ${formatFecha(d.fin)}.`,
-      ...(adjuntos.length > 0 ? [`Te adjuntamos ${unir(adjuntos)} de tu póliza para que los descargues y los tengas a la mano.`] : []),
-      ...enlaces.map((e) => `Descarga ${e.que} de tu póliza aquí (el enlace está disponible 7 días): ${e.url}`),
-      d.correoServicio
-        ? `Si tienes cualquier duda o necesitas algo, escríbenos a ${d.correoServicio} y con gusto te atenderemos.`
-        : "Si tienes cualquier duda o necesitas algo, responde a este correo y con gusto te atenderemos.",
-      "Saludos cordiales.",
+      ...cuerpoEntregaPoliza(d),
+    ].join("\n"),
+  };
+}
+
+/**
+ * Entrega de una póliza nueva (no renovación): le avisa al cliente que su póliza ya está lista,
+ * con el número, la vigencia y sus documentos.
+ */
+export function mensajePolizaNueva(d: DatosEntregaPoliza): { asunto: string; titulo: string; mensaje: string } {
+  return {
+    asunto: `Tu nueva póliza ${d.poliza} ya está lista`,
+    titulo: "¡Tu nueva póliza ya está lista!",
+    mensaje: [
+      `Tu nueva póliza${d.ramo ? ` de ${d.ramo}` : ""} con ${d.aseguradora} ya está lista. Gracias por confiar en ${d.agencia}: es un gusto protegerte.`,
+      ...cuerpoEntregaPoliza(d),
     ].join("\n"),
   };
 }

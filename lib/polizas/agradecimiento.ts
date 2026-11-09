@@ -5,15 +5,23 @@ import type { Attachment } from "resend";
 import { ramoLabel } from "@/components/polizas/poliza-ui";
 import { getAlmacen } from "@/lib/archivos/almacen";
 import { COLOR_MARCA_PREDETERMINADO, logoParaDocumentos } from "@/lib/agencias/marca";
-import { mensajeAgradecimientoRenovacion } from "@/lib/avisos/mensajes";
+import { mensajeAgradecimientoRenovacion, mensajePolizaNueva } from "@/lib/avisos/mensajes";
 import { CorreoNoConfiguradoError, emailValido, enviarAviso, getConfigCorreo } from "@/lib/comunicaciones/envio";
 import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { Prisma } from "@/lib/generated/prisma/client";
 import type { AgradecimientoRenovacion } from "@/lib/polizas/guardar";
 
-/** Tipo en avisos_enviados: un agradecimiento por póliza renovada. */
-const TIPO = "agradecimiento_renovacion";
+/**
+ * Correos que le entregan al cliente su póliza: el agradecimiento de una renovación o el aviso de
+ * que su póliza nueva ya está lista. Cada uno sale una sola vez por póliza.
+ */
+export type ClaseCorreoPoliza = "renovacion" | "nueva";
+
+const CLASES = {
+  renovacion: { tipo: "agradecimiento_renovacion", mensaje: mensajeAgradecimientoRenovacion, modulo: "renovaciones" },
+  nueva: { tipo: "poliza_nueva", mensaje: mensajePolizaNueva, modulo: "polizas" },
+} as const;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 /**
  * Lo que se puede adjuntar: el correo completo no debe pasar de 40 MB y los adjuntos viajan en
@@ -44,7 +52,7 @@ async function documentosDe(docs: Documento[]) {
       }
       resumen.enlaces.push({ que: d.que, url: await almacen.urlDescarga(d.clave, { descargarComo: d.nombre, vigenciaS: VIGENCIA_ENLACE_S }) });
     } catch (e) {
-      console.error("[agradecimientoRenovacion] documento", d.que, e instanceof Error ? e.message : e);
+      console.error("[correoPoliza] documento", d.que, e instanceof Error ? e.message : e);
     }
   }
   return { adjuntos, resumen };
@@ -71,22 +79,35 @@ export async function esRenovacion(
   return anterior !== null || renovo !== null;
 }
 
-/** A quién y cuándo se le envió el agradecimiento de esta póliza, si ya salió. */
-export async function getAgradecimientoEnviado(polizaId: string, agenciaId: string) {
+/** A quién y cuándo se le envió a esta póliza el correo de la clase dada, si ya salió. */
+export async function getCorreoPolizaEnviado(polizaId: string, agenciaId: string, clase: ClaseCorreoPoliza) {
   return db.avisoEnviado.findFirst({
-    where: { agenciaId, tipo: TIPO, referencia_id: polizaId },
+    where: { agenciaId, tipo: CLASES[clase].tipo, referencia_id: polizaId },
     select: { destinatario: true, created_at: true },
   });
 }
 
 /**
  * Correo "Gracias por continuar con nosotros" al cliente registrado de una póliza recién renovada:
- * le confirma el número y la vigencia nuevos. Sale de la dirección universal con la marca de la
- * agencia; las respuestas van a su correo de servicio y su correo de copia recibe copia oculta.
- * Queda en avisos_enviados, así que sale una sola vez por póliza. Nunca lanza: si no se puede
- * enviar, dice por qué (la renovación ya quedó guardada).
+ * le confirma el número y la vigencia nuevos (ver enviarCorreoPoliza).
  */
-export async function enviarAgradecimientoRenovacion(polizaId: string, agenciaId: string): Promise<AgradecimientoRenovacion> {
+export function enviarAgradecimientoRenovacion(polizaId: string, agenciaId: string): Promise<AgradecimientoRenovacion> {
+  return enviarCorreoPoliza(polizaId, agenciaId, "renovacion");
+}
+
+/** Correo "Tu nueva póliza ya está lista" al cliente registrado de una póliza nueva (ver enviarCorreoPoliza). */
+export function enviarPolizaNueva(polizaId: string, agenciaId: string): Promise<AgradecimientoRenovacion> {
+  return enviarCorreoPoliza(polizaId, agenciaId, "nueva");
+}
+
+/**
+ * Le entrega al cliente registrado su póliza con la carátula y el expediente. Sale de la dirección
+ * universal con la marca de la agencia; las respuestas van a su correo de servicio y su correo de
+ * copia recibe copia oculta. Queda en avisos_enviados, así que cada clase sale una sola vez por
+ * póliza. Nunca lanza: si no se puede enviar, dice por qué (la póliza ya quedó guardada).
+ */
+async function enviarCorreoPoliza(polizaId: string, agenciaId: string, clase: ClaseCorreoPoliza): Promise<AgradecimientoRenovacion> {
+  const { tipo, mensaje: redactar, modulo } = CLASES[clase];
   const poliza = await db.poliza.findFirst({
     where: { id: polizaId, agenciaId },
     select: {
@@ -125,14 +146,14 @@ export async function enviarAgradecimientoRenovacion(polizaId: string, agenciaId
   }
 
   const { agencia } = poliza;
-  const where = { tipo_referencia_id: { tipo: TIPO, referencia_id: polizaId } };
+  const where = { tipo_referencia_id: { tipo, referencia_id: polizaId } };
   try {
-    await db.avisoEnviado.create({ data: { agenciaId, tipo: TIPO, referencia_id: polizaId, destinatario: email } });
+    await db.avisoEnviado.create({ data: { agenciaId, tipo, referencia_id: polizaId, destinatario: email } });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       return { enviado: false, motivo: "ya se le había enviado." };
     }
-    console.error("[agradecimientoRenovacion]", e instanceof Error ? e.message : e);
+    console.error(`[correoPoliza:${clase}]`, e instanceof Error ? e.message : e);
     return { enviado: false, motivo: "no se pudo registrar el envío." };
   }
 
@@ -141,7 +162,7 @@ export async function enviarAgradecimientoRenovacion(polizaId: string, agenciaId
       { que: "la carátula", clave: poliza.caratula_path, nombre: poliza.caratula_nombre, bytes: poliza.caratula_bytes },
       { que: "el expediente completo", clave: poliza.expediente_path, nombre: poliza.expediente_nombre, bytes: poliza.expediente_bytes },
     ]);
-    const { asunto, titulo, mensaje } = mensajeAgradecimientoRenovacion({
+    const { asunto, titulo, mensaje } = redactar({
       documentos: documentos.resumen,
       agencia: agencia.nombre,
       poliza: poliza.numeroImpreso,
@@ -167,13 +188,13 @@ export async function enviarAgradecimientoRenovacion(polizaId: string, agenciaId
       texto,
       copia: agencia.correoCopiaAvisos ?? undefined,
       responderA: agencia.correoServicio ?? undefined,
-      modulo: "renovaciones",
+      modulo,
       adjuntos: documentos.adjuntos,
     });
     if (r.ok) return { enviado: true, email };
-    console.error("[agradecimientoRenovacion]", polizaId, r.error);
+    console.error(`[correoPoliza:${clase}]`, polizaId, r.error);
   } catch (e) {
-    console.error("[agradecimientoRenovacion]", polizaId, e instanceof Error ? e.message : e);
+    console.error(`[correoPoliza:${clase}]`, polizaId, e instanceof Error ? e.message : e);
   }
   // No salió: se borra el registro para que no cuente como enviado.
   await db.avisoEnviado.delete({ where }).catch(() => {});

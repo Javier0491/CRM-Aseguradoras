@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { mensajeAgradecimientoRenovacion, mensajeAviso } from "@/lib/avisos/mensajes";
+import { mensajeAgradecimientoRenovacion, mensajeAviso, mensajePolizaNueva } from "@/lib/avisos/mensajes";
 import { avisoDeRecibo } from "@/lib/avisos/reglas";
 import { construirCorreoHtml, htmlATexto } from "@/lib/comunicaciones/correo";
 
@@ -80,6 +80,26 @@ describe("correos a clientes", () => {
     assert.match(m.mensaje, /Tu póliza de Gastos Médicos Mayores con GNP ya quedó renovada/);
     assert.match(m.mensaje, /Póliza GMM-2027, vigente del 01 nov 2026 al 01 nov 2027\./);
     assert.match(m.mensaje, /escríbenos a servicio@magnusseguros\.com/);
+  });
+
+  it("póliza nueva: avisa que ya está lista, con vigencia, documentos y correo de servicio", () => {
+    const m = mensajePolizaNueva({
+      agencia: "PJ Magnus",
+      poliza: "AUTO-123",
+      ramo: "Autos",
+      aseguradora: "Qualitas",
+      inicio: "2026-11-09",
+      fin: "2027-11-09",
+      correoServicio: "servicio@magnusseguros.com",
+      documentos: { adjuntos: ["la carátula", "el expediente completo"], enlaces: [] },
+    });
+    assert.equal(m.titulo, "¡Tu nueva póliza ya está lista!");
+    assert.match(m.asunto, /Tu nueva póliza AUTO-123 ya está lista/);
+    assert.match(m.mensaje, /Tu nueva póliza de Autos con Qualitas ya está lista\. Gracias por confiar en PJ Magnus/);
+    assert.match(m.mensaje, /Póliza AUTO-123, vigente del 09 nov 2026 al 09 nov 2027\./);
+    assert.match(m.mensaje, /Te adjuntamos la carátula y el expediente completo de tu póliza/);
+    assert.match(m.mensaje, /escríbenos a servicio@magnusseguros\.com/);
+    assert.doesNotMatch(m.mensaje, /renovada/);
   });
 
   it("los correos masivos invitan a escribir al correo de servicio", () => {

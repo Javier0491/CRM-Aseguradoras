@@ -409,8 +409,10 @@ export function datosPoliza(c: Conjunto): DatosPoliza {
     },
     renovada: null,
     anterior: c === "vacio" ? null : { id: "pol1", numeroImpreso: f === "demo" ? "0012345677" : "VG-COL-2025-000123456-REN-02-ANEXO-B" },
-    agradecimiento:
-      c === "vacio" ? null : { enviado: c === "uno" ? { destinatario: "cliente@correo.com", fecha: dia(-300) } : null },
+    correoCliente: {
+      clase: c === "vacio" ? "nueva" : "renovacion",
+      enviado: c === "uno" ? { destinatario: "cliente@correo.com", fecha: dia(-300) } : null,
+    },
     historial: rango(nHistorial).map((i) => ({
       id: `his${i}`,
       fecha: dia(-i),

@@ -14,7 +14,7 @@ import {
   type EditarPolizaResultado,
   type GuardarPolizaResultado,
 } from "@/lib/polizas/guardar";
-import { enviarAgradecimientoRenovacion, esRenovacion } from "@/lib/polizas/agradecimiento";
+import { enviarAgradecimientoRenovacion, enviarPolizaNueva, esRenovacion } from "@/lib/polizas/agradecimiento";
 import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
@@ -59,6 +59,29 @@ export async function enviarAgradecimientoDeRenovacion(polizaId: string): Promis
   if (!(await esRenovacion(poliza, user.agenciaId))) return { enviado: false, motivo: "la póliza no es una renovación." };
   const r = await enviarAgradecimientoRenovacion(polizaId, user.agenciaId).catch((e) => {
     console.error("[enviarAgradecimientoDeRenovacion]", e instanceof Error ? e.message : e);
+    return { enviado: false as const, motivo: "no se pudo enviar el correo." };
+  });
+  if (r.enviado) revalidatePath(`/polizas/${polizaId}`);
+  return r;
+}
+
+/**
+ * "Tu nueva póliza ya está lista" al cliente de una póliza nueva (no renovación), con su carátula
+ * y su expediente: botón "Nuevo" del detalle de la póliza. Sale una sola vez por póliza.
+ */
+export async function enviarPolizaNuevaAlCliente(polizaId: string): Promise<AgradecimientoRenovacion> {
+  const user = await getUsuarioCrm();
+  if (!user) return { enviado: false, motivo: "tu sesión expiró." };
+  if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { enviado: false, motivo: "datos inválidos." };
+  const poliza = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
+    select: { id: true, cadenaId: true, vigencia_inicio: true, canceladaAt: true },
+  });
+  if (!poliza) return { enviado: false, motivo: "la póliza ya no existe." };
+  if (poliza.canceladaAt) return { enviado: false, motivo: "la póliza está cancelada." };
+  if (await esRenovacion(poliza, user.agenciaId)) return { enviado: false, motivo: "la póliza es una renovación." };
+  const r = await enviarPolizaNueva(polizaId, user.agenciaId).catch((e) => {
+    console.error("[enviarPolizaNuevaAlCliente]", e instanceof Error ? e.message : e);
     return { enviado: false as const, motivo: "no se pudo enviar el correo." };
   });
   if (r.enviado) revalidatePath(`/polizas/${polizaId}`);
