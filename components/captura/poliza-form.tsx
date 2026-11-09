@@ -69,6 +69,7 @@ import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memor
 import { etiquetaPolizaVigor, usaFolioInterno, usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { subirArchivo } from "@/lib/archivos/subir";
 import { buscarContactoPorRfc, type ContactoCliente } from "@/lib/clientes/actions";
+import { leerCco, MAX_CCO } from "@/lib/comunicaciones/correo";
 import { claveNombre, RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { hoyISO } from "@/lib/format";
 import { validarActividad, type ActividadCaptura } from "@/lib/tareas/actividades";
@@ -364,6 +365,15 @@ export function PolizaForm({
   const [subiendo, setSubiendo] = React.useState<TipoArchivo | null>(null);
   // Renovación: al guardar, el cliente recibe "Gracias por continuar con nosotros" (se puede apagar).
   const [agradecer, setAgradecer] = React.useState(true);
+  // Copia oculta del agradecimiento, escrita a mano (opcional).
+  const [cco, setCco] = React.useState("");
+  const ocultas = leerCco(cco);
+  const errorCco =
+    ocultas.invalidos.length > 0
+      ? `Correo inválido en CCO: ${ocultas.invalidos[0]}`
+      : ocultas.correos.length > MAX_CCO
+        ? `La copia oculta admite como máximo ${MAX_CCO} correos.`
+        : null;
   // Actividades de la póliza (cambio de agente, …): quedan como pendientes al guardar.
   const [actividades, setActividades] = React.useState<ActividadCaptura[]>([]);
   const [erroresActividades, setErroresActividades] = React.useState(false);
@@ -553,6 +563,10 @@ export function PolizaForm({
 
   const onSubmit = handleSubmit(async (values) => {
     limpiarAvisos();
+    if (modo.tipo === "renovacion" && agradecer && errorCco) {
+      setErrorGeneral(`${errorCco}. Corrígelo o apaga el agradecimiento para guardar.`);
+      return;
+    }
     try {
       await enviar(values);
     } catch (e) {
@@ -623,7 +637,7 @@ export function PolizaForm({
       // Renovación: el agradecimiento sale ya con la carátula y el expediente que se acaban de subir.
       if (modo.tipo === "renovacion" && agradecer) {
         setExito({ ...res, archivos, enviandoAgradecimiento: true });
-        const agradecimiento = await enviarAgradecimientoDeRenovacion(res.poliza.id);
+        const agradecimiento = await enviarAgradecimientoDeRenovacion(res.poliza.id, ocultas.correos.join(", "));
         setExito({ ...res, archivos, agradecimiento });
       } else {
         setExito({ ...res, archivos });
@@ -1056,6 +1070,29 @@ export function PolizaForm({
               disabled={bloqueado}
               className="mt-0.5"
             />
+          </div>
+        )}
+        {modo.tipo === "renovacion" && !exito && agradecer && (
+          <div className="mx-6 -mt-3 mb-6 space-y-1.5 rounded-lg border bg-background/60 px-4 py-3">
+            <Label htmlFor="agradecer-cco" className="text-xs">
+              CCO (copia oculta, opcional)
+            </Label>
+            <Input
+              id="agradecer-cco"
+              type="text"
+              inputMode="email"
+              autoComplete="off"
+              value={cco}
+              onChange={(e) => setCco(e.target.value)}
+              disabled={bloqueado}
+              maxLength={1000}
+              placeholder="correo@ejemplo.com, otro@ejemplo.com"
+              aria-invalid={errorCco ? true : undefined}
+              aria-describedby="agradecer-cco-ayuda"
+            />
+            <p id="agradecer-cco-ayuda" className={errorCco ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+              {errorCco ?? "Reciben una copia del agradecimiento sin que el cliente lo vea. Separa varios con comas."}
+            </p>
           </div>
         )}
 

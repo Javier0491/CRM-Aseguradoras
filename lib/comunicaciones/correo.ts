@@ -13,6 +13,53 @@ export const MAX_BYTES_IMAGEN = 2 * 1024 * 1024;
 export const MAX_BYTES_CUERPO = 8 * 1024 * 1024;
 export const TIPOS_IMAGEN = ["image/png", "image/jpeg", "image/gif"] as const;
 
+/**
+ * Límite de toda la solicitud de envío (cuerpo + imágenes + adjuntos): Vercel rechaza las
+ * solicitudes de más de 4.5 MB antes de que lleguen a la ruta.
+ */
+export const MAX_BYTES_SOLICITUD = Math.floor(4.4 * 1024 * 1024);
+/** Archivos adjuntos por envío. */
+export const MAX_ADJUNTOS = 10;
+/** Extensiones que se pueden adjuntar a un comunicado (nada ejecutable). */
+export const EXTENSIONES_ADJUNTO = [
+  "pdf", "jpg", "jpeg", "png", "gif", "webp",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "csv", "txt", "zip",
+] as const;
+
+/** Extensión en minúsculas de un nombre de archivo, o "" si no tiene. */
+export function extensionDe(nombre: string) {
+  const i = nombre.lastIndexOf(".");
+  return i > 0 ? nombre.slice(i + 1).toLowerCase() : "";
+}
+
+export function adjuntoPermitido(nombre: string) {
+  return (EXTENSIONES_ADJUNTO as readonly string[]).includes(extensionDe(nombre));
+}
+
+const EMAIL_VALIDO = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/;
+
+export function emailValido(email: string) {
+  return EMAIL_VALIDO.test(email.trim());
+}
+
+/** Máximo de direcciones en copia oculta que se escriben a mano. */
+export const MAX_CCO = 5;
+
+/**
+ * Lee las direcciones de copia oculta escritas a mano (separadas por coma, punto y coma o
+ * espacios), sin repetidas. Devuelve las inválidas aparte para avisarlas.
+ */
+export function leerCco(texto: string): { correos: string[]; invalidos: string[] } {
+  const correos = new Map<string, string>();
+  const invalidos: string[] = [];
+  for (const parte of texto.split(/[\s,;]+/)) {
+    if (!parte) continue;
+    if (emailValido(parte)) correos.set(parte.toLowerCase(), parte);
+    else invalidos.push(parte);
+  }
+  return { correos: [...correos.values()], invalidos };
+}
+
 /** Variable que se sustituye por el nombre de cada cliente. */
 export const VARIABLE_NOMBRE = "{{nombre}}";
 

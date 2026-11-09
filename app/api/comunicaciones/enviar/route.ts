@@ -1,10 +1,16 @@
 import { getMarcaCorreo } from "@/lib/agencias/queries";
 import { alcanceDe } from "@/lib/auth/alcance";
 import { getUsuarioCrm } from "@/lib/auth/dal";
+import type { Attachment } from "resend";
+
 import {
+  adjuntoPermitido,
   cuerpoVacio,
+  EXTENSIONES_ADJUNTO,
+  MAX_ADJUNTOS,
   MAX_ASUNTO,
   MAX_BYTES_CUERPO,
+  MAX_BYTES_SOLICITUD,
   MAX_DESTINATARIOS,
   type DestinatarioCorreo,
   type EnviarCorreoRespuesta,
@@ -26,25 +32,61 @@ function error(mensaje: string, status: number) {
   return Response.json({ ok: false, error: mensaje } satisfies EnviarCorreoRespuesta, { status });
 }
 
+const MB = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+/** Lee la solicitud: multipart con "solicitud" (JSON) y los archivos en "adjuntos", o JSON sin adjuntos. */
+async function leerSolicitud(request: Request): Promise<{ solicitud: EnviarCorreoSolicitud; archivos: File[] } | null> {
+  try {
+    if ((request.headers.get("content-type") ?? "").startsWith("multipart/form-data")) {
+      const datos = await request.formData();
+      const json = datos.get("solicitud");
+      if (typeof json !== "string") return null;
+      const archivos = datos.getAll("adjuntos").filter((a): a is File => a instanceof File);
+      return { solicitud: JSON.parse(json), archivos };
+    }
+    return { solicitud: await request.json(), archivos: [] };
+  } catch {
+    return null;
+  }
+}
+
+/** Valida los archivos adjuntos y los convierte al formato de Resend; o dice por qué no. */
+async function adjuntosDe(archivos: File[]): Promise<Attachment[] | string> {
+  if (archivos.length > MAX_ADJUNTOS) return `Se pueden adjuntar como máximo ${MAX_ADJUNTOS} archivos.`;
+  const adjuntos: Attachment[] = [];
+  for (const a of archivos) {
+    const nombre = a.name.replace(/[\\/\r\n"]/g, "_").trim().slice(0, 200);
+    if (!nombre || !adjuntoPermitido(nombre)) {
+      return `No se puede adjuntar «${nombre || "archivo sin nombre"}». Tipos permitidos: ${EXTENSIONES_ADJUNTO.join(", ")}.`;
+    }
+    if (a.size === 0) return `El archivo «${nombre}» está vacío.`;
+    adjuntos.push({ filename: nombre, content: Buffer.from(await a.arrayBuffer()) });
+  }
+  return adjuntos;
+}
+
 /**
  * POST /api/comunicaciones/enviar
- * Cuerpo JSON (ver EnviarCorreoSolicitud): asunto, html del editor y destinatarios
- * (`"todos"` o IDs de clientes). Con `prueba: true` envía solo al usuario de la sesión.
- * Las direcciones siempre se leen de la base de datos, nunca del navegador.
+ * Multipart: "solicitud" (JSON, ver EnviarCorreoSolicitud: asunto, html del editor y
+ * destinatarios `"todos"` o IDs de clientes) y los archivos adjuntos en "adjuntos"; también
+ * acepta el JSON solo. Con `prueba: true` envía solo al usuario de la sesión. Las direcciones
+ * siempre se leen de la base de datos, nunca del navegador.
  */
 export async function POST(request: Request) {
   const usuario = await getUsuarioCrm();
   if (!usuario) return error("No autenticado.", 401);
 
   const largo = Number(request.headers.get("content-length") ?? 0);
-  if (largo > MAX_BYTES_CUERPO) return error("El correo es demasiado grande. Reduce el tamaño de las imágenes.", 413);
-
-  let solicitud: EnviarCorreoSolicitud;
-  try {
-    solicitud = await request.json();
-  } catch {
-    return error("La solicitud debe enviarse como JSON.", 400);
+  if (largo > MAX_BYTES_SOLICITUD) {
+    return error(`El correo con sus imágenes y adjuntos pesa más de ${MB(MAX_BYTES_SOLICITUD)}. Quita o reduce archivos.`, 413);
   }
+
+  const leida = await leerSolicitud(request);
+  if (!leida) return error("La solicitud no es válida.", 400);
+  const { solicitud } = leida;
+  if (typeof solicitud !== "object" || solicitud === null) return error("La solicitud no es válida.", 400);
+  const archivos = await adjuntosDe(leida.archivos);
+  if (typeof archivos === "string") return error(archivos, 400);
 
   const asunto = typeof solicitud.asunto === "string" ? solicitud.asunto.trim() : "";
   const html = typeof solicitud.html === "string" ? solicitud.html : "";
@@ -99,7 +141,7 @@ export async function POST(request: Request) {
 
   try {
     const marca = await getMarcaCorreo(usuario.agenciaId);
-    const resultados = await enviarCorreos({ asunto, html, destinatarios: validos, marca });
+    const resultados = await enviarCorreos({ asunto, html, destinatarios: validos, marca, archivos });
     const enviados = resultados.filter((r) => r.ok).length;
     return Response.json({
       ok: true,

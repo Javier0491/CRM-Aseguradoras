@@ -14,6 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { leerCco, MAX_CCO } from "@/lib/comunicaciones/correo";
 import { formatFecha } from "@/lib/format";
 import { enviarAgradecimientoDeRenovacion, enviarPolizaNuevaAlCliente } from "@/lib/polizas/actions";
 
@@ -60,8 +63,10 @@ export function EnviarAgradecimiento({
   enviado: { destinatario: string; fecha: Date } | null;
 }) {
   const [abierto, setAbierto] = React.useState(false);
+  const [cco, setCco] = React.useState("");
   const [pendiente, startTransition] = React.useTransition();
   const t = CLASES[clase];
+  const ccoId = React.useId();
 
   if (enviado) {
     return (
@@ -79,13 +84,23 @@ export function EnviarAgradecimiento({
 
   const sinCorreo = !email.trim();
   const Icono = t.icono;
+  const ocultas = leerCco(cco);
+  const errorCco =
+    ocultas.invalidos.length > 0
+      ? `Correo inválido: ${ocultas.invalidos[0]}`
+      : ocultas.correos.length > MAX_CCO
+        ? `Máximo ${MAX_CCO} correos.`
+        : null;
 
   function enviar() {
+    if (errorCco) return;
     startTransition(async () => {
-      const r = await t.accion(polizaId);
+      const r = await t.accion(polizaId, ocultas.correos.join(", "));
       if (r.enviado) {
-        toast.success(`Se le envió ${t.que} a ${r.email}.`);
+        const copia = ocultas.correos.length > 0 ? ` (copia oculta a ${ocultas.correos.join(", ")})` : "";
+        toast.success(`Se le envió ${t.que} a ${r.email}${copia}.`);
         setAbierto(false);
+        setCco("");
       } else {
         toast.error(`No se envió ${t.que}: ${r.motivo}`);
       }
@@ -112,13 +127,35 @@ export function EnviarAgradecimiento({
               adjuntos, la carátula y el expediente (ZIP) de esta póliza. Se envía una sola vez.
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor={ccoId} className="text-xs">
+              CCO (copia oculta, opcional)
+            </Label>
+            <Input
+              id={ccoId}
+              type="text"
+              inputMode="email"
+              autoComplete="off"
+              value={cco}
+              onChange={(e) => setCco(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !pendiente && enviar()}
+              disabled={pendiente}
+              maxLength={1000}
+              placeholder="correo@ejemplo.com, otro@ejemplo.com"
+              aria-invalid={errorCco ? true : undefined}
+              aria-describedby={`${ccoId}-ayuda`}
+            />
+            <p id={`${ccoId}-ayuda`} className={errorCco ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+              {errorCco ?? "Reciben una copia sin que el cliente lo vea. Separa varios con comas."}
+            </p>
+          </div>
           <DialogFooter>
             <DialogClose asChild>
               <Button variant="outline" disabled={pendiente}>
                 Cancelar
               </Button>
             </DialogClose>
-            <Button onClick={enviar} disabled={pendiente}>
+            <Button onClick={enviar} disabled={pendiente || !!errorCco}>
               {pendiente ? <Loader2 className="animate-spin" /> : <Mail />}
               {pendiente ? "Enviando…" : "Enviar"}
             </Button>

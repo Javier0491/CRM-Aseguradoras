@@ -7,10 +7,12 @@ import {
   Eye,
   FlaskConical,
   Loader2,
+  Paperclip,
   PencilLine,
   Search,
   Send,
   Users,
+  X,
   XCircle,
 } from "lucide-react";
 
@@ -29,11 +31,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatBytes } from "@/lib/archivos/config";
 import {
+  adjuntoPermitido,
   construirCorreoHtml,
   cuerpoVacio,
+  EXTENSIONES_ADJUNTO,
+  MAX_ADJUNTOS,
   MAX_ASUNTO,
   MAX_BYTES_CUERPO,
+  MAX_BYTES_SOLICITUD,
   MAX_DESTINATARIOS,
   personalizar,
   type DestinatarioCorreo,
@@ -69,6 +76,8 @@ export function RedactorCorreo({
   const [enviando, setEnviando] = React.useState<"prueba" | "real" | null>(null);
   const [envio, setEnvio] = React.useState<Envio | null>(null);
   const [aviso, setAviso] = React.useState<string | null>(null);
+  const [adjuntos, setAdjuntos] = React.useState<File[]>([]);
+  const bytesAdjuntos = adjuntos.reduce((t, a) => t + a.size, 0);
 
   const total = modo === "todos" ? clientes.length : seleccion.size;
   const primero = modo === "todos" ? clientes[0] : clientes.find((c) => seleccion.has(c.id));
@@ -86,15 +95,17 @@ export function RedactorCorreo({
     };
     try {
       const cuerpo = JSON.stringify(solicitud);
-      if (cuerpo.length > MAX_BYTES_CUERPO) {
-        setAviso("El correo es demasiado grande. Reduce el tamaño o la cantidad de imágenes.");
+      if (cuerpo.length > MAX_BYTES_CUERPO || cuerpo.length + bytesAdjuntos > MAX_BYTES_SOLICITUD) {
+        setAviso(
+          `El correo con sus imágenes y adjuntos pesa más de ${formatBytes(MAX_BYTES_SOLICITUD)}. Quita archivos o reduce las imágenes.`
+        );
         return;
       }
-      const res = await fetch("/api/comunicaciones/enviar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: cuerpo,
-      });
+      // Multipart: los archivos viajan tal cual (sin base64) junto al JSON del correo.
+      const datos = new FormData();
+      datos.append("solicitud", cuerpo);
+      for (const a of adjuntos) datos.append("adjuntos", a, a.name);
+      const res = await fetch("/api/comunicaciones/enviar", { method: "POST", body: datos });
       const respuesta = (await res.json().catch(() => ({
         ok: false,
         error: `Error del servidor (${res.status}).`,
@@ -154,9 +165,12 @@ export function RedactorCorreo({
                 marca={marca}
                 remitente={remitente}
                 destinatario={primero}
+                adjuntos={adjuntos}
               />
             </TabsContent>
           </Tabs>
+
+          <SelectorAdjuntos adjuntos={adjuntos} onAdjuntos={setAdjuntos} onError={setAviso} bloqueado={enviando !== null} />
 
           {aviso && (
             <p className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
@@ -220,8 +234,10 @@ export function RedactorCorreo({
             <DialogTitle>¿Enviar el correo?</DialogTitle>
             <DialogDescription>
               Se enviará «{asunto.trim()}» a {total} {total === 1 ? "cliente" : "clientes"}
-              {modo === "todos" ? " (todos los clientes con correo)" : ""}. Cada cliente recibe un correo
-              individual. Esta acción no se puede deshacer.
+              {modo === "todos" ? " (todos los clientes con correo)" : ""}
+              {adjuntos.length > 0 &&
+                ` con ${adjuntos.length} ${adjuntos.length === 1 ? "archivo adjunto" : "archivos adjuntos"}`}
+              . Cada cliente recibe un correo individual. Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
           {enviando === "real" && total > 20 && (
@@ -240,6 +256,104 @@ export function RedactorCorreo({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Archivos que se adjuntan a cada correo del envío (los valida otra vez el servidor). */
+function SelectorAdjuntos({
+  adjuntos,
+  onAdjuntos,
+  onError,
+  bloqueado,
+}: {
+  adjuntos: File[];
+  onAdjuntos: (adjuntos: File[]) => void;
+  onError: (mensaje: string | null) => void;
+  bloqueado: boolean;
+}) {
+  const entrada = React.useRef<HTMLInputElement>(null);
+  const total = adjuntos.reduce((t, a) => t + a.size, 0);
+
+  function agregar(lista: FileList | null) {
+    if (!lista) return;
+    const nuevos = [...adjuntos];
+    const rechazados: string[] = [];
+    for (const a of lista) {
+      if (!adjuntoPermitido(a.name) || a.size === 0) rechazados.push(a.name);
+      // El mismo archivo elegido dos veces se adjunta una sola vez.
+      else if (!nuevos.some((n) => n.name === a.name && n.size === a.size)) nuevos.push(a);
+    }
+    const bytes = nuevos.reduce((t, a) => t + a.size, 0);
+    if (nuevos.length > MAX_ADJUNTOS) {
+      onError(`Se pueden adjuntar como máximo ${MAX_ADJUNTOS} archivos.`);
+    } else if (bytes > MAX_BYTES_SOLICITUD) {
+      onError(`Los adjuntos suman ${formatBytes(bytes)}; el máximo por envío es ${formatBytes(MAX_BYTES_SOLICITUD)}.`);
+    } else {
+      onAdjuntos(nuevos);
+      onError(
+        rechazados.length > 0
+          ? `No se adjuntó ${rechazados.join(", ")}: tipos permitidos ${EXTENSIONES_ADJUNTO.join(", ")}.`
+          : null
+      );
+    }
+    if (entrada.current) entrada.current.value = "";
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-medium">Archivos adjuntos</span>
+        <span className="text-xs text-muted-foreground">
+          {adjuntos.length > 0
+            ? `${formatBytes(total)} de ${formatBytes(MAX_BYTES_SOLICITUD)}`
+            : `Hasta ${formatBytes(MAX_BYTES_SOLICITUD)} en total`}
+        </span>
+      </div>
+      {adjuntos.length > 0 && (
+        <ul className="flex flex-wrap gap-2">
+          {adjuntos.map((a, i) => (
+            <li
+              key={`${a.name}-${a.size}`}
+              className="flex max-w-full min-w-0 items-center gap-1.5 rounded-md border bg-muted/40 py-1 pr-1 pl-2 text-xs"
+            >
+              <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 truncate" title={a.name}>
+                {a.name}
+              </span>
+              <span className="shrink-0 text-muted-foreground">{formatBytes(a.size)}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-6 shrink-0"
+                disabled={bloqueado}
+                onClick={() => onAdjuntos(adjuntos.filter((_, j) => j !== i))}
+                aria-label={`Quitar ${a.name}`}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <input
+        ref={entrada}
+        type="file"
+        multiple
+        hidden
+        accept={EXTENSIONES_ADJUNTO.map((e) => `.${e}`).join(",")}
+        onChange={(e) => agregar(e.target.files)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={bloqueado || adjuntos.length >= MAX_ADJUNTOS}
+        onClick={() => entrada.current?.click()}
+      >
+        <Paperclip /> Adjuntar archivos
+      </Button>
     </div>
   );
 }
@@ -389,12 +503,14 @@ function VistaPrevia({
   marca,
   remitente,
   destinatario,
+  adjuntos,
 }: {
   asunto: string;
   html: string;
   marca: MarcaCorreo;
   remitente: string | null;
   destinatario?: DestinatarioCorreo;
+  adjuntos: File[];
 }) {
   const nombre = destinatario?.nombre ?? "Cliente de ejemplo";
   const asuntoFinal = personalizar(asunto, nombre, false);
@@ -418,6 +534,12 @@ function VistaPrevia({
           <dt className="w-14 shrink-0 text-muted-foreground">Asunto</dt>
           <dd className="font-medium">{asuntoFinal || <span className="text-muted-foreground">(sin asunto)</span>}</dd>
         </div>
+        {adjuntos.length > 0 && (
+          <div className="flex gap-3 px-4 py-2.5">
+            <dt className="w-14 shrink-0 text-muted-foreground">Adjuntos</dt>
+            <dd className="min-w-0 wrap-anywhere">{adjuntos.map((a) => a.name).join(", ")}</dd>
+          </div>
+        )}
       </dl>
       {/* sandbox sin scripts: el HTML se muestra tal como lo verá el cliente. */}
       <iframe title="Vista previa del correo" srcDoc={documento} sandbox="" className="h-[560px] w-full bg-[#f4f4f5]" />

@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { mensajeAgradecimientoRenovacion, mensajeAviso, mensajePolizaNueva } from "@/lib/avisos/mensajes";
 import { avisoDeRecibo } from "@/lib/avisos/reglas";
-import { construirCorreoHtml, htmlATexto } from "@/lib/comunicaciones/correo";
+import { adjuntoPermitido, construirCorreoHtml, htmlATexto, leerCco } from "@/lib/comunicaciones/correo";
 
 describe("avisos de cobro", () => {
   const base = { vencimiento: "2026-10-20", primerAviso: null, diasAntes: 5, diasSegundo: 10 };
@@ -110,5 +110,25 @@ describe("correos a clientes", () => {
     const sin = construirCorreoHtml({ asunto: "Hola", cuerpo: "<p>Aviso</p>", marca });
     assert.doesNotMatch(sin, /mailto:/);
     assert.match(sin, /responde directamente a este mensaje/);
+  });
+});
+
+describe("copia oculta y adjuntos", () => {
+  it("lee la copia oculta separada por comas, punto y coma o espacios, sin repetidas", () => {
+    const r = leerCco(" ana@agencia.com; Luis@Agencia.com,ana@agencia.com  luis@agencia.com ");
+    assert.deepEqual(r.correos, ["ana@agencia.com", "luis@agencia.com"]);
+    assert.deepEqual(r.invalidos, []);
+    assert.deepEqual(leerCco("").correos, []);
+    assert.deepEqual(leerCco("ana@agencia.com, ana@").invalidos, ["ana@"]);
+  });
+
+  it("solo deja adjuntar documentos e imágenes, nada ejecutable", () => {
+    assert.equal(adjuntoPermitido("Póliza GMM.PDF"), true);
+    assert.equal(adjuntoPermitido("tarifas.xlsx"), true);
+    assert.equal(adjuntoPermitido("foto.jpeg"), true);
+    assert.equal(adjuntoPermitido("instalador.exe"), false);
+    assert.equal(adjuntoPermitido("script.js"), false);
+    assert.equal(adjuntoPermitido("sin-extension"), false);
+    assert.equal(adjuntoPermitido(".pdf"), false);
   });
 });

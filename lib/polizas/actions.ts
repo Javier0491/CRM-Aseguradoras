@@ -14,6 +14,7 @@ import {
   type EditarPolizaResultado,
   type GuardarPolizaResultado,
 } from "@/lib/polizas/guardar";
+import { leerCco, MAX_CCO } from "@/lib/comunicaciones/correo";
 import { enviarAgradecimientoRenovacion, enviarPolizaNueva, esRenovacion } from "@/lib/polizas/agradecimiento";
 import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
@@ -39,6 +40,15 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
   return resultado;
 }
 
+/** Copia oculta escrita a mano en el diálogo de envío: solo correos válidos y como máximo MAX_CCO. */
+function validarCco(texto: unknown): { ok: true; correos: string[] } | { ok: false; motivo: string } {
+  if (typeof texto !== "string" || texto.length > 1000) return { ok: false, motivo: "la copia oculta no es válida." };
+  const { correos, invalidos } = leerCco(texto);
+  if (invalidos.length > 0) return { ok: false, motivo: `la copia oculta tiene un correo inválido (${invalidos[0]}).` };
+  if (correos.length > MAX_CCO) return { ok: false, motivo: `la copia oculta admite como máximo ${MAX_CCO} correos.` };
+  return { ok: true, correos };
+}
+
 /**
  * "Gracias por continuar con nosotros" al cliente de una renovación, con su carátula y su
  * expediente: el formulario lo pide al terminar de subir los archivos y el detalle de la póliza
@@ -46,10 +56,12 @@ export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultad
  * que se sumaron solas a la cadena de la anterior; sale una sola vez por póliza. Un fallo no
  * deshace la renovación.
  */
-export async function enviarAgradecimientoDeRenovacion(polizaId: string): Promise<AgradecimientoRenovacion> {
+export async function enviarAgradecimientoDeRenovacion(polizaId: string, cco = ""): Promise<AgradecimientoRenovacion> {
   const user = await getUsuarioCrm();
   if (!user) return { enviado: false, motivo: "tu sesión expiró." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { enviado: false, motivo: "datos inválidos." };
+  const ocultas = validarCco(cco);
+  if (!ocultas.ok) return { enviado: false, motivo: ocultas.motivo };
   const poliza = await db.poliza.findFirst({
     where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
     select: { id: true, cadenaId: true, vigencia_inicio: true, canceladaAt: true },
@@ -57,7 +69,7 @@ export async function enviarAgradecimientoDeRenovacion(polizaId: string): Promis
   if (!poliza) return { enviado: false, motivo: "la póliza ya no existe." };
   if (poliza.canceladaAt) return { enviado: false, motivo: "la póliza está cancelada." };
   if (!(await esRenovacion(poliza, user.agenciaId))) return { enviado: false, motivo: "la póliza no es una renovación." };
-  const r = await enviarAgradecimientoRenovacion(polizaId, user.agenciaId).catch((e) => {
+  const r = await enviarAgradecimientoRenovacion(polizaId, user.agenciaId, ocultas.correos).catch((e) => {
     console.error("[enviarAgradecimientoDeRenovacion]", e instanceof Error ? e.message : e);
     return { enviado: false as const, motivo: "no se pudo enviar el correo." };
   });
@@ -69,10 +81,12 @@ export async function enviarAgradecimientoDeRenovacion(polizaId: string): Promis
  * "Tu nueva póliza ya está lista" al cliente de una póliza nueva (no renovación), con su carátula
  * y su expediente: botón "Nuevo" del detalle de la póliza. Sale una sola vez por póliza.
  */
-export async function enviarPolizaNuevaAlCliente(polizaId: string): Promise<AgradecimientoRenovacion> {
+export async function enviarPolizaNuevaAlCliente(polizaId: string, cco = ""): Promise<AgradecimientoRenovacion> {
   const user = await getUsuarioCrm();
   if (!user) return { enviado: false, motivo: "tu sesión expiró." };
   if (typeof polizaId !== "string" || !/^[a-z0-9]+$/i.test(polizaId)) return { enviado: false, motivo: "datos inválidos." };
+  const ocultas = validarCco(cco);
+  if (!ocultas.ok) return { enviado: false, motivo: ocultas.motivo };
   const poliza = await db.poliza.findFirst({
     where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
     select: { id: true, cadenaId: true, vigencia_inicio: true, canceladaAt: true },
@@ -80,7 +94,7 @@ export async function enviarPolizaNuevaAlCliente(polizaId: string): Promise<Agra
   if (!poliza) return { enviado: false, motivo: "la póliza ya no existe." };
   if (poliza.canceladaAt) return { enviado: false, motivo: "la póliza está cancelada." };
   if (await esRenovacion(poliza, user.agenciaId)) return { enviado: false, motivo: "la póliza es una renovación." };
-  const r = await enviarPolizaNueva(polizaId, user.agenciaId).catch((e) => {
+  const r = await enviarPolizaNueva(polizaId, user.agenciaId, ocultas.correos).catch((e) => {
     console.error("[enviarPolizaNuevaAlCliente]", e instanceof Error ? e.message : e);
     return { enviado: false as const, motivo: "no se pudo enviar el correo." };
   });

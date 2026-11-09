@@ -91,22 +91,31 @@ export async function getCorreoPolizaEnviado(polizaId: string, agenciaId: string
  * Correo "Gracias por continuar con nosotros" al cliente registrado de una póliza recién renovada:
  * le confirma el número y la vigencia nuevos (ver enviarCorreoPoliza).
  */
-export function enviarAgradecimientoRenovacion(polizaId: string, agenciaId: string): Promise<AgradecimientoRenovacion> {
-  return enviarCorreoPoliza(polizaId, agenciaId, "renovacion");
+export function enviarAgradecimientoRenovacion(
+  polizaId: string,
+  agenciaId: string,
+  cco: string[] = []
+): Promise<AgradecimientoRenovacion> {
+  return enviarCorreoPoliza(polizaId, agenciaId, "renovacion", cco);
 }
 
 /** Correo "Tu nueva póliza ya está lista" al cliente registrado de una póliza nueva (ver enviarCorreoPoliza). */
-export function enviarPolizaNueva(polizaId: string, agenciaId: string): Promise<AgradecimientoRenovacion> {
-  return enviarCorreoPoliza(polizaId, agenciaId, "nueva");
+export function enviarPolizaNueva(polizaId: string, agenciaId: string, cco: string[] = []): Promise<AgradecimientoRenovacion> {
+  return enviarCorreoPoliza(polizaId, agenciaId, "nueva", cco);
 }
 
 /**
  * Le entrega al cliente registrado su póliza con la carátula y el expediente. Sale de la dirección
- * universal con la marca de la agencia; las respuestas van a su correo de servicio y su correo de
- * copia recibe copia oculta. Queda en avisos_enviados, así que cada clase sale una sola vez por
+ * universal con la marca de la agencia; las respuestas van a su correo de servicio, y su correo de
+ * copia y las direcciones de `cco` reciben copia oculta. Queda en avisos_enviados, así que cada clase sale una sola vez por
  * póliza. Nunca lanza: si no se puede enviar, dice por qué (la póliza ya quedó guardada).
  */
-async function enviarCorreoPoliza(polizaId: string, agenciaId: string, clase: ClaseCorreoPoliza): Promise<AgradecimientoRenovacion> {
+async function enviarCorreoPoliza(
+  polizaId: string,
+  agenciaId: string,
+  clase: ClaseCorreoPoliza,
+  cco: string[]
+): Promise<AgradecimientoRenovacion> {
   const { tipo, mensaje: redactar, modulo } = CLASES[clase];
   const poliza = await db.poliza.findFirst({
     where: { id: polizaId, agenciaId },
@@ -187,6 +196,7 @@ async function enviarCorreoPoliza(polizaId: string, agenciaId: string, clase: Cl
       html,
       texto,
       copia: agencia.correoCopiaAvisos ?? undefined,
+      cco,
       responderA: agencia.correoServicio ?? undefined,
       modulo,
       adjuntos: documentos.adjuntos,

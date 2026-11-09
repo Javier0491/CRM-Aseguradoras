@@ -46,11 +46,7 @@ export function getConfigCorreo() {
   };
 }
 
-const EMAIL_VALIDO = /^[^\s@<>()",;]+@[^\s@<>()",;]+\.[^\s@<>()",;]+$/;
-
-export function emailValido(email: string) {
-  return EMAIL_VALIDO.test(email.trim());
-}
+export { emailValido } from "@/lib/comunicaciones/correo";
 
 const EXTENSION: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif" };
 
@@ -112,17 +108,21 @@ export async function enviarCorreos({
   html,
   destinatarios,
   marca,
+  archivos = [],
 }: {
   asunto: string;
   html: string;
   destinatarios: DestinatarioCorreo[];
   marca: MarcaCorreo;
+  /** Archivos adjuntos que recibe cada destinatario (ya validados). */
+  archivos?: Attachment[];
 }): Promise<ResultadoEnvio[]> {
   const { resend, remitente, responderA } = getConfigCorreo();
   const de = remitenteDeAgencia(remitente, marca.nombre);
   // Las respuestas de los clientes llegan al correo de servicio de la agencia.
   const responder = marca.correoServicio?.trim() || responderA;
-  const { html: cuerpo, adjuntos } = extraerImagenesEnLinea(html);
+  const { html: cuerpo, adjuntos: enLinea } = extraerImagenesEnLinea(html);
+  const adjuntos = [...enLinea, ...archivos];
   const resultados: ResultadoEnvio[] = [];
 
   for (const [i, d] of destinatarios.entries()) {
@@ -202,6 +202,7 @@ export async function enviarAviso({
   html,
   texto,
   copia,
+  cco = [],
   responderA: responderAgencia,
   modulo = "avisos",
   adjuntos,
@@ -212,6 +213,8 @@ export async function enviarAviso({
   html: string;
   texto: string;
   copia?: string;
+  /** Más direcciones en copia oculta, aparte de `copia` (p. ej. las que escribe la ejecutiva). */
+  cco?: string[];
   responderA?: string;
   /** Etiqueta del envío en Resend. */
   modulo?: string;
@@ -219,11 +222,16 @@ export async function enviarAviso({
   adjuntos?: Attachment[];
 }): Promise<{ ok: boolean; error?: string }> {
   const { resend, remitente, responderA } = getConfigCorreo();
+  // Copia oculta: las ejecutivas se enteran sin que el cliente vea el buzón entre los destinatarios.
+  const ocultas = new Map<string, string>();
+  for (const c of [copia, ...cco]) {
+    const correo = c?.trim();
+    if (correo && correo.toLowerCase() !== para.toLowerCase()) ocultas.set(correo.toLowerCase(), correo);
+  }
   const error = await despachar(resend, {
     from: remitenteDeAgencia(remitente, agencia),
     to: para,
-    // Copia oculta: las ejecutivas se enteran sin que el cliente vea el buzón entre los destinatarios.
-    bcc: copia && copia.toLowerCase() !== para.toLowerCase() ? copia : undefined,
+    bcc: ocultas.size > 0 ? [...ocultas.values()] : undefined,
     replyTo: responderAgencia ?? copia ?? responderA,
     subject: asunto,
     html,
