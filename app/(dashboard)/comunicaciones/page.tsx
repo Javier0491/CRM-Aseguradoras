@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { BellRing, Mail } from "lucide-react";
+import { BellRing, CalendarX2, Mail } from "lucide-react";
 
 import { ComunicacionesWorkspace } from "@/components/comunicaciones/comunicaciones-workspace";
+import { PrevioCancelar } from "@/components/comunicaciones/previo-cancelar";
 import { RedactorCorreo } from "@/components/comunicaciones/redactor-correo";
 import { EncabezadoModulo } from "@/components/layout/encabezado-modulo";
 import { Badge } from "@/components/ui/badge";
@@ -38,6 +39,9 @@ export default async function ComunicacionesPage() {
           <TabsTrigger value="correo">
             <Mail /> Correo a clientes
           </TabsTrigger>
+          <TabsTrigger value="previo">
+            <CalendarX2 /> Previo a cancelar
+          </TabsTrigger>
           <TabsTrigger value="cobranza">
             <BellRing /> Avisos de cobranza
             <Badge variant="outline" className="border-warning/30 bg-warning/10 text-[10px] font-medium text-warning">
@@ -53,6 +57,9 @@ export default async function ComunicacionesPage() {
             remitente={configurado ? remitente : null}
             marca={marca}
           />
+        </TabsContent>
+        <TabsContent value="previo">
+          <PrevioCancelar remitente={configurado ? remitente : null} correoContacto={marca.correoServicio} />
         </TabsContent>
         <TabsContent value="cobranza">
           <ComunicacionesWorkspace recibos={recibosPorCobrar} plantillasIniciales={plantillasIniciales} />

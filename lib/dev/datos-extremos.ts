@@ -15,6 +15,9 @@ import type { DatosPolizas } from "@/components/polizas/vista-polizas";
 import type { DatosRenovaciones } from "@/components/renovaciones/vista-renovaciones";
 import type { DatosSuperadmin } from "@/components/superadmin/vista-superadmin";
 import type { DatosMensajesDev } from "@/components/dev/vista-mensajes-dev";
+import type { PrevioInicial } from "@/components/comunicaciones/previo-cancelar";
+import type { PolizaPrevio } from "@/lib/previo-cancelar/actions";
+import type { RenglonPrevio } from "@/lib/previo-cancelar/excel";
 import type { DatosTareas } from "@/components/tareas/vista-tareas";
 import { hoyISO } from "@/lib/format";
 import { Prisma, type EstadoRecibo, type FormaPago, type Ramo } from "@/lib/generated/prisma/client";
@@ -990,5 +993,59 @@ export function datosSuperadmin(c: Conjunto): DatosSuperadmin {
     activaId: "agc0",
     propiaId: "agc0",
     hoy,
+  };
+}
+
+// Previo a cancelar ---------------------------------------------------------------------------
+
+export function datosPrevio(c: Conjunto): PrevioInicial | undefined {
+  if (c === "vacio") return undefined;
+  const estados = ["listo", "listo", "sin_correo", "avisado", "no_encontrada", "cancelada"] as const;
+  const total = { demo: 6, extremos: 12, uno: 1, masivo: 300 }[c];
+  const largo = c === "extremos";
+  const renglones: RenglonPrevio[] = [];
+  const polizas: PolizaPrevio[] = [];
+  for (let i = 0; i < total; i++) {
+    const estado = estados[i % estados.length];
+    const numero = String(1455495 + i * 3967);
+    const contratante = largo && i % 2 === 0
+      ? "FIDEICOMISO DE ADMINISTRACIÓN E INVERSIÓN F/4521 BANORTE PARA EMPLEADOS DE GRUPO INDUSTRIAL DEL NORTE"
+      : ["CARLOS ROBERTO GARIBAY DOMINGUEZ", "ARLETTE SANCHEZ RODRIGUEZ", "BRANDON JACOB BARRAGAN SANTELISES", "JO"][i % 4];
+    renglones.push({
+      poliza: numero,
+      contratante,
+      agente: "LESLY JANET RAMIREZ BARBOSA",
+      formaPago: i % 3 === 1 ? "ANUAL" : "MENSUAL S REC",
+      conducto: i % 3 === 1 ? "AGENTE" : "TARJ.CRED.",
+      referencia: `MEDICA00000I${numero}4`,
+      pagadoHasta: i % 3 === 1 ? "" : "2026-10-01",
+      primaAnual: largo ? 12_345_678.9 : 101_867.86,
+      primerRecibo: largo ? 1_234_567.89 : 9_658.6,
+      reciboSubsecuente: i % 3 === 1 ? 0 : largo ? 987_654.32 : 8_382.66,
+    });
+    if (estado === "no_encontrada") continue;
+    polizas.push({
+      numero,
+      polizaId: `pol${i}`,
+      numeroImpreso: `0000${685925 + i}`,
+      polizaVigor: numero,
+      ramo: i % 5 === 4 ? "VIDA_INDIVIDUAL" : "GMM_INDIVIDUAL",
+      aseguradora: "MetLife",
+      cliente: { id: `cli${i}`, nombre: contratante },
+      email:
+        estado === "sin_correo"
+          ? null
+          : largo
+            ? "contabilidad.y.administracion.general@grupoindustrialdelnorte-fideicomisos.com.mx"
+            : `cliente${i}@ejemplo.com`,
+      cancelada: estado === "cancelada",
+      vigenciaFin: "2027-07-01",
+      avisado: estado === "avisado" ? { destinatario: `cliente${i}@ejemplo.com`, fecha: "2026-11-05T16:00:00.000Z" } : null,
+    });
+  }
+  return {
+    nombre: largo ? "Previo a cancelar GMM noviembre - LESLY JANET RAMIREZ BARBOSA - agente 12959 (versión final).xlsx" : "Previo a cancelar GMM noviembre.xlsx",
+    datos: { titulo: "Previo de Polizas a Cancelar Gastos Medicos", ramo: "GMM", renglones },
+    polizas,
   };
 }

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { VistaCliente } from "@/components/clientes/vista-cliente";
+import { PrevioCancelar } from "@/components/comunicaciones/previo-cancelar";
 import { VistaClientes } from "@/components/clientes/vista-clientes";
 import { VistaDashboard } from "@/components/dashboard/vista-dashboard";
 import { BarraDatosDev } from "@/components/dev/barra-datos-dev";
@@ -21,6 +22,7 @@ import {
   datosMensajes,
   datosPoliza,
   datosPolizas,
+  datosPrevio,
   datosRenovaciones,
   datosSuperadmin,
   datosTareas,
@@ -45,6 +47,7 @@ const PANTALLAS = [
   { clave: "dashboard", titulo: "Dashboard" },
   { clave: "tareas", titulo: "Tareas (Líder de oficina)" },
   { clave: "mensajes", titulo: "Mensajes (chat del equipo)" },
+  { clave: "previo", titulo: "Previo a cancelar" },
   { clave: "superadmin", titulo: "Cobranza de la plataforma" },
 ] as const;
 type Pantalla = (typeof PANTALLAS)[number]["clave"];
@@ -84,6 +87,14 @@ export default async function DatosDePruebaPage({ searchParams }: PageProps<"/de
     dashboard: () => <VistaDashboard {...datosDashboard(conjunto)} />,
     tareas: () => <VistaTareasPagina {...datosTareas(conjunto)} />,
     mensajes: () => <VistaMensajesDev {...datosMensajes(conjunto)} />,
+    previo: () => (
+      <PrevioCancelar
+        key={conjunto}
+        remitente="PJ MAGNUS <avisos@zensecure.mx>"
+        correoContacto="servicio@pjmagnus.mx"
+        inicial={datosPrevio(conjunto)}
+      />
+    ),
     superadmin: () => <VistaSuperadmin {...datosSuperadmin(conjunto)} />,
   };
 
