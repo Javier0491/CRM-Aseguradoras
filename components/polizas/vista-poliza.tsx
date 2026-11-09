@@ -278,19 +278,11 @@ export function VistaPoliza({
                 />
               )}
               {!cancelada && (
-                <EnviarEndoso
-                  polizaId={poliza.id}
-                  email={poliza.cliente.email}
-                  endosos={poliza.endosos.map((e) => ({
-                    id: e.id,
-                    tipo: e.tipo,
-                    numero: e.numero,
-                    fecha: e.fecha,
-                    createdAt: e.createdAt,
-                  }))}
-                  avisos={avisosEndoso}
-                  caratula={poliza.caratula_path ? { subidaAt: poliza.caratula_subido_at } : null}
-                />
+                <Button asChild variant="outline" size="sm" title="Subir la póliza endosada, actualizar sus datos y avisar al cliente">
+                  <Link href={`/polizas/${poliza.id}/endoso`}>
+                    <FilePenLine /> Endoso
+                  </Link>
+                </Button>
               )}
               {renovada ? (
                 <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
@@ -540,10 +532,27 @@ export function VistaPoliza({
                 <FilePenLine className="size-4 text-primary" /> Endosos · {poliza.endosos.length}
               </CardTitle>
               <CardDescription>Cambios durante la vigencia y su movimiento de prima.</CardDescription>
+              {!cancelada && (
+                <CardAction>
+                  <EnviarEndoso
+                    polizaId={poliza.id}
+                    email={poliza.cliente.email}
+                    endosos={poliza.endosos.map((e) => ({
+                      id: e.id,
+                      tipo: e.tipo,
+                      numero: e.numero,
+                      fecha: e.fecha,
+                      createdAt: e.createdAt,
+                    }))}
+                    avisos={avisosEndoso}
+                    caratula={poliza.caratula_path ? { subidaAt: poliza.caratula_subido_at } : null}
+                />
+                </CardAction>
+              )}
             </CardHeader>
             {poliza.endosos.length === 0 ? (
               <p className="px-5 py-4 text-sm text-muted-foreground">
-                Sin endosos.{!cancelada && " Regístralos desde «Más → Registrar endoso»."}
+                Sin endosos.{!cancelada && " Usa «Endoso» para subir la póliza endosada, o «Más → Registrar endoso»."}
               </p>
             ) : (
               <ul className="divide-y">

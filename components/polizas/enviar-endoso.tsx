@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Check, FilePenLine, Loader2, Mail } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ export type EndosoParaAviso = {
 export type AvisoEndosoEnviado = { endosoId: string | null; destinatario: string; fecha: Date };
 
 /**
- * Botón "Endoso" del detalle de una póliza: le avisa al cliente que se realizaron los cambios a su
+ * Botón "Avisar al cliente" de los endosos de una póliza: le avisa al cliente que se realizaron los cambios a su
  * póliza y le manda la versión actualizada (carátula y expediente). Se elige el endoso registrado
  * que se le explica; cada endoso se avisa una vez y el aviso general se puede repetir.
  */
@@ -113,7 +113,7 @@ export function EnviarEndoso({
               : "Avisar al cliente que se realizaron los cambios a su póliza, con la póliza actualizada"
         }
       >
-        <FilePenLine /> Endoso
+        <Mail /> Avisar al cliente
         {ultimo && !pendiente0 && <Check className="text-success" />}
       </Button>
       <Dialog open={abierto} onOpenChange={(v) => !pendiente && setAbierto(v)}>

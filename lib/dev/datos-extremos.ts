@@ -11,6 +11,7 @@ import type { DatosCliente } from "@/components/clientes/vista-cliente";
 import type { DatosClientes } from "@/components/clientes/vista-clientes";
 import type { DatosDashboard } from "@/components/dashboard/vista-dashboard";
 import type { DatosPoliza } from "@/components/polizas/vista-poliza";
+import type { PolizaFormInicial } from "@/components/captura/poliza-form";
 import type { DatosPolizas } from "@/components/polizas/vista-polizas";
 import type { DatosRenovaciones } from "@/components/renovaciones/vista-renovaciones";
 import type { DatosSuperadmin } from "@/components/superadmin/vista-superadmin";
@@ -1050,5 +1051,55 @@ export function datosPrevio(c: Conjunto): PrevioInicial | undefined {
     nombre: largo ? "Previo a cancelar GMM noviembre - LESLY JANET RAMIREZ BARBOSA - agente 12959 (versión final).xlsx" : "Previo a cancelar GMM noviembre.xlsx",
     datos: { titulo: "Previo de Polizas a Cancelar Gastos Medicos", ramo: "GMM", renglones },
     polizas,
+  };
+}
+
+// Endoso con Captura Inteligente ----------------------------------------------------------------
+
+export function datosEndoso(c: Conjunto): {
+  aseguradoras: { value: string; label: string }[];
+  endoso: {
+    polizaId: string;
+    numero: string;
+    vigencia: { inicio: string; fin: string };
+    bloqueados: string[];
+    inicial: PolizaFormInicial;
+  };
+} {
+  const largo = c === "extremos";
+  return {
+    aseguradoras: [
+      { value: "aseg-metlife", label: "MetLife" },
+      { value: "aseg-axa", label: "AXA Seguros" },
+    ],
+    endoso: {
+      polizaId: "pol0",
+      numero: largo ? "VG-COL-2026-000123456-REN-03-ANEXO-B" : "0000685925",
+      vigencia: { inicio: "2026-07-01", fin: "2027-07-01" },
+      // "uno": con recibos cobrados, también quedan fijas la forma de pago y la prima.
+      bloqueados: c === "uno" ? ["vigenciaInicio", "vigenciaFin", "formaPago", "primaTotal", "plazoPago"] : [],
+      inicial: {
+        ramo: "gmm_individual",
+        generales: {
+          numeroImpreso: largo ? "VG-COL-2026-000123456-REN-03-ANEXO-B" : "0000685925",
+          polizaVigor: "1455495",
+          aseguradora: "aseg-metlife",
+          vigenciaInicio: "2026-07-01",
+          vigenciaFin: "2027-07-01",
+          formaPago: "MENSUAL",
+          primaTotal: "101867.86",
+          primaNeta: "87816.22",
+          contratante: largo
+            ? "FIDEICOMISO DE ADMINISTRACIÓN E INVERSIÓN F/4521 BANORTE PARA EMPLEADOS DE GRUPO INDUSTRIAL DEL NORTE"
+            : "CARLOS ROBERTO GARIBAY DOMINGUEZ",
+          rfc: "GADC860101AB1",
+          correo: "cliente@ejemplo.com",
+          telefono: "5512345678",
+        },
+        especificos: {},
+        asegurados: [{ nombre: "CARLOS ROBERTO GARIBAY DOMINGUEZ", parentesco: "titular", edad: "40", antiguedad: "2019-01-01", sexo: "" } as never],
+        ejecutivoId: "",
+      },
+    },
   };
 }

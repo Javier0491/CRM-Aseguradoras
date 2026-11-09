@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { VistaCliente } from "@/components/clientes/vista-cliente";
+import { CapturaWorkspace } from "@/components/captura/captura-workspace";
 import { PrevioCancelar } from "@/components/comunicaciones/previo-cancelar";
 import { VistaClientes } from "@/components/clientes/vista-clientes";
 import { VistaDashboard } from "@/components/dashboard/vista-dashboard";
@@ -19,6 +20,7 @@ import {
   datosCliente,
   datosClientes,
   datosDashboard,
+  datosEndoso,
   datosMensajes,
   datosPoliza,
   datosPolizas,
@@ -48,6 +50,7 @@ const PANTALLAS = [
   { clave: "tareas", titulo: "Tareas (Líder de oficina)" },
   { clave: "mensajes", titulo: "Mensajes (chat del equipo)" },
   { clave: "previo", titulo: "Previo a cancelar" },
+  { clave: "endoso", titulo: "Endoso con Captura Inteligente" },
   { clave: "superadmin", titulo: "Cobranza de la plataforma" },
 ] as const;
 type Pantalla = (typeof PANTALLAS)[number]["clave"];
@@ -95,6 +98,7 @@ export default async function DatosDePruebaPage({ searchParams }: PageProps<"/de
         inicial={datosPrevio(conjunto)}
       />
     ),
+    endoso: () => <CapturaWorkspace key={conjunto} verComisiones={false} {...datosEndoso(conjunto)} />,
     superadmin: () => <VistaSuperadmin {...datosSuperadmin(conjunto)} />,
   };
 

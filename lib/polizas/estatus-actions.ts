@@ -133,7 +133,7 @@ export async function reactivarPoliza(polizaId: string): Promise<EstatusResultad
   return { ok: true };
 }
 
-export type EndosoResultado = { ok: true } | { ok: false; error?: string; errores?: ErroresEndoso };
+export type EndosoResultado = { ok: true; id: string } | { ok: false; error?: string; errores?: ErroresEndoso };
 
 /** Registra un endoso de la póliza (cambio durante la vigencia con su movimiento de prima). */
 export async function registrarEndoso(polizaId: string, raw: EndosoValores): Promise<EndosoResultado> {
@@ -153,8 +153,8 @@ export async function registrarEndoso(polizaId: string, raw: EndosoValores): Pro
   if (Object.keys(errores).length > 0) return { ok: false, errores };
   const prima = primaEndoso(valores.prima);
 
-  await db.$transaction(async (tx) => {
-    await tx.endoso.create({
+  const id = await db.$transaction(async (tx) => {
+    const endoso = await tx.endoso.create({
       data: {
         agenciaId: user.agenciaId,
         polizaId: poliza.id,
@@ -165,6 +165,7 @@ export async function registrarEndoso(polizaId: string, raw: EndosoValores): Pro
         prima: prima === null ? null : prima.toFixed(2),
         usuarioEmail: user.email,
       },
+      select: { id: true },
     });
     await registrarBitacora(
       user,
@@ -179,9 +180,10 @@ export async function registrarEndoso(polizaId: string, raw: EndosoValores): Pro
       },
       tx
     );
+    return endoso.id;
   });
   revalidar(poliza.id);
-  return { ok: true };
+  return { ok: true, id };
 }
 
 /** Borra un endoso capturado por error. */

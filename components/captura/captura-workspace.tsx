@@ -5,9 +5,11 @@ import * as React from "react";
 import { OcrDropzone } from "@/components/captura/ocr-dropzone";
 import {
   PolizaForm,
+  type ModoPoliza,
   type PolizaFormHandle,
   type PolizaFormInicial,
 } from "@/components/captura/poliza-form";
+import { CAMPOS_FIJOS_ENDOSO, combinarEndoso, combinarRenovacion } from "@/lib/captura/combinar";
 import type { ExtraccionPoliza } from "@/lib/ocr/types";
 import type { Opcion, Ramo } from "@/lib/polizas/ramos";
 
@@ -32,35 +34,13 @@ export function aValoresIniciales(datos: ExtraccionPoliza, aseguradoras: Opcion[
   };
 }
 
-/**
- * Renovación: lo que lee la IA de la carátula nueva manda, y lo que no trae se completa con la
- * vigencia anterior (contacto, datos del ramo, asegurados y su antigüedad).
- */
-function combinarRenovacion(ocr: PolizaFormInicial, anterior: PolizaFormInicial): PolizaFormInicial {
-  const conValor = (v: Record<string, string> | undefined) =>
-    Object.fromEntries(Object.entries(v ?? {}).filter(([, valor]) => valor !== ""));
-  const mismoRamo = !ocr.ramo || ocr.ramo === anterior.ramo;
-  const antiguedades = new Map((anterior.asegurados ?? []).map((a) => [a.nombre.trim().toUpperCase(), a.antiguedad]));
-  return {
-    ramo: ocr.ramo ?? anterior.ramo,
-    // El número original se conserva en la renovación; la póliza vigor es la que lea la IA (la nueva).
-    generales: { ...anterior.generales, ...conValor(ocr.generales), numeroImpreso: anterior.generales?.numeroImpreso ?? "" },
-    especificos: mismoRamo ? { ...anterior.especificos, ...conValor(ocr.especificos) } : ocr.especificos,
-    asegurados: ocr.asegurados?.length
-      ? ocr.asegurados.map((a) => ({ ...a, antiguedad: a.antiguedad || antiguedades.get(a.nombre.trim().toUpperCase()) || "" }))
-      : anterior.asegurados,
-    sumaAseguradaIlimitada: ocr.sumaAseguradaIlimitada ?? anterior.sumaAseguradaIlimitada,
-    // La renovación sigue en la cartera del mismo ejecutivo.
-    ejecutivoId: anterior.ejecutivoId,
-  };
-}
-
 export function CapturaWorkspace({
   aseguradoras,
   verComisiones,
   ejecutivos,
   ejecutivoPredeterminado,
   renovacion,
+  endoso,
 }: {
   aseguradoras: Opcion[];
   /** Solo ADMIN captura el % de comisión personalizado. */
@@ -70,12 +50,27 @@ export function CapturaWorkspace({
   ejecutivoPredeterminado?: string;
   /** Captura de la renovación de una póliza, con sus datos precargados. */
   renovacion?: { anterior: { id: string; numero: string }; inicial: PolizaFormInicial };
+  /** Endoso de una póliza guardada: sus datos actuales precargados y lo que no puede cambiar. */
+  endoso?: {
+    polizaId: string;
+    numero: string;
+    vigencia: { inicio: string; fin: string };
+    /** Campos fijos por recibos cobrados (además de número y vigencia). */
+    bloqueados: readonly string[];
+    inicial: PolizaFormInicial;
+  };
 }) {
+  const bloqueadosEndoso = endoso ? [...CAMPOS_FIJOS_ENDOSO, ...endoso.bloqueados] : [];
+  const modo: ModoPoliza | undefined = endoso
+    ? { tipo: "endoso", polizaId: endoso.polizaId, numero: endoso.numero, bloqueados: bloqueadosEndoso, vigencia: endoso.vigencia }
+    : renovacion
+      ? { tipo: "renovacion", anterior: renovacion.anterior }
+      : undefined;
   // `version` remonta el formulario para que tome los valores extraídos como estado inicial.
   const [prellenado, setPrellenado] = React.useState<{
     version: number;
     inicial?: PolizaFormInicial;
-  }>({ version: 0, inicial: renovacion?.inicial });
+  }>({ version: 0, inicial: endoso?.inicial ?? renovacion?.inicial });
   const [extrayendo, setExtrayendo] = React.useState(false);
   // Documentos leídos por la IA: el primer PDF se guarda como carátula de la póliza.
   // Las imágenes y los demás documentos se usan solo para la lectura.
@@ -110,7 +105,11 @@ export function CapturaWorkspace({
             const leidos = aValoresIniciales(datos, aseguradoras);
             setPrellenado((p) => ({
               version: p.version + 1,
-              inicial: renovacion ? combinarRenovacion(leidos, renovacion.inicial) : leidos,
+              inicial: endoso
+                ? combinarEndoso(leidos, endoso.inicial, bloqueadosEndoso)
+                : renovacion
+                  ? combinarRenovacion(leidos, renovacion.inicial)
+                  : leidos,
             }));
           }}
         />
@@ -144,7 +143,7 @@ export function CapturaWorkspace({
         verComisiones={verComisiones}
         ejecutivos={ejecutivos}
         ejecutivoPredeterminado={ejecutivoPredeterminado}
-        modo={renovacion ? { tipo: "renovacion", anterior: renovacion.anterior } : undefined}
+        modo={modo}
         ref={formRef}
         extrayendo={extrayendo || leyendoComplemento}
         leidaConIa={leidaConIa}

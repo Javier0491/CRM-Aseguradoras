@@ -68,12 +68,26 @@ import { ARCHIVOS, TIPOS_ARCHIVO, validarArchivo, type TipoArchivo } from "@/lib
 import { esArchivoIlegible, MENSAJE_ARCHIVO_PERDIDO } from "@/lib/archivos/memoria";
 import { etiquetaPolizaVigor, usaFolioInterno, usaPolizaVigorEn } from "@/lib/aseguradoras/poliza-vigor";
 import { subirArchivo } from "@/lib/archivos/subir";
+import { CAMPOS_FIJOS_ENDOSO } from "@/lib/captura/combinar";
 import { buscarContactoPorRfc, type ContactoCliente } from "@/lib/clientes/actions";
 import { leerCco, MAX_CCO } from "@/lib/comunicaciones/correo";
 import { claveNombre, RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { hoyISO } from "@/lib/format";
 import { validarActividad, type ActividadCaptura } from "@/lib/tareas/actividades";
-import { editarPoliza, enviarAgradecimientoDeRenovacion, guardarPoliza } from "@/lib/polizas/actions";
+import {
+  editarPoliza,
+  enviarAgradecimientoDeRenovacion,
+  enviarEndosoAlCliente,
+  guardarPoliza,
+} from "@/lib/polizas/actions";
+import { registrarEndoso } from "@/lib/polizas/estatus-actions";
+import {
+  etiquetaEndoso,
+  TIPOS_ENDOSO,
+  validarEndoso,
+  type EndosoValores,
+  type ErroresEndoso,
+} from "@/lib/polizas/estatus";
 import type { GuardarPolizaResultado } from "@/lib/polizas/guardar";
 import {
   aseguradoVacio,
@@ -128,11 +142,25 @@ const SIN_EJECUTIVO = "__sin_asignar__";
  * - renovacion: póliza nueva que renueva `anterior`; conserva su póliza vigor (la cadena).
  * - edicion: corrige una póliza guardada; `bloqueados` son campos que no se pueden cambiar
  *   (el calendario de recibos cuando ya hay recibos cobrados).
+ * - endoso: actualiza los datos de una póliza guardada con la póliza endosada (la que lee la IA) y
+ *   registra el endoso; el número, la póliza vigor y la vigencia no cambian (van en `bloqueados`).
  */
 export type ModoPoliza =
   | { tipo: "captura" }
   | { tipo: "renovacion"; anterior: { id: string; numero: string } }
-  | { tipo: "edicion"; polizaId: string; numero: string; bloqueados: readonly string[]; cancelada?: boolean };
+  | { tipo: "edicion"; polizaId: string; numero: string; bloqueados: readonly string[]; cancelada?: boolean }
+  | {
+      tipo: "endoso";
+      polizaId: string;
+      numero: string;
+      bloqueados: readonly string[];
+      /** Vigencia de la póliza (YYYY-MM-DD): el endoso debe surtir efecto dentro de ella. */
+      vigencia: { inicio: string; fin: string };
+    };
+
+/** La fecha dada, o el extremo más cercano de la vigencia si cae fuera. */
+const fechaDentro = (fecha: string, v: { inicio: string; fin: string }) =>
+  fecha < v.inicio ? v.inicio : fecha > v.fin ? v.fin : fecha;
 
 /** Acciones del formulario disponibles para el contenedor (vía `ref`). */
 export type PolizaFormHandle = {
@@ -379,6 +407,15 @@ export function PolizaForm({
   const [erroresActividades, setErroresActividades] = React.useState(false);
   const router = useRouter();
   const editando = modo.tipo === "edicion";
+  // Endoso: el movimiento que se registra junto con los datos actualizados.
+  const [endoso, setEndoso] = React.useState<EndosoValores>(() => ({
+    tipo: "",
+    fecha: modo.tipo === "endoso" ? fechaDentro(hoyISO(), modo.vigencia) : "",
+    numero: "",
+    descripcion: "",
+    prima: "",
+  }));
+  const [erroresEndoso, setErroresEndoso] = React.useState<ErroresEndoso>({});
 
   // La validación es la misma que aplica la Server Action (lib/polizas/validacion.ts).
   const resolver = React.useCallback<Resolver<FormValues>>(
@@ -447,7 +484,12 @@ export function PolizaForm({
   } = useForm<FormValues>({ defaultValues: valoresIniciales(inicial, ejecutivoPredeterminado), resolver });
 
   // En una edición la póliza ya está ligada a su cliente; al capturar o renovar se busca por RFC.
-  const clienteRegistrado = useClienteRegistrado(control, getValues, setValue, modo.tipo !== "edicion");
+  const clienteRegistrado = useClienteRegistrado(
+    control,
+    getValues,
+    setValue,
+    modo.tipo !== "edicion" && modo.tipo !== "endoso"
+  );
 
   const ramo = useWatch({ control, name: "ramo" });
   const secciones = seccionesPorRamo[ramo];
@@ -563,9 +605,17 @@ export function PolizaForm({
 
   const onSubmit = handleSubmit(async (values) => {
     limpiarAvisos();
-    if (modo.tipo === "renovacion" && agradecer && errorCco) {
-      setErrorGeneral(`${errorCco}. Corrígelo o apaga el agradecimiento para guardar.`);
+    if ((modo.tipo === "renovacion" || modo.tipo === "endoso") && agradecer && errorCco) {
+      setErrorGeneral(`${errorCco}. Corrígelo o apaga el aviso al cliente para guardar.`);
       return;
+    }
+    if (modo.tipo === "endoso") {
+      const e = validarEndoso(endoso, modo.vigencia);
+      setErroresEndoso(e);
+      if (Object.keys(e).length > 0) {
+        setErrorGeneral("Completa los datos del endoso.");
+        return;
+      }
     }
     try {
       await enviar(values);
@@ -591,6 +641,11 @@ export function PolizaForm({
     }
 
     const datos = datosDelFormulario(values, Boolean(ejecutivos));
+
+    if (modo.tipo === "endoso") {
+      await guardarEndoso(modo, datos, values);
+      return;
+    }
 
     if (modo.tipo === "edicion") {
       const editada = await editarPoliza(modo.polizaId, datos);
@@ -650,6 +705,64 @@ export function PolizaForm({
     }
   }
 
+  /**
+   * Endoso: actualiza los datos de la póliza, registra el endoso, reemplaza sus documentos y, si se
+   * pidió, le avisa al cliente con la póliza ya actualizada. Termina en el detalle de la póliza.
+   */
+  async function guardarEndoso(
+    m: Extract<ModoPoliza, { tipo: "endoso" }>,
+    datos: ReturnType<typeof datosDelFormulario>,
+    values: FormValues
+  ) {
+    const editada = await editarPoliza(m.polizaId, datos);
+    if (!editada.ok) {
+      setErrorGeneral(editada.error ?? null);
+      for (const [nombre, message] of Object.entries(editada.errores ?? ({} as Errores))) {
+        setError(rutaCampo(nombre, values.ramo), { type: "server", message });
+      }
+      return;
+    }
+    const registrado = await registrarEndoso(m.polizaId, endoso);
+    if (!registrado.ok) {
+      setErroresEndoso(registrado.errores ?? {});
+      setErrorGeneral(
+        `Los datos de la póliza se guardaron, pero el endoso no: ${registrado.error ?? "revisa sus datos"}. Corrígelo y vuelve a guardar.`
+      );
+      return;
+    }
+    // Los documentos nuevos reemplazan a los anteriores de la póliza.
+    const porTipo: Record<TipoArchivo, File | null> = {
+      caratula,
+      negociacion,
+      expediente: values.expediente ?? expediente,
+    };
+    const fallidos: string[] = [];
+    for (const tipo of TIPOS_ARCHIVO) {
+      const archivo = porTipo[tipo];
+      if (!archivo) continue;
+      setSubiendo(tipo);
+      const r = await subirArchivo(m.polizaId, tipo, archivo);
+      if (!r.ok) fallidos.push(`${ARCHIVOS[tipo].etiqueta}: ${r.error}`);
+    }
+    setSubiendo(null);
+    toast.success(`Endoso de la póliza ${m.numero} guardado`, {
+      description: caratula && fallidos.length === 0 ? "Datos y carátula actualizados." : "Datos actualizados.",
+    });
+    if (fallidos.length > 0) {
+      toast.error("No se subieron algunos documentos; súbelos desde la póliza.", { description: fallidos.join(" · ") });
+    }
+    // El aviso sale con la carátula recién subida: si no se pudo subir, no se manda la anterior.
+    if (agradecer && fallidos.length === 0) {
+      const aviso = await enviarEndosoAlCliente(m.polizaId, registrado.id, ocultas.correos.join(", "));
+      if (aviso.enviado) toast.success(`Se le avisó del endoso a ${aviso.email}.`);
+      else toast.error(`No se envió el aviso al cliente: ${aviso.motivo} Puedes enviarlo desde la póliza.`);
+    } else if (agradecer) {
+      toast.warning("No se envió el aviso al cliente porque faltó subir un documento. Envíalo desde la póliza.");
+    }
+    router.push(`/polizas/${m.polizaId}`);
+    router.refresh();
+  }
+
   const bloqueado = isSubmitting || extrayendo;
   const totalErrores =
     Object.keys(errors.generales ?? {}).length +
@@ -663,10 +776,14 @@ export function PolizaForm({
     const esImpreso = campo.name === "numeroImpreso";
     const esVigor = campo.name === "polizaVigor";
     const bloqueadoPorModo =
-      (modo.tipo === "edicion" && modo.bloqueados.includes(campo.name)) ||
+      ((modo.tipo === "edicion" || modo.tipo === "endoso") && modo.bloqueados.includes(campo.name)) ||
       (modo.tipo === "renovacion" && esImpreso);
     const ayudaModo = !bloqueadoPorModo
       ? undefined
+      : modo.tipo === "endoso"
+        ? CAMPOS_FIJOS_ENDOSO.includes(campo.name)
+          ? "En un endoso se conservan el número de póliza y la vigencia."
+          : "Tiene recibos cobrados: la forma de pago y la prima total quedan fijas."
       : modo.tipo === "renovacion"
         ? "Se conserva el número original; en la renovación cambia la póliza vigor."
         : modo.tipo === "edicion" && modo.cancelada
@@ -725,6 +842,8 @@ export function PolizaForm({
           <CardTitle className="text-base">
             {modo.tipo === "edicion"
               ? `Editar póliza ${modo.numero}`
+              : modo.tipo === "endoso"
+                ? `Endoso de la póliza ${modo.numero}`
               : modo.tipo === "renovacion"
                 ? `Renovación de la póliza ${modo.anterior.numero}`
                 : "Nueva póliza"}
@@ -736,6 +855,8 @@ export function PolizaForm({
                 : modo.bloqueados.length > 0
                 ? "La póliza ya tiene recibos cobrados: la vigencia, la forma de pago y la prima total quedan fijas."
                 : "Si cambias la vigencia, la forma de pago o la prima total, sus recibos se vuelven a generar."
+              : modo.tipo === "endoso"
+                ? "Datos actuales de la póliza precargados. Sube la póliza endosada para que la IA los actualice; el número y la vigencia no cambian."
               : modo.tipo === "renovacion"
                 ? "Datos de la vigencia anterior precargados. Sube la carátula nueva o captura la póliza vigor y las primas."
                 : "Revisa los datos extraídos antes de guardar; todos los campos son editables."}
@@ -922,7 +1043,7 @@ export function PolizaForm({
                               bloqueado ||
                               bloqueadoPorSuma ||
                               campo.derivado ||
-                              (modo.tipo === "edicion" && modo.bloqueados.includes(campo.name))
+                              ((modo.tipo === "edicion" || modo.tipo === "endoso") && modo.bloqueados.includes(campo.name))
                             }
                             inputRef={field.ref}
                             onBlur={field.onBlur}
@@ -974,7 +1095,19 @@ export function PolizaForm({
                 </FormSection>
               )}
 
-              {!editando && (
+              {modo.tipo === "endoso" && (
+                <SeccionEndoso
+                  valores={endoso}
+                  errores={erroresEndoso}
+                  disabled={bloqueado}
+                  onChange={(v) => {
+                    setEndoso(v);
+                    limpiarAvisos();
+                  }}
+                />
+              )}
+
+              {!editando && modo.tipo !== "endoso" && (
                 <ActividadesCaptura
                   actividades={actividades}
                   onChange={(lista) => {
@@ -1052,15 +1185,19 @@ export function PolizaForm({
           </div>
         )}
 
-        {modo.tipo === "renovacion" && !exito && (
+        {(modo.tipo === "renovacion" || modo.tipo === "endoso") && !exito && (
           <div className="mx-6 mb-6 flex items-start justify-between gap-4 rounded-lg border bg-background/60 px-4 py-3">
             <div className="space-y-0.5">
               <Label htmlFor="agradecer-renovacion" className="flex items-center gap-2">
-                <Mail className="size-4 text-primary" /> Enviar al cliente el agradecimiento por renovar
+                <Mail className="size-4 text-primary" />{" "}
+                {modo.tipo === "endoso"
+                  ? "Avisar al cliente de los cambios"
+                  : "Enviar al cliente el agradecimiento por renovar"}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Al guardar, le llega a su correo registrado «¡Gracias por continuar con nosotros!» con la vigencia nueva y,
-                adjuntos, la carátula y el expediente (ZIP) que subas aquí.
+                {modo.tipo === "endoso"
+                  ? "Al guardar, le llega a su correo registrado «Se realizaron los cambios a tu póliza» con el detalle del endoso y, adjuntos, la carátula y el expediente actualizados."
+                  : "Al guardar, le llega a su correo registrado «¡Gracias por continuar con nosotros!» con la vigencia nueva y, adjuntos, la carátula y el expediente (ZIP) que subas aquí."}
               </p>
             </div>
             <Switch
@@ -1072,7 +1209,7 @@ export function PolizaForm({
             />
           </div>
         )}
-        {modo.tipo === "renovacion" && !exito && agradecer && (
+        {(modo.tipo === "renovacion" || modo.tipo === "endoso") && !exito && agradecer && (
           <div className="mx-6 -mt-3 mb-6 space-y-1.5 rounded-lg border bg-background/60 px-4 py-3">
             <Label htmlFor="agradecer-cco" className="text-xs">
               CCO (copia oculta, opcional)
@@ -1091,7 +1228,7 @@ export function PolizaForm({
               aria-describedby="agradecer-cco-ayuda"
             />
             <p id="agradecer-cco-ayuda" className={errorCco ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-              {errorCco ?? "Reciben una copia del agradecimiento sin que el cliente lo vea. Separa varios con comas."}
+              {errorCco ?? "Reciben una copia del correo sin que el cliente lo vea. Separa varios con comas."}
             </p>
           </div>
         )}
@@ -1109,7 +1246,7 @@ export function PolizaForm({
               </span>
             )}
           </div>
-          {editando ? (
+          {modo.tipo === "edicion" || modo.tipo === "endoso" ? (
             <Button type="button" variant="ghost" asChild>
               <Link href={`/polizas/${modo.polizaId}`}>Cancelar</Link>
             </Button>
@@ -1126,6 +1263,8 @@ export function PolizaForm({
                 ? "Guardando…"
                 : editando
                   ? "Guardar cambios"
+                  : modo.tipo === "endoso"
+                    ? "Guardar endoso"
                   : modo.tipo === "renovacion"
                     ? "Guardar renovación"
                     : "Guardar póliza"}
@@ -1596,3 +1735,106 @@ const CAMPOS_ASEGURADO_UI: { campo: keyof AseguradoValores; definicion: CampoDef
   { campo: "fecha_nacimiento", definicion: { name: "fecha_nacimiento", label: "Fecha de nacimiento", type: "date", hint: "Del contratante asegurado, se toma de su RFC." } },
   { campo: "antiguedad", definicion: { name: "antiguedad", label: "Antigüedad", type: "text", placeholder: "Ej. 2015-03-01" } },
 ];
+
+/** Datos del endoso que se registra junto con la póliza actualizada. */
+function SeccionEndoso({
+  valores,
+  errores,
+  disabled,
+  onChange,
+}: {
+  valores: EndosoValores;
+  errores: ErroresEndoso;
+  disabled: boolean;
+  onChange: (v: EndosoValores) => void;
+}) {
+  const campo = (k: keyof EndosoValores) => (v: string) => onChange({ ...valores, [k]: v });
+  const error = (k: keyof EndosoValores) =>
+    errores[k] ? <p className="text-xs text-destructive">{errores[k]}</p> : null;
+
+  return (
+    <FormSection titulo="Endoso" badge="Se registra en la póliza">
+      <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="endoso-tipo" className="text-xs">
+            Tipo de endoso
+          </Label>
+          <Select value={valores.tipo} onValueChange={campo("tipo")} disabled={disabled}>
+            <SelectTrigger id="endoso-tipo" className="w-full" aria-invalid={Boolean(errores.tipo)}>
+              <SelectValue placeholder="Selecciona…" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIPOS_ENDOSO.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {error("tipo")}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="endoso-fecha" className="text-xs">
+            Fecha efectiva
+          </Label>
+          <Input
+            id="endoso-fecha"
+            type="date"
+            value={valores.fecha}
+            onChange={(e) => campo("fecha")(e.target.value)}
+            disabled={disabled}
+            aria-invalid={Boolean(errores.fecha)}
+          />
+          {error("fecha")}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="endoso-numero" className="text-xs">
+            Número de endoso (opcional)
+          </Label>
+          <Input
+            id="endoso-numero"
+            value={valores.numero}
+            onChange={(e) => campo("numero")(e.target.value)}
+            maxLength={60}
+            disabled={disabled}
+            aria-invalid={Boolean(errores.numero)}
+          />
+          {error("numero")}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="endoso-prima" className="text-xs">
+            Movimiento de prima (opcional)
+          </Label>
+          <Input
+            id="endoso-prima"
+            inputMode="decimal"
+            value={valores.prima}
+            onChange={(e) => campo("prima")(e.target.value)}
+            placeholder="1,250.00 o -1,250.00 si es devolución"
+            disabled={disabled}
+            aria-invalid={Boolean(errores.prima)}
+          />
+          {error("prima")}
+        </div>
+        <div className="space-y-2 sm:col-span-2">
+          <Label htmlFor="endoso-descripcion" className="text-xs">
+            Descripción del cambio
+          </Label>
+          <Textarea
+            id="endoso-descripcion"
+            value={valores.descripcion}
+            onChange={(e) => campo("descripcion")(e.target.value)}
+            rows={3}
+            maxLength={1000}
+            placeholder={valores.tipo ? `${etiquetaEndoso(valores.tipo)}: …` : "Qué cambió en la póliza"}
+            disabled={disabled}
+            aria-invalid={Boolean(errores.descripcion)}
+          />
+          {error("descripcion") ?? (
+            <p className="text-xs text-muted-foreground">Se incluye en el aviso al cliente.</p>
+          )}
+        </div>
+      </div>
+    </FormSection>
+  );
+}
