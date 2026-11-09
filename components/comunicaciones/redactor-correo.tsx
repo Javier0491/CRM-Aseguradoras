@@ -11,6 +11,7 @@ import {
   PencilLine,
   Search,
   Send,
+  UploadCloud,
   Users,
   X,
   XCircle,
@@ -273,7 +274,23 @@ function SelectorAdjuntos({
   bloqueado: boolean;
 }) {
   const entrada = React.useRef<HTMLInputElement>(null);
+  const [arrastrando, setArrastrando] = React.useState(false);
   const total = adjuntos.reduce((t, a) => t + a.size, 0);
+  const deshabilitada = bloqueado || adjuntos.length >= MAX_ADJUNTOS;
+
+  // Un archivo que se suelta fuera de la zona no debe abrirse en la pestaña (se perdería el borrador).
+  React.useEffect(() => {
+    const conArchivos = (e: DragEvent) => e.dataTransfer?.types.includes("Files") ?? false;
+    const evitar = (e: DragEvent) => {
+      if (conArchivos(e)) e.preventDefault();
+    };
+    window.addEventListener("dragover", evitar);
+    window.addEventListener("drop", evitar);
+    return () => {
+      window.removeEventListener("dragover", evitar);
+      window.removeEventListener("drop", evitar);
+    };
+  }, []);
 
   function agregar(lista: FileList | null) {
     if (!lista) return;
@@ -345,15 +362,45 @@ function SelectorAdjuntos({
         accept={EXTENSIONES_ADJUNTO.map((e) => `.${e}`).join(",")}
         onChange={(e) => agregar(e.target.files)}
       />
-      <Button
+      <button
         type="button"
-        variant="outline"
-        size="sm"
-        disabled={bloqueado || adjuntos.length >= MAX_ADJUNTOS}
+        disabled={deshabilitada}
         onClick={() => entrada.current?.click()}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = deshabilitada ? "none" : "copy";
+          if (!deshabilitada) setArrastrando(true);
+        }}
+        // Pasar sobre el ícono o el texto también dispara dragleave: solo cuenta salir de la zona.
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastrando(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setArrastrando(false);
+          if (!deshabilitada) agregar(e.dataTransfer.files);
+        }}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg border border-dashed bg-background/60 px-4 py-3 text-left transition-colors outline-none",
+          "hover:border-primary/60 hover:bg-primary/[0.03] focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring/40",
+          "disabled:pointer-events-none disabled:opacity-50",
+          arrastrando && "border-primary bg-primary/[0.06]"
+        )}
       >
-        <Paperclip /> Adjuntar archivos
-      </Button>
+        <UploadCloud className="size-5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">
+            {arrastrando
+              ? "Suelta los archivos aquí"
+              : adjuntos.length >= MAX_ADJUNTOS
+                ? `Ya tienes ${MAX_ADJUNTOS} archivos, el máximo por envío`
+                : "Arrastra archivos aquí o haz clic para adjuntar"}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            PDF, imágenes, Word, Excel, PowerPoint, CSV, TXT o ZIP · hasta {MAX_ADJUNTOS} archivos
+          </span>
+        </span>
+      </button>
     </div>
   );
 }
