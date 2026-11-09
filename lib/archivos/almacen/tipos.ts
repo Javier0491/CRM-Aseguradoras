@@ -16,6 +16,8 @@ export interface Almacen {
   info(clave: string): Promise<{ bytes: number } | null>;
   /** Primeros `n` bytes del objeto (para verificar su firma real), o null si no existe. */
   leerInicio(clave: string, n: number): Promise<Uint8Array | null>;
+  /** Contenido completo del objeto, o null si no existe. */
+  leer(clave: string): Promise<Uint8Array | null>;
   eliminar(claves: string[]): Promise<void>;
   /**
    * Claves de todos los objetos bajo `prefijo` (p. ej. "{polizaId}/"). Se lista antes de borrar

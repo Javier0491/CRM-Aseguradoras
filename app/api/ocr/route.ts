@@ -6,7 +6,9 @@ import {
   PermissionDeniedError,
   RateLimitError,
 } from "openai";
+import { after } from "next/server";
 
+import { getAlmacen } from "@/lib/archivos/almacen";
 import { esAdmin, getUsuarioCrm } from "@/lib/auth/dal";
 import { db } from "@/lib/db";
 import {
@@ -23,6 +25,7 @@ import {
   type ContextoOcr,
   type OcrRespuesta,
 } from "@/lib/ocr/types";
+import { claveOcrValida, type DocumentoRemoto } from "@/lib/ocr/subida";
 import { liberarEscaneoOcr, reservarEscaneoOcr } from "@/lib/planes/limites";
 
 // La lectura de los documentos con IA puede tardar varias decenas de segundos.
@@ -61,9 +64,45 @@ function errorDeExtraccion(e: unknown) {
 }
 
 /**
+ * Lee los documentos que el navegador subió directo al almacenamiento (campo "remotos": JSON
+ * con DocumentoRemoto[]). Devuelve los archivos y las claves a borrar, o el error a responder.
+ */
+async function leerRemotos(
+  formData: FormData,
+  agenciaId: string
+): Promise<{ archivos: File[]; claves: string[] } | { error: Response; claves: string[] }> {
+  const raw = formData.get("remotos");
+  if (raw === null || raw === "") return { archivos: [], claves: [] };
+  let remotos: DocumentoRemoto[];
+  try {
+    remotos = JSON.parse(String(raw));
+  } catch {
+    return { error: error("Documentos no válidos.", 400), claves: [] };
+  }
+  if (!Array.isArray(remotos) || remotos.length > OCR_MAX_ARCHIVOS) {
+    return { error: error(`Sube como máximo ${OCR_MAX_ARCHIVOS} documentos a la vez.`, 413), claves: [] };
+  }
+  if (!remotos.every((r) => typeof r === "object" && r !== null && claveOcrValida(r.clave, agenciaId, r.tipo))) {
+    return { error: error("Documentos no válidos.", 400), claves: [] };
+  }
+  const claves = remotos.map((r) => r.clave);
+  const almacen = getAlmacen();
+  const contenidos = await Promise.all(claves.map((c) => almacen.leer(c)));
+  if (contenidos.some((c) => !c)) {
+    return { error: error("Un documento no terminó de subirse. Vuelve a intentarlo.", 400), claves };
+  }
+  const archivos = remotos.map((r, i) => {
+    const nombre = typeof r.nombre === "string" && r.nombre.trim() ? r.nombre.trim().slice(0, 200) : `documento-${i + 1}`;
+    return new File([contenidos[i] as Uint8Array<ArrayBuffer>], nombre, { type: r.tipo });
+  });
+  return { archivos, claves };
+}
+
+/**
  * POST /api/ocr
  * Recibe un `multipart/form-data` con uno o varios documentos de la misma póliza en el
- * campo `files` (se acepta también `file` por compatibilidad) y, opcionalmente, `contexto`
+ * campo `files` (se acepta también `file` por compatibilidad), los que pasan del límite de
+ * Vercel ya subidos al almacenamiento en `remotos` (ver lib/ocr/subida.ts) y, opcionalmente, `contexto`
  * (ver CONTEXTOS_OCR). La IA cruza todos los documentos y devuelve una sola extracción.
  */
 export async function POST(request: Request) {
@@ -77,7 +116,18 @@ export async function POST(request: Request) {
     return error("La solicitud debe enviarse como multipart/form-data.", 400);
   }
 
-  const archivos = [...formData.getAll("files"), ...formData.getAll("file")].filter(
+  // Los temporales se borran al terminar, pase lo que pase con la lectura.
+  const remotos = await leerRemotos(formData, user.agenciaId);
+  if (remotos.claves.length > 0) {
+    after(() =>
+      getAlmacen()
+        .eliminar(remotos.claves)
+        .catch((e) => console.error("[ocr] No se pudieron borrar los temporales:", e instanceof Error ? e.message : e))
+    );
+  }
+  if ("error" in remotos) return remotos.error;
+
+  const archivos = [...formData.getAll("files"), ...formData.getAll("file"), ...remotos.archivos].filter(
     (a): a is File => a instanceof File && a.size > 0
   );
   if (archivos.length === 0) {

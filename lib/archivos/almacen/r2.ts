@@ -46,6 +46,16 @@ export function crearAlmacenR2(): Almacen {
       }
     },
 
+    async leer(clave) {
+      try {
+        const r = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: clave }));
+        return r.Body ? await r.Body.transformToByteArray() : null;
+      } catch (e) {
+        if (noExiste(e)) return null;
+        throw e;
+      }
+    },
+
     async eliminar(claves) {
       // DeleteObjects acepta hasta 1000 claves por solicitud.
       for (let i = 0; i < claves.length; i += 1000) {

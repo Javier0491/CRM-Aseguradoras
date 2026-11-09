@@ -36,8 +36,8 @@ import {
   OCR_TIPOS_PERMITIDOS,
   type ContextoOcr,
   type ExtraccionPoliza,
-  type OcrRespuesta,
 } from "@/lib/ocr/types";
+import { enviarOcr } from "@/lib/ocr/enviar";
 import { camposGenerales, FORMAS_PAGO, ramoLabels } from "@/lib/polizas/ramos";
 import { cn } from "@/lib/utils";
 
@@ -162,15 +162,7 @@ export function OcrDropzone({
     onProcesando?.(true);
 
     try {
-      const body = new FormData();
-      for (const archivo of archivos) body.append("files", archivo);
-      if (contexto) body.append("contexto", contexto);
-      const res = await fetch("/api/ocr", {
-        method: "POST",
-        body,
-        signal: controller.signal,
-      });
-      const json = (await res.json()) as OcrRespuesta;
+      const { json } = await enviarOcr(archivos, { contexto, signal: controller.signal });
       if (!json.ok) {
         setEstado({ status: "error", archivos, mensaje: json.error });
         return;
@@ -185,7 +177,9 @@ export function OcrDropzone({
       setEstado({
         status: "error",
         archivos,
-        mensaje: "No se pudo contactar al servicio de extracción.",
+        mensaje: navigator.onLine
+          ? "No se pudo contactar al servicio de extracción. Intenta de nuevo."
+          : "Sin conexión a internet: no se pudo leer el documento.",
       });
     } finally {
       // Una petición abortada por otra más reciente no debe apagar el indicador.

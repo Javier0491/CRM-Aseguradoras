@@ -45,6 +45,11 @@ export function crearAlmacenSupabase(): Almacen {
       return r.ok ? new Uint8Array(await r.arrayBuffer()).slice(0, n) : null;
     },
 
+    async leer(clave) {
+      const { data } = await (await storage()).download(clave);
+      return data ? new Uint8Array(await data.arrayBuffer()) : null;
+    },
+
     async eliminar(claves) {
       if (claves.length === 0) return;
       const { error } = await (await storage()).remove(claves);

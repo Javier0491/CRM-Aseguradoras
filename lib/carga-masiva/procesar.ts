@@ -12,7 +12,8 @@ import { guardarPolizaMasiva } from "@/lib/carga-masiva/actions";
 import { comoArchivo, documentosDe, expedienteDe, leerDocumento, type Fuente } from "@/lib/carga-masiva/fuente";
 import { RFC_GENERICOS } from "@/lib/clientes/reglas";
 import { rfcDeNombres } from "@/lib/ocr/rfc-de-archivo";
-import type { ContextoOcr, ExtraccionPoliza, OcrRespuesta } from "@/lib/ocr/types";
+import { enviarOcr } from "@/lib/ocr/enviar";
+import type { ContextoOcr, ExtraccionPoliza } from "@/lib/ocr/types";
 import { camposGenerales, COBERTURAS_SI_NO_GMM, seccionesPorRamo, type Opcion } from "@/lib/polizas/ramos";
 import { normalizarRfc } from "@/lib/polizas/validacion";
 
@@ -59,17 +60,12 @@ const espera = (ms: number, senal: AbortSignal) =>
 /** Lectura con IA sin descontar escaneos del plan; reintenta si el proveedor está saturado. */
 async function leerConIa(archivos: File[], senal: AbortSignal, contexto?: ContextoOcr): Promise<ExtraccionPoliza> {
   for (let intento = 0; ; intento++) {
-    const body = new FormData();
-    for (const a of archivos) body.append("files", a);
-    body.append("masiva", "1");
-    if (contexto) body.append("contexto", contexto);
-    const res = await fetch("/api/ocr", { method: "POST", body, signal: senal });
-    if (res.status === 401) throw new SesionVencida();
-    const json = (await res.json().catch(() => ({ ok: false, error: "Respuesta inválida del servidor." }))) as OcrRespuesta;
+    const { status, json } = await enviarOcr(archivos, { contexto, masiva: true, signal: senal });
+    if (status === 401) throw new SesionVencida();
     if (json.ok) return json.datos;
     // Límite de uso de la IA o una falla de red pasajera: se espera y se reintenta.
-    if ([429, 502, 503, 504].includes(res.status) && intento < 4 && !senal.aborted) {
-      await espera(res.status === 429 ? 30_000 * (intento + 1) : 8_000, senal);
+    if ([429, 502, 503, 504].includes(status) && intento < 4 && !senal.aborted) {
+      await espera(status === 429 ? 30_000 * (intento + 1) : 8_000, senal);
       continue;
     }
     throw new Error(json.error);
