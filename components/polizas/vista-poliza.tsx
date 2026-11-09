@@ -23,6 +23,7 @@ import { BarraAccionesMovil } from "@/components/layout/barra-acciones-movil";
 import { EliminarEndoso } from "@/components/polizas/eliminar-endoso";
 import { EliminarPoliza } from "@/components/polizas/eliminar-poliza";
 import { EnviarAgradecimiento } from "@/components/polizas/enviar-agradecimiento";
+import { EnviarEndoso, type AvisoEndosoEnviado } from "@/components/polizas/enviar-endoso";
 import { GestionPoliza } from "@/components/polizas/gestion-poliza";
 import { HistorialPoliza } from "@/components/polizas/historial-poliza";
 import { PrimaNeta } from "@/components/polizas/prima-neta";
@@ -100,6 +101,8 @@ export type DatosPoliza = {
    * de póliza nueva si no; y si ya se le envió.
    */
   correoCliente: { clase: "renovacion" | "nueva"; enviado: { destinatario: string; fecha: Date } | null };
+  /** Avisos de endoso ya enviados al cliente, del más reciente al más antiguo. */
+  avisosEndoso: AvisoEndosoEnviado[];
   historial: Awaited<ReturnType<typeof getHistorialPoliza>>;
   tareas: Awaited<ReturnType<typeof getTareasDe>>;
   /** Para asignar tareas; no viene para quien solo ve su cartera. */
@@ -116,6 +119,7 @@ export function VistaPoliza({
   renovada,
   anterior,
   correoCliente,
+  avisosEndoso,
   historial,
   tareas,
   equipo,
@@ -271,6 +275,21 @@ export function VistaPoliza({
                   clase={correoCliente.clase}
                   email={poliza.cliente.email}
                   enviado={correoCliente.enviado}
+                />
+              )}
+              {!cancelada && (
+                <EnviarEndoso
+                  polizaId={poliza.id}
+                  email={poliza.cliente.email}
+                  endosos={poliza.endosos.map((e) => ({
+                    id: e.id,
+                    tipo: e.tipo,
+                    numero: e.numero,
+                    fecha: e.fecha,
+                    createdAt: e.createdAt,
+                  }))}
+                  avisos={avisosEndoso}
+                  caratula={poliza.caratula_path ? { subidaAt: poliza.caratula_subido_at } : null}
                 />
               )}
               {renovada ? (

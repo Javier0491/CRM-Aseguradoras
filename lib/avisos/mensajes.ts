@@ -99,6 +99,8 @@ export type DatosEntregaPoliza = {
   correoServicio?: string;
   /** Lo que va adjunto ("la carátula", "el expediente completo") y lo que va como enlace. */
   documentos?: { adjuntos: string[]; enlaces: { que: string; url: string }[] };
+  /** Solo el aviso de endoso: el movimiento que se aplicó, si está registrado. */
+  endoso?: { tipo: string; numero: string | null; fecha: string; descripcion: string };
 };
 
 /** Vigencia, documentos y despedida: lo que comparten los correos que entregan la póliza. */
@@ -142,6 +144,28 @@ export function mensajePolizaNueva(d: DatosEntregaPoliza): { asunto: string; tit
     titulo: "¡Tu nueva póliza ya está lista!",
     mensaje: [
       `Tu nueva póliza${d.ramo ? ` de ${d.ramo}` : ""} con ${d.aseguradora} ya está lista. Gracias por confiar en ${d.agencia}: es un gusto protegerte.`,
+      ...cuerpoEntregaPoliza(d),
+    ].join("\n"),
+  };
+}
+
+/**
+ * Aviso de endoso: le confirma al cliente que se aplicaron los cambios a su póliza y le entrega la
+ * versión actualizada (carátula y expediente). `endoso.tipo` ya viene como etiqueta legible.
+ */
+export function mensajeEndoso(d: DatosEntregaPoliza): { asunto: string; titulo: string; mensaje: string } {
+  const e = d.endoso;
+  return {
+    asunto: `Se realizaron los cambios a tu póliza ${d.poliza}`,
+    titulo: "Se realizaron los cambios a tu póliza",
+    mensaje: [
+      `Te informamos que se realizaron los cambios correspondientes a tu póliza${d.ramo ? ` de ${d.ramo}` : ""} con ${d.aseguradora}.`,
+      ...(e
+        ? [
+            `Movimiento aplicado: ${e.tipo}${e.numero ? ` (endoso ${e.numero})` : ""}, con efecto a partir del ${formatFecha(e.fecha)}.${e.descripcion.trim() ? ` ${e.descripcion.trim()}` : ""}`,
+          ]
+        : []),
+      "Te compartimos tu póliza actualizada con los cambios ya aplicados. Te recomendamos conservarla y sustituir la versión anterior.",
       ...cuerpoEntregaPoliza(d),
     ].join("\n"),
   };

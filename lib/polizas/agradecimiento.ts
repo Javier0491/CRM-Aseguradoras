@@ -5,23 +5,48 @@ import type { Attachment } from "resend";
 import { ramoLabel } from "@/components/polizas/poliza-ui";
 import { getAlmacen } from "@/lib/archivos/almacen";
 import { COLOR_MARCA_PREDETERMINADO, logoParaDocumentos } from "@/lib/agencias/marca";
-import { mensajeAgradecimientoRenovacion, mensajePolizaNueva } from "@/lib/avisos/mensajes";
+import {
+  mensajeAgradecimientoRenovacion,
+  mensajeEndoso,
+  mensajePolizaNueva,
+  type DatosEntregaPoliza,
+} from "@/lib/avisos/mensajes";
 import { CorreoNoConfiguradoError, emailValido, enviarAviso, getConfigCorreo } from "@/lib/comunicaciones/envio";
 import { db } from "@/lib/db";
 import { renderNotificacionCrm } from "@/lib/emails/render";
 import { Prisma } from "@/lib/generated/prisma/client";
+import { etiquetaEndoso } from "@/lib/polizas/estatus";
 import type { AgradecimientoRenovacion } from "@/lib/polizas/guardar";
 
 /**
  * Correos que le entregan al cliente su póliza: el agradecimiento de una renovación o el aviso de
- * que su póliza nueva ya está lista. Cada uno sale una sola vez por póliza.
+ * que su póliza nueva ya está lista (cada uno sale una sola vez por póliza) y el aviso de endoso
+ * con la póliza actualizada (uno por endoso registrado; sin endoso, las veces que haga falta).
  */
-export type ClaseCorreoPoliza = "renovacion" | "nueva";
+export type ClaseCorreoPoliza = "renovacion" | "nueva" | "endoso";
 
 const CLASES = {
   renovacion: { tipo: "agradecimiento_renovacion", mensaje: mensajeAgradecimientoRenovacion, modulo: "renovaciones" },
   nueva: { tipo: "poliza_nueva", mensaje: mensajePolizaNueva, modulo: "polizas" },
+  endoso: { tipo: "endoso_poliza", mensaje: mensajeEndoso, modulo: "polizas" },
 } as const;
+
+/** Clave del aviso de endoso en avisos_enviados: "{polizaId}:{endosoId}" o "{polizaId}:general-{marca}". */
+export const referenciaEndoso = (polizaId: string, endosoId: string | null) =>
+  `${polizaId}:${endosoId ?? `general-${Date.now()}`}`;
+
+/** Avisos de endoso que ya se le enviaron al cliente de esta póliza, del más reciente al más antiguo. */
+export async function getAvisosEndoso(polizaId: string, agenciaId: string) {
+  const avisos = await db.avisoEnviado.findMany({
+    where: { agenciaId, tipo: CLASES.endoso.tipo, referencia_id: { startsWith: `${polizaId}:` } },
+    select: { referencia_id: true, destinatario: true, created_at: true },
+    orderBy: { created_at: "desc" },
+  });
+  return avisos.map((a) => {
+    const resto = a.referencia_id.slice(polizaId.length + 1);
+    return { endosoId: resto.startsWith("general-") ? null : resto, destinatario: a.destinatario, fecha: a.created_at };
+  });
+}
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 /**
  * Lo que se puede adjuntar: el correo completo no debe pasar de 40 MB y los adjuntos viajan en
@@ -105,6 +130,28 @@ export function enviarPolizaNueva(polizaId: string, agenciaId: string, cco: stri
 }
 
 /**
+ * "Se realizaron los cambios a tu póliza" al cliente registrado, con la póliza ya actualizada (ver
+ * enviarCorreoPoliza). Con `endosoId`, describe ese movimiento y sale una vez por endoso.
+ */
+export async function enviarAvisoEndoso(
+  polizaId: string,
+  agenciaId: string,
+  endosoId: string | null,
+  cco: string[] = []
+): Promise<AgradecimientoRenovacion> {
+  let endoso: DatosEntregaPoliza["endoso"];
+  if (endosoId) {
+    const e = await db.endoso.findFirst({
+      where: { id: endosoId, polizaId, agenciaId },
+      select: { tipo: true, numero: true, fecha: true, descripcion: true },
+    });
+    if (!e) return { enviado: false, motivo: "el endoso ya no existe." };
+    endoso = { tipo: etiquetaEndoso(e.tipo), numero: e.numero, fecha: iso(e.fecha), descripcion: e.descripcion };
+  }
+  return enviarCorreoPoliza(polizaId, agenciaId, "endoso", cco, { referencia: referenciaEndoso(polizaId, endosoId), endoso });
+}
+
+/**
  * Le entrega al cliente registrado su póliza con la carátula y el expediente. Sale de la dirección
  * universal con la marca de la agencia; las respuestas van a su correo de servicio, y su correo de
  * copia y las direcciones de `cco` reciben copia oculta. Queda en avisos_enviados, así que cada clase sale una sola vez por
@@ -114,9 +161,12 @@ async function enviarCorreoPoliza(
   polizaId: string,
   agenciaId: string,
   clase: ClaseCorreoPoliza,
-  cco: string[]
+  cco: string[],
+  extra: { referencia?: string; endoso?: DatosEntregaPoliza["endoso"] } = {}
 ): Promise<AgradecimientoRenovacion> {
   const { tipo, mensaje: redactar, modulo } = CLASES[clase];
+  // Renovación y póliza nueva: una vez por póliza. Endoso: la referencia la da enviarAvisoEndoso.
+  const referencia_id = extra.referencia ?? polizaId;
   const poliza = await db.poliza.findFirst({
     where: { id: polizaId, agenciaId },
     select: {
@@ -155,12 +205,12 @@ async function enviarCorreoPoliza(
   }
 
   const { agencia } = poliza;
-  const where = { tipo_referencia_id: { tipo, referencia_id: polizaId } };
+  const where = { tipo_referencia_id: { tipo, referencia_id } };
   try {
-    await db.avisoEnviado.create({ data: { agenciaId, tipo, referencia_id: polizaId, destinatario: email } });
+    await db.avisoEnviado.create({ data: { agenciaId, tipo, referencia_id, destinatario: email } });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return { enviado: false, motivo: "ya se le había enviado." };
+      return { enviado: false, motivo: clase === "endoso" ? "ya se le envió el aviso de este endoso." : "ya se le había enviado." };
     }
     console.error(`[correoPoliza:${clase}]`, e instanceof Error ? e.message : e);
     return { enviado: false, motivo: "no se pudo registrar el envío." };
@@ -180,6 +230,7 @@ async function enviarCorreoPoliza(
       inicio: iso(poliza.vigencia_inicio),
       fin: iso(poliza.vigencia_fin),
       correoServicio: agencia.correoServicio ?? undefined,
+      endoso: extra.endoso,
     });
     const { html, texto } = await renderNotificacionCrm({
       nombreCrm: agencia.nombre,

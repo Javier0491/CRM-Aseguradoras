@@ -6,7 +6,7 @@ import { getAgencia } from "@/lib/agencias/queries";
 import { requireUsuarioCrm, veComisiones } from "@/lib/auth/dal";
 import { getHistorialPoliza } from "@/lib/bitacora/historial-poliza";
 import { hoyISO } from "@/lib/format";
-import { esRenovacion, getCorreoPolizaEnviado } from "@/lib/polizas/agradecimiento";
+import { esRenovacion, getAvisosEndoso, getCorreoPolizaEnviado } from "@/lib/polizas/agradecimiento";
 import { getPolizaAnterior, getRenovacion } from "@/lib/polizas/formulario";
 import { getPolizaDetalle } from "@/lib/polizas/queries";
 import { getTareasDe } from "@/lib/tareas/queries";
@@ -34,13 +34,17 @@ export default async function PolizaDetallePage({ params }: PageProps<"/polizas/
   ]);
   // Renovación: agradecimiento por continuar. Póliza nueva: aviso de que ya está lista.
   const clase = renovacion ? "renovacion" : "nueva";
-  const enviado = await getCorreoPolizaEnviado(poliza.id, user.agenciaId, clase);
+  const [enviado, avisosEndoso] = await Promise.all([
+    getCorreoPolizaEnviado(poliza.id, user.agenciaId, clase),
+    getAvisosEndoso(poliza.id, user.agenciaId),
+  ]);
   return (
     <VistaPoliza
       poliza={poliza}
       renovada={renovada}
       anterior={anterior}
       correoCliente={{ clase, enviado: enviado && { destinatario: enviado.destinatario, fecha: enviado.created_at } }}
+      avisosEndoso={avisosEndoso}
       historial={historial}
       tareas={tareas}
       equipo={equipo}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { mensajeAgradecimientoRenovacion, mensajeAviso, mensajePolizaNueva } from "@/lib/avisos/mensajes";
+import { mensajeAgradecimientoRenovacion, mensajeAviso, mensajeEndoso, mensajePolizaNueva } from "@/lib/avisos/mensajes";
 import { avisoDeRecibo } from "@/lib/avisos/reglas";
 import { adjuntoPermitido, construirCorreoHtml, htmlATexto, leerCco } from "@/lib/comunicaciones/correo";
 
@@ -130,5 +130,37 @@ describe("copia oculta y adjuntos", () => {
     assert.equal(adjuntoPermitido("script.js"), false);
     assert.equal(adjuntoPermitido("sin-extension"), false);
     assert.equal(adjuntoPermitido(".pdf"), false);
+  });
+});
+
+describe("aviso de endoso al cliente", () => {
+  const base = {
+    agencia: "PJ MAGNUS",
+    poliza: "0000685925",
+    ramo: "GMM Individual",
+    aseguradora: "MetLife",
+    inicio: "2026-07-01",
+    fin: "2027-07-01",
+    correoServicio: "servicio@pjmagnus.mx",
+    documentos: { adjuntos: ["la carátula"], enlaces: [] },
+  };
+
+  it("dice que se realizaron los cambios y detalla el endoso registrado", () => {
+    const m = mensajeEndoso({
+      ...base,
+      endoso: { tipo: "Alta de asegurado", numero: "E-03", fecha: "2026-11-12", descripcion: "Alta de la hija, 12 años." },
+    });
+    assert.match(m.asunto, /Se realizaron los cambios a tu póliza 0000685925/);
+    assert.match(m.mensaje, /se realizaron los cambios correspondientes a tu póliza de GMM Individual con MetLife/);
+    assert.match(m.mensaje, /Movimiento aplicado: Alta de asegurado \(endoso E-03\)/);
+    assert.match(m.mensaje, /Alta de la hija, 12 años\./);
+    assert.match(m.mensaje, /póliza actualizada/);
+    assert.match(m.mensaje, /Te adjuntamos la carátula/);
+  });
+
+  it("sin endoso registrado no inventa el movimiento", () => {
+    const m = mensajeEndoso(base);
+    assert.doesNotMatch(m.mensaje, /Movimiento aplicado/);
+    assert.match(m.mensaje, /Saludos cordiales\./);
   });
 });

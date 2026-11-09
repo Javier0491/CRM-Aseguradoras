@@ -333,7 +333,16 @@ export async function getPolizaDetalle(id: string) {
       },
       endosos: {
         orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
-        select: { id: true, numero: true, tipo: true, fecha: true, descripcion: true, prima: true, usuarioEmail: true },
+        select: {
+          id: true,
+          numero: true,
+          tipo: true,
+          fecha: true,
+          descripcion: true,
+          prima: true,
+          usuarioEmail: true,
+          createdAt: true,
+        },
       },
     },
   });

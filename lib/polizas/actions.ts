@@ -15,7 +15,12 @@ import {
   type GuardarPolizaResultado,
 } from "@/lib/polizas/guardar";
 import { leerCco, MAX_CCO } from "@/lib/comunicaciones/correo";
-import { enviarAgradecimientoRenovacion, enviarPolizaNueva, esRenovacion } from "@/lib/polizas/agradecimiento";
+import {
+  enviarAgradecimientoRenovacion,
+  enviarAvisoEndoso,
+  enviarPolizaNueva,
+  esRenovacion,
+} from "@/lib/polizas/agradecimiento";
 import { parseNumero, validarPrimaNeta } from "@/lib/polizas/validacion";
 
 export async function guardarPoliza(raw: unknown): Promise<GuardarPolizaResultado> {
@@ -96,6 +101,38 @@ export async function enviarPolizaNuevaAlCliente(polizaId: string, cco = ""): Pr
   if (await esRenovacion(poliza, user.agenciaId)) return { enviado: false, motivo: "la póliza es una renovación." };
   const r = await enviarPolizaNueva(polizaId, user.agenciaId, ocultas.correos).catch((e) => {
     console.error("[enviarPolizaNuevaAlCliente]", e instanceof Error ? e.message : e);
+    return { enviado: false as const, motivo: "no se pudo enviar el correo." };
+  });
+  if (r.enviado) revalidatePath(`/polizas/${polizaId}`);
+  return r;
+}
+
+/**
+ * "Se realizaron los cambios a tu póliza" al cliente, con la póliza actualizada (carátula y
+ * expediente): botón "Endoso" del detalle de la póliza. Con `endosoId` describe ese endoso y sale
+ * una vez por endoso; sin él, es un aviso general que se puede repetir.
+ */
+export async function enviarEndosoAlCliente(
+  polizaId: string,
+  endosoId: string | null,
+  cco = ""
+): Promise<AgradecimientoRenovacion> {
+  const user = await getUsuarioCrm();
+  if (!user) return { enviado: false, motivo: "tu sesión expiró." };
+  const id = /^[a-z0-9]+$/i;
+  if (typeof polizaId !== "string" || !id.test(polizaId) || (endosoId !== null && (typeof endosoId !== "string" || !id.test(endosoId)))) {
+    return { enviado: false, motivo: "datos inválidos." };
+  }
+  const ocultas = validarCco(cco);
+  if (!ocultas.ok) return { enviado: false, motivo: ocultas.motivo };
+  const poliza = await db.poliza.findFirst({
+    where: { id: polizaId, ...polizasDe(alcanceDe(user)) },
+    select: { id: true, canceladaAt: true },
+  });
+  if (!poliza) return { enviado: false, motivo: "la póliza ya no existe." };
+  if (poliza.canceladaAt) return { enviado: false, motivo: "la póliza está cancelada." };
+  const r = await enviarAvisoEndoso(polizaId, user.agenciaId, endosoId, ocultas.correos).catch((e) => {
+    console.error("[enviarEndosoAlCliente]", e instanceof Error ? e.message : e);
     return { enviado: false as const, motivo: "no se pudo enviar el correo." };
   });
   if (r.enviado) revalidatePath(`/polizas/${polizaId}`);

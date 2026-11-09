@@ -408,10 +408,13 @@ export function datosPoliza(c: Conjunto): DatosPoliza {
         descripcion: f === "demo" ? "Alta de la hija María López, 12 años" : ciclo([TEXTO_LARGO, "Baja."], i),
         prima: ciclo([dec(98_765.43), dec(-12_345_678.9), null], i),
         usuarioEmail: f === "demo" ? "laura.mendez@example.com" : "maria.guadalupe.hernandez.villasenor+renovaciones2026@example.com",
+        createdAt: dia(-100 + i),
       })),
     },
     renovada: null,
     anterior: c === "vacio" ? null : { id: "pol1", numeroImpreso: f === "demo" ? "0012345677" : "VG-COL-2025-000123456-REN-02-ANEXO-B" },
+    avisosEndoso:
+      c === "uno" ? [{ endosoId: "end0", destinatario: "cliente@example.com", fecha: dia(-5) }] : [],
     correoCliente: {
       clase: c === "vacio" ? "nueva" : "renovacion",
       enviado: c === "uno" ? { destinatario: "cliente@correo.com", fecha: dia(-300) } : null,
