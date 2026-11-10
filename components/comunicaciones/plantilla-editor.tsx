@@ -39,12 +39,15 @@ export function PlantillaEditor({
   plantillas,
   plantillaId,
   recibo,
+  remitente,
   onCambiarPlantilla,
   onGuardar,
 }: {
   plantillas: Plantilla[];
   plantillaId: string;
   recibo: ReciboCobranza;
+  /** Remitente de la agencia ("Nombre <correo>"); null si el envío no está configurado. */
+  remitente: string | null;
   onCambiarPlantilla: (id: string) => void;
   onGuardar: (plantilla: Plantilla) => void;
 }) {
@@ -183,7 +186,7 @@ export function PlantillaEditor({
 
         <TabsContent value="vista">
           <CardContent className="px-5 py-5">
-            <VistaPrevia asunto={borrador.asunto} cuerpo={borrador.cuerpo} recibo={recibo} />
+            <VistaPrevia asunto={borrador.asunto} cuerpo={borrador.cuerpo} recibo={recibo} remitente={remitente} />
           </CardContent>
         </TabsContent>
       </Tabs>
@@ -232,10 +235,12 @@ function VistaPrevia({
   asunto,
   cuerpo,
   recibo,
+  remitente,
 }: {
   asunto: string;
   cuerpo: string;
   recibo: ReciboCobranza;
+  remitente: string | null;
 }) {
   const valores = valoresDeRecibo(recibo);
   return (
@@ -243,7 +248,7 @@ function VistaPrevia({
       <dl className="divide-y border-b text-sm">
         <div className="flex gap-3 px-4 py-2.5">
           <dt className="w-14 shrink-0 text-muted-foreground">De</dt>
-          <dd>cobranza@pjmagnus.mx</dd>
+          <dd className="truncate">{remitente ?? "(remitente sin configurar)"}</dd>
         </div>
         <div className="flex gap-3 px-4 py-2.5">
           <dt className="w-14 shrink-0 text-muted-foreground">Para</dt>

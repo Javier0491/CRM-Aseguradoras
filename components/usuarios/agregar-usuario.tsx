@@ -127,7 +127,7 @@ export function AgregarUsuario({ disponible, agencias, agenciaActivaId }: Props)
                   type="email"
                   value={datos.email}
                   autoComplete="off"
-                  placeholder="ana@magnusseguros.com"
+                  placeholder="ana@tuagencia.com"
                   onChange={(e) => actualizar({ email: e.target.value })}
                   aria-invalid={error?.campo === "email"}
                 />

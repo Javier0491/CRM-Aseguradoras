@@ -11,9 +11,12 @@ const hora = new Intl.DateTimeFormat("es-MX", { hour: "2-digit", minute: "2-digi
 export function ComunicacionesWorkspace({
   recibos,
   plantillasIniciales,
+  remitente,
 }: {
   recibos: ReciboCobranza[];
   plantillasIniciales: Plantilla[];
+  /** Remitente de la agencia ("Nombre <correo>"); null si el envío no está configurado. */
+  remitente: string | null;
 }) {
   const [plantillas, setPlantillas] = React.useState(plantillasIniciales);
   const [plantillaId, setPlantillaId] = React.useState(plantillasIniciales[0].id);
@@ -50,6 +53,7 @@ export function ComunicacionesWorkspace({
         plantillas={plantillas}
         plantillaId={plantillaId}
         recibo={recibo}
+        remitente={remitente}
         onCambiarPlantilla={setPlantillaId}
         onGuardar={guardar}
       />

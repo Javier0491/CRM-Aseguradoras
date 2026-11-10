@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMarcaCorreo } from "@/lib/agencias/queries";
 import { requireUsuarioCrm } from "@/lib/auth/dal";
 import { remitenteDeAgencia } from "@/lib/comunicaciones/correo";
-import { plantillasIniciales, recibosPorCobrar } from "@/lib/comunicaciones/data";
+import { plantillasDeEjemplo, recibosPorCobrar } from "@/lib/comunicaciones/data";
 import { getDirectorioCorreo } from "@/lib/comunicaciones/queries";
 
 export const metadata: Metadata = {
@@ -62,7 +62,11 @@ export default async function ComunicacionesPage() {
           <PrevioCancelar remitente={configurado ? remitente : null} correoContacto={marca.correoServicio} />
         </TabsContent>
         <TabsContent value="cobranza">
-          <ComunicacionesWorkspace recibos={recibosPorCobrar} plantillasIniciales={plantillasIniciales} />
+          <ComunicacionesWorkspace
+            recibos={recibosPorCobrar}
+            plantillasIniciales={plantillasDeEjemplo(marca.nombre)}
+            remitente={remitente}
+          />
         </TabsContent>
       </Tabs>
     </>

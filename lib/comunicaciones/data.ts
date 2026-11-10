@@ -21,7 +21,13 @@ export const recibosPorCobrar: ReciboCobranza[] = [
   { folio: "REC-24-009126", poliza: "MET-GM-6614480", cliente: "Consultores Asociados MX", email: "rh@consultoresmx.mx", aseguradora: "MetLife", monto: 131_926.9, fechaVencimiento: "2026-10-03", diasGracia: 30 },
 ];
 
-export const plantillasIniciales: Plantilla[] = [
+/**
+ * Plantillas de ejemplo firmadas con el nombre de la agencia que las ve: cada agencia tiene su
+ * marca, así que la firma nunca lleva un nombre fijo.
+ */
+export function plantillasDeEjemplo(nombreAgencia: string): Plantilla[] {
+  const firma = `Equipo de Cobranza · ${nombreAgencia}`;
+  return [
   {
     id: "recordatorio",
     nombre: "Recordatorio preventivo",
@@ -33,7 +39,7 @@ Te recordamos que el recibo de tu póliza {{numero_poliza}} con {{aseguradora}} 
 Realizar tu pago a tiempo mantiene tu cobertura vigente sin interrupciones. Si ya lo realizaste, por favor ignora este mensaje.
 
 Atentamente,
-Equipo de Cobranza · PJ MAGNUS`,
+${firma}`,
   },
   {
     id: "vencido",
@@ -46,7 +52,7 @@ Nuestros registros indican que el recibo de tu póliza {{numero_poliza}} con {{a
 {{aseguradora}} te da {{dias_gracia}} de gracia: para evitar la cancelación de tu cobertura, realiza el pago a más tardar el {{fecha_limite_pago}}. Estamos a tus órdenes para cualquier aclaración.
 
 Atentamente,
-Equipo de Cobranza · PJ MAGNUS`,
+${firma}`,
   },
   {
     id: "ultimo",
@@ -59,6 +65,7 @@ A la fecha no hemos recibido el pago de {{monto_adeudo}} correspondiente a tu p�
 Si el pago no se registra en los próximos días, la aseguradora podrá cancelar la póliza. Contáctanos hoy mismo para ayudarte.
 
 Atentamente,
-Equipo de Cobranza · PJ MAGNUS`,
+${firma}`,
   },
-];
+  ];
+}
