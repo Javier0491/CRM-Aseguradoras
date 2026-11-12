@@ -133,7 +133,7 @@ const ejecutivosOpciones = (c: Conjunto) =>
 // Equipo para encargar tareas: nombres y apellidos reales combinados (de "Jo" a cuatro palabras).
 const NOMBRES_EQUIPO = ["Ana Sofía", "Jo", "José Francisco Javier", "Fernanda Ximena", "Raúl", "Itzel Citlali"];
 const APELLIDOS_EQUIPO = ["Rodríguez", "Martínez Ochoa", "Gutiérrez Zamudio", "Peña", "Hernández de la Fuente Villarreal", "Ramírez"];
-const ROLES_EQUIPO: RolUsuario[] = ["ADMIN", "EJECUTIVO", "OPERACION", "LIDER_OFICINA", "AUXILIAR"];
+const ROLES_EQUIPO: RolUsuario[] = ["ADMIN", "EJECUTIVO", "AUXILIAR_COMERCIAL", "OPERACION", "LIDER_OFICINA", "AUXILIAR"];
 
 /** Todo el equipo (con su rol): el de la demo, ocho personas en el peor caso y 24 en el masivo. */
 const equipoOpciones = (c: Conjunto) => {

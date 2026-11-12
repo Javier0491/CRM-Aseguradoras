@@ -19,7 +19,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-/** admin: rol ADMIN; conciliar: ADMIN y Ejecutivo comercial; superadmin: SUPERADMIN de la plataforma. */
+/** admin: rol ADMIN; conciliar: ADMIN, Ejecutivo comercial y Auxiliar comercial; superadmin: SUPERADMIN de la plataforma. */
 export type Permiso = "admin" | "conciliar" | "superadmin";
 
 export type NavItem = {

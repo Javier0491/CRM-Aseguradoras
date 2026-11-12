@@ -57,15 +57,17 @@ enum EtapaRenovacion {
   PERDIDA
 }
 
-// ADMIN (Administrador): acceso total. EJECUTIVO (Ejecutivo comercial): operación diaria con
-// conciliación de cobranza, sin comisiones ni configuración. OPERACION (Ejecutiva de operación),
-// LIDER_OFICINA (Líder de oficina) y AUXILIAR solo usan Tareas (ver lib/usuarios/reglas.ts).
+// ADMIN (Administrador): acceso total. EJECUTIVO (Ejecutivo comercial) y AUXILIAR_COMERCIAL
+// (Auxiliar comercial, misma vista que el ejecutivo): operación diaria con conciliación de
+// cobranza, sin comisiones ni configuración. OPERACION (Ejecutiva de operación), LIDER_OFICINA
+// (Líder de oficina) y AUXILIAR solo usan Tareas (ver lib/usuarios/reglas.ts).
 enum Rol {
   ADMIN
   EJECUTIVO
   OPERACION
   LIDER_OFICINA
   AUXILIAR
+  AUXILIAR_COMERCIAL
 }
 
 // Broker o agencia cliente del SaaS: dueña de todos sus datos (tenant).

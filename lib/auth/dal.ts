@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 import type { Rol } from "@/lib/generated/prisma/client";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { esRolSoloTareas } from "@/lib/usuarios/reglas";
+import { esRolComercial, esRolSoloTareas } from "@/lib/usuarios/reglas";
 
 export type UsuarioSesion = {
   id: string;
@@ -26,8 +26,8 @@ export type UsuarioSesion = {
   /** Rol de plataforma SUPERADMIN: puede cambiar de agencia y actúa como ADMIN en cualquiera. */
   superadmin: boolean;
   /**
-   * EJECUTIVO de una agencia con "cartera por ejecutivo": solo ve los clientes y pólizas que
-   * tiene asignados (ver lib/auth/alcance.ts).
+   * Ejecutivo o Auxiliar comercial de una agencia con "cartera por ejecutivo": solo ve los
+   * clientes y pólizas que tiene asignados (ver lib/auth/alcance.ts).
    */
   soloSuCartera: boolean;
   /**
@@ -81,7 +81,7 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
     agenciaPropiaId: perfil.agenciaId,
     superadmin,
     // La opción es de la agencia propia, que para quien no es SUPERADMIN es la que opera.
-    soloSuCartera: !superadmin && perfil.rol === "EJECUTIVO" && perfil.agencia.carteraPorEjecutivo,
+    soloSuCartera: !superadmin && esRolComercial(perfil.rol) && perfil.agencia.carteraPorEjecutivo,
     soloTareas: !superadmin && esRolSoloTareas(perfil.rol),
     coordinaTareas: superadmin || perfil.rol === "ADMIN" || perfil.rol === "LIDER_OFICINA",
   };
@@ -89,14 +89,14 @@ export const getCurrentUser = cache(async (): Promise<UsuarioSesion | null> => {
 
 export const esAdmin = (user: UsuarioSesion | null) => user?.rol === "ADMIN";
 
-/** Conciliación de cobranza: Administrador y Ejecutivo comercial. */
+/** Conciliación de cobranza: Administrador, Ejecutivo comercial y Auxiliar comercial. */
 export const puedeConciliar = (user: UsuarioSesion | null) =>
-  Boolean(user && !user.soloTareas && (user.rol === "ADMIN" || user.rol === "EJECUTIVO"));
+  Boolean(user && !user.soloTareas && (user.rol === "ADMIN" || esRolComercial(user.rol)));
 
 /**
  * Las comisiones (matriz, % por póliza, montos esperados y pagados) solo las ve y edita el
  * SUPERADMIN: varias aseguradoras las pagan fraccionadas y el cálculo no es confiable para la
- * agencia. Ni ADMIN ni EJECUTIVO las ven.
+ * agencia. Ni ADMIN ni los roles comerciales las ven.
  */
 export const veComisiones = (user: UsuarioSesion | null) => Boolean(user?.superadmin);
 
@@ -120,7 +120,7 @@ export async function getUsuarioCrm(): Promise<UsuarioSesion | null> {
   return user && !user.soloTareas ? user : null;
 }
 
-/** Exige poder conciliar la cobranza (Administrador o Ejecutivo comercial); si no, al dashboard. */
+/** Exige poder conciliar la cobranza (Administrador o rol comercial); si no, al dashboard. */
 export async function requireConciliador(): Promise<UsuarioSesion> {
   const user = await requireUsuarioCrm();
   if (!puedeConciliar(user)) redirect("/");

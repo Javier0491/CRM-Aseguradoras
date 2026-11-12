@@ -4,8 +4,8 @@ import { requireUsuarioCrm, type UsuarioSesion } from "@/lib/auth/dal";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
 /**
- * Qué datos ve la sesión: los de su agencia y, si es un EJECUTIVO de una agencia con "cartera por
- * ejecutivo", solo los clientes y pólizas que tiene asignados (`ejecutivoId`). Quien solo usa
+ * Qué datos ve la sesión: los de su agencia y, si es un Ejecutivo o Auxiliar comercial de una
+ * agencia con "cartera por ejecutivo", solo los clientes y pólizas que tiene asignados (`ejecutivoId`). Quien solo usa
  * Tareas (`ninguno`) no ve ninguna póliza, cliente ni recibo.
  */
 export type Alcance = { agenciaId: string; ejecutivoId: string | null; ninguno?: boolean };

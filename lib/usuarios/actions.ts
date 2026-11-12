@@ -337,7 +337,7 @@ export async function reasignarCartera(deId: string, aId: string): Promise<Resul
   if (a && conCartera && !ROLES_CARTERA.includes(a.rol)) {
     return {
       ok: false,
-      error: `${a.nombre} es ${rolLabels[a.rol]}: las pólizas y los clientes solo los recibe un Administrador o un Ejecutivo comercial.`,
+      error: `${a.nombre} es ${rolLabels[a.rol]}: las pólizas y los clientes solo los recibe un Administrador, un Ejecutivo comercial o un Auxiliar comercial.`,
     };
   }
   const destino = a?.id ?? null;
