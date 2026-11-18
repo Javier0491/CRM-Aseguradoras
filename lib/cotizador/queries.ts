@@ -22,6 +22,8 @@ export type SolicitudVista = {
   terminadaAt: string | null;
   /** El robot subió el PDF oficial de la aseguradora (se descarga en /cotizador/{id}/pdf). */
   tienePdf: boolean;
+  /** Envío del multicotizador al que pertenece (las de un mismo grupo se comparan juntas). */
+  grupoId: string | null;
 };
 
 /**
@@ -44,6 +46,7 @@ export async function getSolicitudes(user: UsuarioSesion): Promise<SolicitudVist
       tomadaAt: true,
       terminadaAt: true,
       pdfClave: true,
+      grupoId: true,
       creadoPor: { select: { nombre: true } },
     },
   });
@@ -59,6 +62,7 @@ export async function getSolicitudes(user: UsuarioSesion): Promise<SolicitudVist
     tomadaAt: f.tomadaAt?.toISOString() ?? null,
     terminadaAt: f.terminadaAt?.toISOString() ?? null,
     tienePdf: Boolean(f.pdfClave),
+    grupoId: f.grupoId,
   }));
 }
 

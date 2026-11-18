@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { crearSolicitudCotizacion } from "@/lib/cotizador/actions";
+import { aseguradorasDelRamo } from "@/lib/cotizador/aseguradoras";
 import type { LecturaDocumentosAuto } from "@/lib/cotizador/lector";
 import {
   ASEGURADORAS_COTIZADOR,
@@ -22,15 +23,25 @@ import {
   edadEn,
   ETIQUETA_FORMA_PAGO,
   ETIQUETA_PAQUETE,
+  ETIQUETA_PROCEDENCIA,
+  ETIQUETA_TIPO_VEHICULO,
+  ETIQUETA_VALOR,
   EXTRAS,
   FORMAS_PAGO,
   PAQUETES,
-  type AseguradoraCotizador,
+  PROCEDENCIAS,
+  TIPOS_VEHICULO,
+  VALORES_VEHICULO,
   type Extra,
   type FormaPago,
   type Paquete,
+  type Procedencia,
+  type TipoPersona,
+  type TipoVehiculo,
+  type ValorVehiculo,
 } from "@/lib/cotizador/reglas";
 import { formatNumero } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 const millones = (...m: number[]) => m.map((x) => x * 1_000_000);
 const miles = (...m: number[]) => m.map((x) => x * 1_000);
@@ -54,8 +65,23 @@ const BASICAS: readonly CampoSuma[] = ["responsabilidadCivil", "gastosMedicosOcu
 const OPCIONALES: readonly CampoSuma[] = ["rcDanosOcupantes", "rcComplementariaPersonas"];
 const NINGUNA = "ninguna";
 
+/** Aseguradoras de Autos del catálogo: las que ya se cotizan primero. */
+const ASEGURADORAS_AUTOS = aseguradorasDelRamo("AUTOS");
+const SELECCION_INICIAL = ASEGURADORAS_AUTOS.filter((a) => a.canal !== null).map((a) => a.clave as string);
+
 const vacio = {
-  vehiculo: { anio: "", marca: "", modelo: "", version: "", transmision: "AUT" as "AUT" | "STD", serie: "", placas: "" },
+  vehiculo: {
+    anio: "",
+    marca: "",
+    modelo: "",
+    version: "",
+    transmision: "AUT" as "AUT" | "STD",
+    serie: "",
+    placas: "",
+    tipo: "AUTO" as TipoVehiculo,
+    procedencia: "RESIDENTE" as Procedencia,
+    valor: "COMERCIAL" as ValorVehiculo,
+  },
   conductor: { nombre: "", fechaNacimiento: "", sexo: "" as "H" | "M" | "", codigoPostal: "" },
 };
 
@@ -100,12 +126,14 @@ function Opciones<T extends string>({
 
 /** Formulario para pedir una cotización de auto: se puede prellenar leyendo la INE y la tarjeta con IA. */
 export function FormularioCotizacion({ hoy }: { hoy: string }) {
-  const [aseguradora, setAseguradora] = React.useState<AseguradoraCotizador>("QUALITAS");
+  const [aseguradoras, setAseguradoras] = React.useState<string[]>(SELECCION_INICIAL);
   const [vehiculo, setVehiculo] = React.useState(vacio.vehiculo);
   const [conductor, setConductor] = React.useState(vacio.conductor);
   const [coberturas, setCoberturas] = React.useState(COBERTURAS_PREDETERMINADAS);
   const [formaPago, setFormaPago] = React.useState<FormaPago>("CONTADO");
   const [notas, setNotas] = React.useState("");
+  const [tipoPersona, setTipoPersona] = React.useState<TipoPersona>("FISICA");
+  const [vigenciaInicio, setVigenciaInicio] = React.useState(hoy);
   const [avisosLectura, setAvisosLectura] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [leyendo, setLeyendo] = React.useState(false);
@@ -113,6 +141,12 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
   const archivosRef = React.useRef<HTMLInputElement>(null);
 
   const edad = conductor.fechaNacimiento ? edadEn(conductor.fechaNacimiento, hoy) : null;
+  // Aseguradoras marcadas que no cotizan sin la fecha de nacimiento y el sexo del conductor.
+  const pidenConductor = aseguradoras
+    .filter((k): k is keyof typeof ASEGURADORAS_COTIZADOR => Object.hasOwn(ASEGURADORAS_COTIZADOR, k))
+    .filter((k) => ASEGURADORAS_COTIZADOR[k].pideConductor)
+    .map((k) => ASEGURADORAS_COTIZADOR[k].nombre);
+  const ayudaConductor = pidenConductor.length > 0 ? `Obligatorio para ${pidenConductor.join(" y ")}.` : "Opcional.";
 
   async function leerDocumentos(archivos: FileList | null) {
     if (!archivos || archivos.length === 0) return;
@@ -129,6 +163,7 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
       }
       const { vehiculo: v, conductor: c, propietario, avisos } = json.lectura;
       setVehiculo((x) => ({
+        ...x,
         anio: v.anio ? String(v.anio) : x.anio,
         marca: v.marca ?? x.marca,
         modelo: v.modelo ?? x.modelo,
@@ -158,9 +193,11 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
     setError(null);
     startEnvio(async () => {
       const r = await crearSolicitudCotizacion({
-        aseguradora,
+        aseguradoras,
         vehiculo: { ...vehiculo, anio: Number(vehiculo.anio) },
         conductor: { ...conductor, sexo: conductor.sexo || null },
+        tipoPersona,
+        vigenciaInicio,
         coberturas,
         formaPago,
         notas,
@@ -169,13 +206,16 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
         setError(r.error);
         return;
       }
-      toast.success("Cotización enviada al robot", {
-        description: `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.anio} en ${ASEGURADORAS_COTIZADOR[aseguradora].nombre}.`,
+      const nombres = ASEGURADORAS_AUTOS.filter((a) => aseguradoras.includes(a.clave)).map((a) => a.nombre);
+      toast.success(nombres.length > 1 ? `Enviada a ${nombres.length} aseguradoras` : "Cotización enviada al robot", {
+        description: `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.anio} en ${nombres.join(", ")}.`,
       });
       setVehiculo(vacio.vehiculo);
       setConductor(vacio.conductor);
       setCoberturas(COBERTURAS_PREDETERMINADAS);
       setNotas("");
+      setTipoPersona("FISICA");
+      setVigenciaInicio(hoy);
       setAvisosLectura([]);
     });
   }
@@ -278,11 +318,35 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
               <Campo id="cot-placas" etiqueta="Placas (opcional)">
                 <Input id="cot-placas" maxLength={10} value={vehiculo.placas} onChange={v("placas")} className="uppercase" />
               </Campo>
+              <Campo id="cot-tipo" etiqueta="Tipo de vehículo">
+                <Opciones
+                  id="cot-tipo"
+                  valor={vehiculo.tipo}
+                  onChange={(t: TipoVehiculo) => setVehiculo((x) => ({ ...x, tipo: t }))}
+                  opciones={TIPOS_VEHICULO.map((t) => ({ valor: t, etiqueta: ETIQUETA_TIPO_VEHICULO[t] }))}
+                />
+              </Campo>
+              <Campo id="cot-procedencia" etiqueta="Procedencia">
+                <Opciones
+                  id="cot-procedencia"
+                  valor={vehiculo.procedencia}
+                  onChange={(p: Procedencia) => setVehiculo((x) => ({ ...x, procedencia: p }))}
+                  opciones={PROCEDENCIAS.map((p) => ({ valor: p, etiqueta: ETIQUETA_PROCEDENCIA[p] }))}
+                />
+              </Campo>
+              <Campo id="cot-valor" etiqueta="Valor del auto">
+                <Opciones
+                  id="cot-valor"
+                  valor={vehiculo.valor}
+                  onChange={(val: ValorVehiculo) => setVehiculo((x) => ({ ...x, valor: val }))}
+                  opciones={VALORES_VEHICULO.map((val) => ({ valor: val, etiqueta: ETIQUETA_VALOR[val] }))}
+                />
+              </Campo>
             </div>
           </fieldset>
 
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium">Conductor</legend>
+            <legend className="text-sm font-medium">Conductor y póliza</legend>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Campo id="cot-cp" etiqueta="Código postal" ayuda="Obligatorio: define la tarifa.">
                 <Input
@@ -299,10 +363,14 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
                   <Input id="cot-nombre" value={conductor.nombre} onChange={c("nombre")} className="uppercase" />
                 </Campo>
               </div>
-              <Campo id="cot-nacimiento" etiqueta="Fecha de nacimiento (opcional)" ayuda={edad !== null ? `${edad} años` : undefined}>
+              <Campo
+                id="cot-nacimiento"
+                etiqueta="Fecha de nacimiento"
+                ayuda={edad !== null ? `${edad} años. ${ayudaConductor}` : ayudaConductor}
+              >
                 <Input id="cot-nacimiento" type="date" max={hoy} value={conductor.fechaNacimiento} onChange={c("fechaNacimiento")} />
               </Campo>
-              <Campo id="cot-sexo" etiqueta="Sexo (opcional)">
+              <Campo id="cot-sexo" etiqueta="Sexo" ayuda={ayudaConductor}>
                 <Opciones
                   id="cot-sexo"
                   valor={conductor.sexo || "-"}
@@ -314,20 +382,26 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
                   ]}
                 />
               </Campo>
+              <Campo id="cot-persona" etiqueta="Contratante">
+                <Opciones
+                  id="cot-persona"
+                  valor={tipoPersona}
+                  onChange={setTipoPersona}
+                  opciones={[
+                    { valor: "FISICA", etiqueta: "Persona física" },
+                    { valor: "MORAL", etiqueta: "Persona moral (empresa)" },
+                  ]}
+                />
+              </Campo>
+              <Campo id="cot-vigencia" etiqueta="Inicio de vigencia" ayuda="Un año a partir de esta fecha.">
+                <Input id="cot-vigencia" type="date" min={hoy} value={vigenciaInicio} onChange={(e) => setVigenciaInicio(e.target.value)} />
+              </Campo>
             </div>
           </fieldset>
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium">Coberturas</legend>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Campo id="cot-aseguradora" etiqueta="Aseguradora">
-                <Opciones
-                  id="cot-aseguradora"
-                  valor={aseguradora}
-                  onChange={setAseguradora}
-                  opciones={Object.entries(ASEGURADORAS_COTIZADOR).map(([k, a]) => ({ valor: k as AseguradoraCotizador, etiqueta: a.nombre }))}
-                />
-              </Campo>
               <Campo id="cot-paquete" etiqueta="Paquete">
                 <Opciones
                   id="cot-paquete"
@@ -406,6 +480,42 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
             </Campo>
           </fieldset>
 
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-medium">
+              Aseguradoras <span className="font-normal text-muted-foreground">(se cotiza en todas las que marques y se comparan juntas)</span>
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {ASEGURADORAS_AUTOS.map((a) => {
+                const disponible = a.canal !== null;
+                const marcada = aseguradoras.includes(a.clave);
+                return (
+                  <label
+                    key={a.clave}
+                    className={cn(
+                      "flex items-center gap-2 rounded-md border px-3 py-2 text-sm",
+                      marcada && "border-primary/40 bg-primary/5",
+                      !disponible && "cursor-not-allowed opacity-60"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="size-4 shrink-0 accent-primary"
+                      disabled={!disponible}
+                      checked={marcada}
+                      onChange={(e) =>
+                        setAseguradoras((x) => (e.target.checked ? [...x, a.clave] : x.filter((y) => y !== a.clave)))
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate">{a.nombre}</span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {a.canal === "API" ? "API" : a.canal === "ROBOT" ? "Robot" : "Próximamente"}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+
           {error && (
             <Alert variant="destructive">
               <TriangleAlert />
@@ -414,9 +524,9 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
           )}
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={enviando || leyendo}>
+            <Button type="submit" disabled={enviando || leyendo || aseguradoras.length === 0}>
               {enviando ? <Loader2 className="animate-spin" /> : <Send />}
-              Enviar a cotizar
+              {aseguradoras.length > 1 ? `Cotizar en ${aseguradoras.length} aseguradoras` : "Enviar a cotizar"}
             </Button>
           </div>
         </form>

@@ -40,12 +40,15 @@ export type TrabajoRobot = {
 /**
  * Toma la solicitud más antigua de la agencia que esté pendiente (o abandonada a medias: en
  * COTIZANDO desde hace más de MINUTOS_ABANDONO) y la marca COTIZANDO. Si dos robots piden a la vez,
- * solo uno se queda con cada solicitud.
+ * solo uno se queda con cada solicitud. `aseguradoras` limita a los portales con sesión abierta en la
+ * oficina (null = cualquiera); las de otras aseguradoras esperan en la fila.
  */
-export async function tomarSiguiente(agenciaId: string): Promise<TrabajoRobot | null> {
+export async function tomarSiguiente(agenciaId: string, aseguradoras: string[] | null = null): Promise<TrabajoRobot | null> {
+  if (aseguradoras && aseguradoras.length === 0) return null;
   const limiteAbandono = new Date(Date.now() - MINUTOS_ABANDONO * 60_000);
   const disponible: Prisma.SolicitudCotizacionWhereInput = {
     agenciaId,
+    ...(aseguradoras ? { aseguradora: { in: aseguradoras } } : {}),
     OR: [{ estado: "PENDIENTE" }, { estado: "COTIZANDO", tomadaAt: { lt: limiteAbandono } }],
   };
   for (let intento = 0; intento < 3; intento++) {

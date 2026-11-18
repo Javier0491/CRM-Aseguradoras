@@ -898,10 +898,14 @@ model SolicitudCotizacion {
   // (cotizaciones/{agenciaId}/{id}/{uuid}.pdf) y su tamaño.
   pdfClave    String?          @map("pdf_clave")
   pdfBytes    Int?             @map("pdf_bytes")
+  // Multicotizador: las solicitudes de un mismo envío (una por aseguradora) comparten grupo para
+  // compararlas lado a lado. Null en las anteriores al multicotizador.
+  grupoId     String?          @map("grupo_id") @db.Uuid
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 
   @@index([agenciaId, estado, createdAt])
   @@index([creadoPorId])
+  @@index([agenciaId, grupoId])
   @@map("solicitudes_cotizacion")
 }

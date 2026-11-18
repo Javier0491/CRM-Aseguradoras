@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Bot, ChevronDown, Clock, FileDown, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
+import { Ban, Bot, ChevronDown, Clock, FileDown, Layers, Loader2, RotateCcw, TriangleAlert, Trophy } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cancelarSolicitudCotizacion, reintentarSolicitudCotizacion } from "@/lib/cotizador/actions";
 import type { SolicitudVista } from "@/lib/cotizador/queries";
-import { ASEGURADORAS_COTIZADOR, ETIQUETA_FORMA_PAGO, ETIQUETA_PAQUETE, EXTRAS } from "@/lib/cotizador/reglas";
+import { nombreAseguradora } from "@/lib/cotizador/aseguradoras";
+import { agruparSolicitudes } from "@/lib/cotizador/comparativo";
+import {
+  ETIQUETA_FORMA_PAGO,
+  ETIQUETA_PAQUETE,
+  ETIQUETA_PROCEDENCIA,
+  ETIQUETA_TIPO_VEHICULO,
+  ETIQUETA_VALOR,
+  EXTRAS,
+} from "@/lib/cotizador/reglas";
 import { formatMoneda, formatNumero } from "@/lib/format";
 import type { EstadoCotizacion } from "@/lib/generated/prisma/enums";
 import { cn } from "@/lib/utils";
@@ -28,9 +37,6 @@ const REFRESCO_MS = 10_000;
 
 const hora = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Mexico_City" });
 
-function nombreAseguradora(clave: string) {
-  return clave in ASEGURADORAS_COTIZADOR ? ASEGURADORAS_COTIZADOR[clave as keyof typeof ASEGURADORAS_COTIZADOR].nombre : clave;
-}
 
 function Detalle({ s }: { s: SolicitudVista }) {
   const r = s.resultado;
@@ -103,6 +109,13 @@ function Detalle({ s }: { s: SolicitudVista }) {
           {(k.extras ?? []).map((x) => ` · ${EXTRAS[x] ?? x}`)}
         </p>
       )}
+      {s.datos.vehiculo.tipo && (
+        <p className="text-xs text-muted-foreground">
+          {ETIQUETA_TIPO_VEHICULO[s.datos.vehiculo.tipo]} · {ETIQUETA_PROCEDENCIA[s.datos.vehiculo.procedencia]} ·{" "}
+          {ETIQUETA_VALOR[s.datos.vehiculo.valor]} · {s.datos.tipoPersona === "MORAL" ? "Persona moral" : "Persona física"} · vigencia
+          desde {s.datos.vigenciaInicio}
+        </p>
+      )}
       {s.tienePdf && (
         <Button asChild variant="outline" size="sm">
           <a href={`/cotizador/${s.id}/pdf`} download>
@@ -125,6 +138,7 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
   const [abierta, setAbierta] = React.useState<string | null>(null);
   const [ocupada, setOcupada] = React.useState<string | null>(null);
   const enCurso = solicitudes.some((s) => s.estado === "PENDIENTE" || s.estado === "COTIZANDO");
+  const grupos = React.useMemo(() => agruparSolicitudes(solicitudes), [solicitudes]);
 
   // Mientras el robot trabaja, la lista se actualiza sola.
   React.useEffect(() => {
@@ -146,6 +160,86 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
     }
   }
 
+  /** Renglón de una solicitud. En un comparativo el título es la aseguradora (el auto va arriba). */
+  const fila = (s: SolicitudVista, enGrupo: boolean, mejor: boolean) => {
+    const est = ESTADO[s.estado];
+    const v = s.datos.vehiculo;
+    const abiertaEsta = abierta === s.id;
+    return (
+      <div key={s.id} className={cn(!enGrupo && "rounded-lg border", enGrupo && "border-t first:border-t-0")}>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setAbierta(abiertaEsta ? null : s.id)}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            aria-expanded={abiertaEsta}
+          >
+            <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", abiertaEsta && "rotate-180")} />
+            <div className="min-w-0">
+              <p className="flex items-center gap-2 truncate font-medium">
+                {enGrupo ? nombreAseguradora(s.aseguradora) : `${v.marca} ${v.modelo} ${v.version} ${v.anio}`}
+                {mejor && (
+                  <Badge variant="outline" className="gap-1 border-success/30 bg-success/10 text-success">
+                    <Trophy className="size-3" /> Más barata
+                  </Badge>
+                )}
+              </p>
+              {!enGrupo && (
+                <p className="truncate text-xs text-muted-foreground">
+                  {nombreAseguradora(s.aseguradora)} · {s.datos.conductor.nombre ?? `C.P. ${s.datos.conductor.codigoPostal}`} ·{" "}
+                  {hora.format(new Date(s.createdAt))}
+                </p>
+              )}
+            </div>
+          </button>
+          <div className="flex items-center gap-2">
+            {s.resultado && (
+              <span className="text-right">
+                <span className="block font-semibold tabular-nums">{formatMoneda(s.resultado.primaTotal)}</span>
+                <span className="block text-[11px] text-muted-foreground">{ETIQUETA_FORMA_PAGO[s.resultado.formaPago]}</span>
+              </span>
+            )}
+            {s.tienePdf && (
+              <Button asChild variant="ghost" size="icon-sm" title={`PDF de ${nombreAseguradora(s.aseguradora)}`}>
+                <a href={`/cotizador/${s.id}/pdf`} download aria-label={`Descargar PDF de ${nombreAseguradora(s.aseguradora)}`}>
+                  <FileDown />
+                </a>
+              </Button>
+            )}
+            <Badge variant="outline" className={cn("gap-1", est.clase)}>
+              {s.estado === "COTIZANDO" && <Loader2 className="size-3 animate-spin" />}
+              {s.estado === "PENDIENTE" && <Clock className="size-3" />}
+              {est.etiqueta}
+            </Badge>
+            {(s.estado === "PENDIENTE" || s.estado === "COTIZANDO") && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Cancelar"
+                disabled={ocupada === s.id}
+                onClick={() => accion(s.id, cancelarSolicitudCotizacion, "Cotización cancelada")}
+              >
+                <Ban />
+              </Button>
+            )}
+            {(s.estado === "ERROR" || s.estado === "CANCELADA") && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Volver a intentar"
+                disabled={ocupada === s.id}
+                onClick={() => accion(s.id, reintentarSolicitudCotizacion, "De vuelta en la fila")}
+              >
+                <RotateCcw />
+              </Button>
+            )}
+          </div>
+        </div>
+        {abiertaEsta && <Detalle s={s} />}
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -163,74 +257,27 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
             Todavía no hay cotizaciones. Llena el formulario y el robot de la oficina la hará en el portal.
           </div>
         ) : (
-          solicitudes.map((s) => {
-            const est = ESTADO[s.estado];
-            const v = s.datos.vehiculo;
-            const abiertaEsta = abierta === s.id;
+          grupos.map((g) => {
+            if (g.solicitudes.length === 1) return fila(g.solicitudes[0], false, false);
+            const primera = g.solicitudes[0];
+            const v = primera.datos.vehiculo;
+            const listas = g.solicitudes.filter((s) => s.resultado).length;
             return (
-              <div key={s.id} className="rounded-lg border">
-                <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <button
-                    type="button"
-                    onClick={() => setAbierta(abiertaEsta ? null : s.id)}
-                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                    aria-expanded={abiertaEsta}
-                  >
-                    <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", abiertaEsta && "rotate-180")} />
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">
-                        {v.marca} {v.modelo} {v.version} {v.anio}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {nombreAseguradora(s.aseguradora)} · {s.datos.conductor.nombre ?? `C.P. ${s.datos.conductor.codigoPostal}`} ·{" "}
-                        {hora.format(new Date(s.createdAt))}
-                      </p>
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-2">
-                    {s.resultado && (
-                      <span className="text-right">
-                        <span className="block font-semibold tabular-nums">{formatMoneda(s.resultado.primaTotal)}</span>
-                        <span className="block text-[11px] text-muted-foreground">{ETIQUETA_FORMA_PAGO[s.resultado.formaPago]}</span>
-                      </span>
-                    )}
-                    {s.tienePdf && (
-                      <Button asChild variant="ghost" size="icon-sm" title={`PDF de ${nombreAseguradora(s.aseguradora)}`}>
-                        <a href={`/cotizador/${s.id}/pdf`} download aria-label={`Descargar PDF de ${nombreAseguradora(s.aseguradora)}`}>
-                          <FileDown />
-                        </a>
-                      </Button>
-                    )}
-                    <Badge variant="outline" className={cn("gap-1", est.clase)}>
-                      {s.estado === "COTIZANDO" && <Loader2 className="size-3 animate-spin" />}
-                      {s.estado === "PENDIENTE" && <Clock className="size-3" />}
-                      {est.etiqueta}
-                    </Badge>
-                    {(s.estado === "PENDIENTE" || s.estado === "COTIZANDO") && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Cancelar"
-                        disabled={ocupada === s.id}
-                        onClick={() => accion(s.id, cancelarSolicitudCotizacion, "Cotización cancelada")}
-                      >
-                        <Ban />
-                      </Button>
-                    )}
-                    {(s.estado === "ERROR" || s.estado === "CANCELADA") && (
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Volver a intentar"
-                        disabled={ocupada === s.id}
-                        onClick={() => accion(s.id, reintentarSolicitudCotizacion, "De vuelta en la fila")}
-                      >
-                        <RotateCcw />
-                      </Button>
-                    )}
+              <div key={g.clave} className="rounded-lg border">
+                <div className="flex items-start gap-3 bg-muted/40 px-4 py-3">
+                  <Layers className="mt-0.5 size-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {v.marca} {v.modelo} {v.version} {v.anio}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      Comparativo · {listas} de {g.solicitudes.length} listas ·{" "}
+                      {primera.datos.conductor.nombre ?? `C.P. ${primera.datos.conductor.codigoPostal}`} ·{" "}
+                      {hora.format(new Date(primera.createdAt))}
+                    </p>
                   </div>
                 </div>
-                {abiertaEsta && <Detalle s={s} />}
+                {g.solicitudes.map((s, i) => fila(s, true, i === 0 && listas > 1 && s.resultado !== null))}
               </div>
             );
           })

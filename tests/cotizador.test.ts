@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { aseguradorasDelRamo, canalDe, CATALOGO_ASEGURADORAS, nombreAseguradora } from "@/lib/cotizador/aseguradoras";
+import { agruparSolicitudes } from "@/lib/cotizador/comparativo";
 import { generarLlave, hashLlave, llaveDeEncabezado } from "@/lib/cotizador/llave";
+import type { SolicitudVista } from "@/lib/cotizador/queries";
 import {
+  ASEGURADORAS_COTIZADOR,
+  aseguradorasDelRobot,
   clavePdfCotizacion,
   COBERTURAS_PREDETERMINADAS,
   edadEn,
   esPdf,
   nombrePdfCotizacion,
+  MAX_ASEGURADORAS_POR_ENVIO,
+  validarAseguradoras,
   validarDatosCotizacion,
   validarResultado,
 } from "@/lib/cotizador/reglas";
@@ -65,6 +72,7 @@ describe("solicitud de cotización de auto", () => {
 
   it("rechaza aseguradoras, deducibles y montos que no existen", () => {
     assert.equal(validarDatosCotizacion({ ...mazda(), aseguradora: "GNP" }).ok, false);
+    assert.equal(validarDatosCotizacion({ ...mazda(), aseguradora: "constructor" }).ok, false);
     assert.equal(validarDatosCotizacion({ ...mazda(), coberturas: { ...COBERTURAS_PREDETERMINADAS, deducibleDM: 7 } }).ok, false);
     assert.equal(validarDatosCotizacion({ ...mazda(), coberturas: { ...COBERTURAS_PREDETERMINADAS, gastosMedicosOcupantes: -1 } }).ok, false);
     assert.equal(validarDatosCotizacion(null).ok, false);
@@ -94,6 +102,46 @@ describe("solicitud de cotización de auto", () => {
     assert.equal(edadEn("1977-11-18", "2026-11-17"), 48);
     assert.equal(edadEn("1977-11-17", "2026-11-17"), 49);
     assert.equal(edadEn("no", "2026-11-17"), null);
+  });
+});
+
+describe("datos que piden las aseguradoras (escaneo 2026-11-18)", () => {
+  const hoy = "2026-11-18";
+
+  it("sin datos nuevos usa auto residente, valor comercial, persona física y vigencia desde hoy", () => {
+    const r = validarDatosCotizacion(mazda(), hoy);
+    assert.ok(r.ok);
+    assert.equal(r.valor.vehiculo.tipo, "AUTO");
+    assert.equal(r.valor.vehiculo.procedencia, "RESIDENTE");
+    assert.equal(r.valor.vehiculo.valor, "COMERCIAL");
+    assert.equal(r.valor.tipoPersona, "FISICA");
+    assert.equal(r.valor.vigenciaInicio, hoy);
+  });
+
+  it("acepta los valores del formulario y rechaza los que no existen", () => {
+    const d = { ...mazda(), tipoPersona: "MORAL", vigenciaInicio: "2026-12-01" };
+    d.vehiculo = { ...d.vehiculo, tipo: "PICKUP", procedencia: "FRONTERIZO", valor: "FACTURA" } as typeof d.vehiculo;
+    const r = validarDatosCotizacion(d, hoy);
+    assert.ok(r.ok);
+    assert.equal(r.valor.vehiculo.tipo, "PICKUP");
+    assert.equal(r.valor.tipoPersona, "MORAL");
+    assert.equal(r.valor.vigenciaInicio, "2026-12-01");
+    assert.equal(validarDatosCotizacion({ ...mazda(), tipoPersona: "OTRA" }, hoy).ok, false);
+    assert.equal(validarDatosCotizacion({ ...mazda(), vehiculo: { ...mazda().vehiculo, tipo: "AVION" } }, hoy).ok, false);
+    assert.equal(validarDatosCotizacion({ ...mazda(), vigenciaInicio: "2026-11-01" }, hoy).ok, false);
+  });
+
+  it("Zurich no cotiza sin fecha de nacimiento y sexo; Qualitas sí", () => {
+    const sinIne = mazda();
+    sinIne.conductor = { nombre: "", fechaNacimiento: "", sexo: "", codigoPostal: "62260" };
+    assert.ok(validarDatosCotizacion(sinIne, hoy).ok);
+    const z = validarDatosCotizacion({ ...sinIne, aseguradora: "ZURICH" }, hoy);
+    assert.equal(z.ok, false);
+    assert.match(z.ok ? "" : z.error, /Zurich necesita/);
+    assert.ok(validarDatosCotizacion({ ...mazda(), aseguradora: "ZURICH" }, hoy).ok);
+    const futuro = mazda();
+    futuro.conductor.fechaNacimiento = "2030-01-01";
+    assert.equal(validarDatosCotizacion(futuro, hoy).ok, false);
   });
 });
 
@@ -167,5 +215,64 @@ describe("llave del robot", () => {
     assert.equal(llaveDeEncabezado("Bearer abc"), null);
     assert.equal(llaveDeEncabezado(`Basic ${generarLlave()}`), null);
     assert.equal(llaveDeEncabezado("Bearer zsr_corta"), null);
+  });
+});
+
+describe("multicotizador", () => {
+  it("el catálogo y lo que acepta el robot coinciden", () => {
+    const conRobot = Object.keys(CATALOGO_ASEGURADORAS).filter((k) => canalDe(k, "AUTOS") === "ROBOT");
+    assert.deepEqual(conRobot.sort(), Object.keys(ASEGURADORAS_COTIZADOR).sort());
+  });
+
+  it("lista las aseguradoras de un ramo con las disponibles primero", () => {
+    const autos = aseguradorasDelRamo("AUTOS");
+    assert.deepEqual(autos.slice(0, 2).map((a) => a.clave), ["QUALITAS", "ZURICH"]);
+    assert.equal(autos[1].canal, "ROBOT");
+    assert.ok(autos.some((a) => a.clave === "GNP" && a.canal === null));
+    assert.ok(!autos.some((a) => a.clave === "METLIFE"));
+    assert.ok(aseguradorasDelRamo("GMM").some((a) => a.clave === "METLIFE"));
+    assert.equal(nombreAseguradora("ANA"), "ANA Seguros");
+    assert.equal(nombreAseguradora("constructor"), "constructor");
+  });
+
+  it("valida las aseguradoras elegidas", () => {
+    const r = validarAseguradoras(["QUALITAS", "QUALITAS"]);
+    assert.ok(r.ok);
+    assert.deepEqual(r.valor, ["QUALITAS"]);
+    assert.equal(validarAseguradoras([]).ok, false);
+    assert.equal(validarAseguradoras("QUALITAS").ok, false);
+    // GNP está en el catálogo pero todavía no se puede cotizar.
+    assert.equal(validarAseguradoras(["QUALITAS", "GNP"]).ok, false);
+    assert.ok(validarAseguradoras(["QUALITAS", "ZURICH"]).ok);
+    assert.equal(validarAseguradoras(["constructor"]).ok, false);
+    assert.equal(validarAseguradoras(Array.from({ length: MAX_ASEGURADORAS_POR_ENVIO + 1 }, (_, i) => `X${i}`)).ok, false);
+    assert.equal(validarDatosCotizacion({ ...mazda(), aseguradora: "toString" }).ok, false);
+  });
+
+  it("el robot pide solo de los portales con sesión abierta", () => {
+    assert.equal(aseguradorasDelRobot(null), null);
+    assert.deepEqual(aseguradorasDelRobot(" qualitas, GNP ,qualitas"), ["QUALITAS"]);
+    assert.deepEqual(aseguradorasDelRobot("QUALITAS,ZURICH"), ["QUALITAS", "ZURICH"]);
+    assert.deepEqual(aseguradorasDelRobot(""), []);
+  });
+
+  it("agrupa un envío y ordena de la más barata a la más cara", () => {
+    const base = (id: string, aseguradora: string, grupoId: string | null, prima: number | null) =>
+      ({
+        id,
+        aseguradora,
+        grupoId,
+        estado: prima === null ? "PENDIENTE" : "LISTA",
+        resultado: prima === null ? null : { primaTotal: prima },
+      }) as unknown as SolicitudVista;
+    const grupos = agruparSolicitudes([
+      base("a", "QUALITAS", "g1", 12_000),
+      base("b", "GNP", "g1", null),
+      base("c", "QUALITAS", null, 9_000),
+      base("d", "HDI", "g1", 10_500),
+    ]);
+    assert.equal(grupos.length, 2);
+    assert.deepEqual(grupos[0].solicitudes.map((s) => s.id), ["d", "a", "b"]);
+    assert.deepEqual(grupos[1].solicitudes.map((s) => s.id), ["c"]);
   });
 });

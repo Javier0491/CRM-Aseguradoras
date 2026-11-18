@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getAdmin, getUsuarioCrm } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
 import { generarLlave, hashLlave } from "@/lib/cotizador/llave";
-import { validarDatosCotizacion } from "@/lib/cotizador/reglas";
+import { validarAseguradoras, validarDatosCotizacion } from "@/lib/cotizador/reglas";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -14,27 +14,40 @@ type Resultado = { ok: true } | { ok: false; error: string };
 /** Máximo de solicitudes en espera por agencia: evita llenar la fila por un doble clic repetido. */
 const MAX_EN_ESPERA = 30;
 
-/** Pide una cotización: queda PENDIENTE hasta que la tome el robot de la oficina. */
+/**
+ * Multicotizador: pide la misma cotización a varias aseguradoras. Crea una solicitud PENDIENTE por
+ * aseguradora, todas con el mismo grupo para compararlas; el robot (o la API, cuando exista) las
+ * resuelve una por una. `entrada` lleva los datos del formulario más `aseguradoras: string[]`.
+ */
 export async function crearSolicitudCotizacion(entrada: unknown): Promise<Resultado> {
   const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: "Tu sesión venció. Vuelve a iniciar sesión." };
-  const v = validarDatosCotizacion(entrada);
-  if (!v.ok) return v;
+  if (typeof entrada !== "object" || entrada === null) return { ok: false, error: "Datos inválidos." };
+  const a = validarAseguradoras((entrada as { aseguradoras?: unknown }).aseguradoras);
+  if (!a.ok) return a;
+  const solicitudes = [];
+  for (const aseguradora of a.valor) {
+    const v = validarDatosCotizacion({ ...entrada, aseguradora });
+    if (!v.ok) return v;
+    solicitudes.push(v.valor);
+  }
 
   const enEspera = await db.solicitudCotizacion.count({
     where: { agenciaId: user.agenciaId, estado: { in: ["PENDIENTE", "COTIZANDO"] } },
   });
-  if (enEspera >= MAX_EN_ESPERA) {
+  if (enEspera + solicitudes.length > MAX_EN_ESPERA) {
     return { ok: false, error: `Ya hay ${enEspera} cotizaciones en espera. Espera a que el robot avance.` };
   }
 
-  await db.solicitudCotizacion.create({
-    data: {
+  const grupoId = solicitudes.length > 1 ? crypto.randomUUID() : null;
+  await db.solicitudCotizacion.createMany({
+    data: solicitudes.map((datos) => ({
       agenciaId: user.agenciaId,
-      aseguradora: v.valor.aseguradora,
-      datos: v.valor as unknown as Prisma.InputJsonValue,
+      aseguradora: datos.aseguradora,
+      datos: datos as unknown as Prisma.InputJsonValue,
       creadoPorId: user.id,
-    },
+      grupoId,
+    })),
   });
   revalidatePath("/cotizador");
   return { ok: true };

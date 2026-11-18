@@ -7,8 +7,19 @@
 // /api/cotizador/robot, cotiza en el portal y devuelve el resultado. El CRM nunca entra a los
 // portales ni guarda sus contraseñas.
 
+import { hoyISO } from "@/lib/format";
+
+/**
+ * Aseguradoras que el robot ya sabe cotizar. `pideConductor`: el portal no cotiza sin la fecha de
+ * nacimiento (edad) y el sexo del conductor (lo vimos en el escaneo del 2026-11-18).
+ */
 export const ASEGURADORAS_COTIZADOR = {
-  QUALITAS: { nombre: "Qualitas", portal: "https://agentes360.qualitas.com.mx/group/guest/inicio" },
+  QUALITAS: { nombre: "Qualitas", portal: "https://agentes360.qualitas.com.mx/group/guest/inicio", pideConductor: false },
+  ZURICH: {
+    nombre: "Zurich",
+    portal: "https://www.zurich.com.mx/PortalAgentes/produccion/autos/nuevaCotizacion",
+    pideConductor: true,
+  },
 } as const;
 export type AseguradoraCotizador = keyof typeof ASEGURADORAS_COTIZADOR;
 
@@ -51,6 +62,35 @@ export const EXTRAS = {
 } as const;
 export type Extra = keyof typeof EXTRAS;
 
+export const TIPOS_VEHICULO = ["AUTO", "PICKUP", "CAMION", "MOTO"] as const;
+export type TipoVehiculo = (typeof TIPOS_VEHICULO)[number];
+export const ETIQUETA_TIPO_VEHICULO: Record<TipoVehiculo, string> = {
+  AUTO: "Auto",
+  PICKUP: "Pickup",
+  CAMION: "Camión ligero",
+  MOTO: "Motocicleta",
+};
+
+export const PROCEDENCIAS = ["RESIDENTE", "FRONTERIZO", "LEGALIZADO"] as const;
+export type Procedencia = (typeof PROCEDENCIAS)[number];
+export const ETIQUETA_PROCEDENCIA: Record<Procedencia, string> = {
+  RESIDENTE: "Nacional (residente)",
+  FRONTERIZO: "Fronterizo",
+  LEGALIZADO: "Legalizado",
+};
+
+/** Cómo se fija la suma asegurada del vehículo. */
+export const VALORES_VEHICULO = ["COMERCIAL", "FACTURA", "CONVENIDO"] as const;
+export type ValorVehiculo = (typeof VALORES_VEHICULO)[number];
+export const ETIQUETA_VALOR: Record<ValorVehiculo, string> = {
+  COMERCIAL: "Valor comercial",
+  FACTURA: "Valor factura",
+  CONVENIDO: "Valor convenido",
+};
+
+export const TIPOS_PERSONA = ["FISICA", "MORAL"] as const;
+export type TipoPersona = (typeof TIPOS_PERSONA)[number];
+
 export const DEDUCIBLES_DM = [3, 5, 10, 20] as const;
 export const DEDUCIBLES_RT = [5, 10, 20] as const;
 
@@ -67,7 +107,15 @@ export type DatosCotizacionAuto = {
     serie: string | null;
     placas: string | null;
     uso: "PARTICULAR";
+    /** Desde el multicotizador (2026-11-18). Las solicitudes anteriores no los traen: auto, residente, comercial. */
+    tipo: TipoVehiculo;
+    procedencia: Procedencia;
+    valor: ValorVehiculo;
   };
+  /** Persona física o moral del contratante. */
+  tipoPersona: TipoPersona;
+  /** Inicio de vigencia (yyyy-mm-dd); la vigencia es anual. */
+  vigenciaInicio: string;
   /** Muchas veces no se tiene la INE: lo único indispensable para cotizar es el código postal. */
   conductor: {
     nombre: string | null;
@@ -174,15 +222,35 @@ export function edadEn(fechaNacimiento: string, hoy: string): number | null {
   return ha - a - (hm < m || (hm === m && hd < d) ? 1 : 0);
 }
 
+/** Máximo de aseguradoras por envío del multicotizador. */
+export const MAX_ASEGURADORAS_POR_ENVIO = 10;
+
+/**
+ * Aseguradoras elegidas en el multicotizador: sin repetir, entre 1 y MAX_ASEGURADORAS_POR_ENVIO, y
+ * solo las que ya se pueden cotizar (hoy, las que maneja el robot).
+ */
+export function validarAseguradoras(entrada: unknown): Validacion<AseguradoraCotizador[]> {
+  if (!Array.isArray(entrada) || entrada.length === 0) return { ok: false, error: "Elige al menos una aseguradora." };
+  const claves = [...new Set(entrada)];
+  if (claves.length > MAX_ASEGURADORAS_POR_ENVIO) {
+    return { ok: false, error: `Elige a lo más ${MAX_ASEGURADORAS_POR_ENVIO} aseguradoras por envío.` };
+  }
+  if (claves.some((k) => typeof k !== "string" || !Object.hasOwn(ASEGURADORAS_COTIZADOR, k))) {
+    return { ok: false, error: "Alguna aseguradora todavía no se puede cotizar." };
+  }
+  return { ok: true, valor: claves as AseguradoraCotizador[] };
+}
+
 /** Valida lo que manda el formulario y lo deja en la forma que lee el robot. */
-export function validarDatosCotizacion(entrada: unknown): Validacion<DatosCotizacionAuto> {
+/** `hoy` (yyyy-mm-dd, hora de México) es el mínimo del inicio de vigencia y el valor por defecto. */
+export function validarDatosCotizacion(entrada: unknown, hoy = hoyISO()): Validacion<DatosCotizacionAuto> {
   if (typeof entrada !== "object" || entrada === null) return { ok: false, error: "Datos inválidos." };
   const e = entrada as Record<string, Record<string, unknown> | unknown>;
   const v = (e.vehiculo ?? {}) as Record<string, unknown>;
   const c = (e.conductor ?? {}) as Record<string, unknown>;
   const k = (e.coberturas ?? {}) as Record<string, unknown>;
 
-  if (typeof e.aseguradora !== "string" || !(e.aseguradora in ASEGURADORAS_COTIZADOR)) {
+  if (typeof e.aseguradora !== "string" || !Object.hasOwn(ASEGURADORAS_COTIZADOR, e.aseguradora)) {
     return { ok: false, error: "Elige una aseguradora." };
   }
 
@@ -206,6 +274,23 @@ export function validarDatosCotizacion(entrada: unknown): Validacion<DatosCotiza
   const fechaNacimiento = textoOpcional(c.fechaNacimiento, 10);
   if (fechaNacimiento && !esFechaISO(fechaNacimiento)) return { ok: false, error: "La fecha de nacimiento no es válida." };
   const sexo = c.sexo === "H" || c.sexo === "M" ? c.sexo : null;
+  const aseg = ASEGURADORAS_COTIZADOR[e.aseguradora as AseguradoraCotizador];
+  if (aseg.pideConductor && (!fechaNacimiento || !sexo)) {
+    return { ok: false, error: `${aseg.nombre} necesita la fecha de nacimiento y el sexo del conductor.` };
+  }
+  if (fechaNacimiento && fechaNacimiento > hoy) return { ok: false, error: "La fecha de nacimiento no puede ser futura." };
+
+  const opcion = <T extends string>(valor: unknown, opciones: readonly T[], porDefecto: T): T | undefined =>
+    valor === undefined || valor === null || valor === "" ? porDefecto : (opciones as readonly unknown[]).includes(valor) ? (valor as T) : undefined;
+  const tipo = opcion(v.tipo, TIPOS_VEHICULO, "AUTO");
+  const procedencia = opcion(v.procedencia, PROCEDENCIAS, "RESIDENTE");
+  const valor = opcion(v.valor, VALORES_VEHICULO, "COMERCIAL");
+  const tipoPersona = opcion(e.tipoPersona, TIPOS_PERSONA, "FISICA");
+  if (!tipo || !procedencia || !valor || !tipoPersona) return { ok: false, error: "Algún dato del vehículo o del contratante no es válido." };
+  const vigenciaInicio = textoOpcional(e.vigenciaInicio, 10) ?? hoy;
+  if (!esFechaISO(vigenciaInicio) || vigenciaInicio < hoy) {
+    return { ok: false, error: "El inicio de vigencia debe ser hoy o una fecha futura." };
+  }
 
   if (!(PAQUETES as readonly unknown[]).includes(k.paquete)) return { ok: false, error: "Elige el paquete de coberturas." };
   const deducibleDM = Number(k.deducibleDM);
@@ -247,7 +332,12 @@ export function validarDatosCotizacion(entrada: unknown): Validacion<DatosCotiza
         serie,
         placas: textoOpcional(v.placas, 10)?.toUpperCase() ?? null,
         uso: "PARTICULAR",
+        tipo,
+        procedencia,
+        valor,
       },
+      tipoPersona,
+      vigenciaInicio,
       conductor: { nombre, fechaNacimiento, sexo, codigoPostal },
       coberturas: {
         paquete: k.paquete as Paquete,
@@ -329,6 +419,20 @@ export function validarResultado(entrada: unknown): Validacion<ResultadoCotizaci
   };
 }
 
+/**
+ * Aseguradoras cuyo portal tiene sesión abierta en la oficina, según el parámetro `?aseguradoras=`
+ * con que el robot pide trabajo (p. ej. "QUALITAS,GNP"). Sin parámetro: todas (null). Las claves
+ * desconocidas se ignoran; si no queda ninguna, la lista vacía hace que no reciba nada.
+ */
+export function aseguradorasDelRobot(parametro: string | null): AseguradoraCotizador[] | null {
+  if (parametro === null) return null;
+  const claves = parametro
+    .split(",")
+    .map((s) => s.trim().toUpperCase())
+    .filter((s): s is AseguradoraCotizador => Object.hasOwn(ASEGURADORAS_COTIZADOR, s));
+  return [...new Set(claves)];
+}
+
 /** Prefijo de las llaves del robot: permite reconocerlas si alguien las pega donde no debe. */
 export const PREFIJO_LLAVE = "zsr_";
 
@@ -361,7 +465,7 @@ export function nombrePdfCotizacion(
   vehiculo: { marca?: string; modelo?: string; anio?: number } | undefined
 ): string {
   const nombreAseg =
-    aseguradora in ASEGURADORAS_COTIZADOR
+    Object.hasOwn(ASEGURADORAS_COTIZADOR, aseguradora)
       ? ASEGURADORAS_COTIZADOR[aseguradora as AseguradoraCotizador].nombre
       : aseguradora;
   const partes = ["Cotizacion", nombreAseg, numeroCotizacion, vehiculo?.marca, vehiculo?.modelo, vehiculo?.anio]

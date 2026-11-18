@@ -1,5 +1,5 @@
 import { agenciaDelRobot, guardarResultado, tomarSiguiente } from "@/lib/cotizador/robot";
-import { validarResultado } from "@/lib/cotizador/reglas";
+import { aseguradorasDelRobot, validarResultado } from "@/lib/cotizador/reglas";
 
 // API del robot cotizador: la computadora de la oficina pide aquí la siguiente cotización
 // pendiente y devuelve el resultado. Se autentica con la llave de la agencia
@@ -11,12 +11,15 @@ const respuesta = (cuerpo: Record<string, unknown>, status = 200) =>
 
 const noAutorizado = () => respuesta({ ok: false, error: "Llave del robot inválida o revocada." }, 401);
 
-/** GET: la siguiente solicitud pendiente (queda en COTIZANDO), o `solicitud: null` si no hay. */
+/**
+ * GET: la siguiente solicitud pendiente (queda en COTIZANDO), o `solicitud: null` si no hay.
+ * `?aseguradoras=QUALITAS,GNP` pide solo de los portales con sesión abierta en la oficina.
+ */
 export async function GET(request: Request) {
   const agenciaId = await agenciaDelRobot(request.headers.get("authorization"));
   if (!agenciaId) return noAutorizado();
   try {
-    const solicitud = await tomarSiguiente(agenciaId);
+    const solicitud = await tomarSiguiente(agenciaId, aseguradorasDelRobot(new URL(request.url).searchParams.get("aseguradoras")));
     return respuesta({ ok: true, solicitud });
   } catch (e) {
     console.error("[cotizador/robot] GET", e instanceof Error ? e.message : e);
