@@ -38,6 +38,20 @@ export const ASEGURADORAS_COTIZADOR = {
     pideNombre: true,
     pideMunicipio: false,
   },
+  AFIRME: {
+    nombre: "Afirme",
+    portal: "https://www.afirmeseguros.com/cercania360/#/inicio",
+    pideConductor: false,
+    pideNombre: false,
+    pideMunicipio: false,
+  },
+  GNP: {
+    nombre: "GNP",
+    portal: "https://portalintermediarios.gnp.com.mx/home/dashboard",
+    pideConductor: true,
+    pideNombre: false,
+    pideMunicipio: false,
+  },
   HDI: {
     nombre: "HDI",
     portal: "https://smartoffice.hdi.com.mx/dashboard",

@@ -46,7 +46,12 @@ export type FichaAseguradora = {
 export const CATALOGO_ASEGURADORAS = {
   QUALITAS: { nombre: "Qualitas", ramos: ["AUTOS"], robot: ["AUTOS"], portal: "https://agentes360.qualitas.com.mx/group/guest/inicio" },
   METLIFE: { nombre: "MetLife", ramos: ["VIDA", "GMM", "ACCIDENTES"] },
-  GNP: { nombre: "GNP", ramos: ["AUTOS", "GMM", "VIDA", "DANOS"] },
+  GNP: {
+    nombre: "GNP",
+    ramos: ["AUTOS", "GMM", "VIDA", "DANOS"],
+    robot: ["AUTOS"],
+    portal: "https://portalintermediarios.gnp.com.mx/home/dashboard",
+  },
   AXA: { nombre: "AXA", ramos: ["AUTOS", "GMM", "VIDA", "DANOS"] },
   MAPFRE: {
     nombre: "Mapfre",
@@ -58,7 +63,12 @@ export const CATALOGO_ASEGURADORAS = {
   ANA: { nombre: "ANA Seguros", ramos: ["AUTOS"] },
   ZURICH: { nombre: "Zurich", ramos: ["AUTOS", "GMM", "DANOS"], robot: ["AUTOS"], portal: "https://miportal.zurich.com.mx/agente/inicio" },
   SURA: { nombre: "Sura", ramos: ["AUTOS", "DANOS"] },
-  AFIRME: { nombre: "Afirme", ramos: ["AUTOS", "VIDA", "DANOS"] },
+  AFIRME: {
+    nombre: "Afirme",
+    ramos: ["AUTOS", "VIDA", "DANOS"],
+    robot: ["AUTOS"],
+    portal: "https://www.afirmeseguros.com/cercania360/#/inicio",
+  },
   ATLAS: { nombre: "Seguros Atlas", ramos: ["AUTOS", "GMM", "VIDA", "DANOS"] },
   EL_POTOSI: { nombre: "El Potosí", ramos: ["AUTOS", "VIDA"], robot: ["AUTOS"], portal: "https://portal.elpotosi.com.mx/Inicio/" },
   GMX: { nombre: "GMX", ramos: ["AUTOS", "DANOS"] },

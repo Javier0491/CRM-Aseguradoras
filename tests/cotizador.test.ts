@@ -78,7 +78,7 @@ describe("solicitud de cotización de auto", () => {
   });
 
   it("rechaza aseguradoras, deducibles y montos que no existen", () => {
-    assert.equal(validarDatosCotizacion({ ...mazda(), aseguradora: "GNP" }).ok, false);
+    assert.equal(validarDatosCotizacion({ ...mazda(), aseguradora: "AXA" }).ok, false);
     assert.equal(validarDatosCotizacion({ ...mazda(), aseguradora: "constructor" }).ok, false);
     assert.equal(validarDatosCotizacion({ ...mazda(), coberturas: { ...COBERTURAS_PREDETERMINADAS, deducibleDM: 7 } }).ok, false);
     assert.equal(validarDatosCotizacion({ ...mazda(), coberturas: { ...COBERTURAS_PREDETERMINADAS, gastosMedicosOcupantes: -1 } }).ok, false);
@@ -248,7 +248,7 @@ describe("conexiones del multicotizador", () => {
     assert.equal(canalDe("ZURICH", "AUTOS"), "ROBOT");
     assert.equal(canalDe("ZURICH", "AUTOS", { "ZURICH:AUTOS": "APAGADO" }), null);
     assert.equal(canalDe("ZURICH", "AUTOS", { "ZURICH:AUTOS": "API" }), "ROBOT");
-    assert.equal(canalDe("GNP", "AUTOS"), null);
+    assert.equal(canalDe("AXA", "AUTOS"), null);
     const autos = aseguradorasDelRamo("AUTOS", { "ZURICH:AUTOS": "APAGADO" });
     const zurich = autos.find((a) => a.clave === "ZURICH");
     assert.equal(zurich?.apagada, true);
@@ -260,7 +260,7 @@ describe("conexiones del multicotizador", () => {
     assert.equal(validarEleccionCanal("ZURICH", "AUTOS", "ROBOT"), null);
     assert.equal(validarEleccionCanal("ZURICH", "AUTOS", "APAGADO"), null);
     assert.match(validarEleccionCanal("ZURICH", "AUTOS", "API") ?? "", /API/);
-    assert.match(validarEleccionCanal("GNP", "AUTOS", "ROBOT") ?? "", /robot/);
+    assert.match(validarEleccionCanal("AXA", "AUTOS", "ROBOT") ?? "", /robot/);
     assert.match(validarEleccionCanal("QUALITAS", "GMM", "APAGADO") ?? "", /no vende/);
     assert.notEqual(validarEleccionCanal("NADIE", "AUTOS", "APAGADO"), null);
     assert.notEqual(validarEleccionCanal("ZURICH", "AUTOS", "OTRO"), null);
@@ -284,8 +284,8 @@ describe("multicotizador", () => {
 
   it("lista las aseguradoras de un ramo con las disponibles primero", () => {
     const autos = aseguradorasDelRamo("AUTOS");
-    assert.deepEqual(autos.filter((a) => a.canal === "ROBOT").map((a) => a.clave), ["EL_POTOSI", "HDI", "MAPFRE", "QUALITAS", "ZURICH"]);
-    assert.ok(autos.some((a) => a.clave === "GNP" && a.canal === null));
+    assert.deepEqual(autos.filter((a) => a.canal === "ROBOT").map((a) => a.clave), ["AFIRME", "EL_POTOSI", "GNP", "HDI", "MAPFRE", "QUALITAS", "ZURICH"]);
+    assert.ok(autos.some((a) => a.clave === "AXA" && a.canal === null));
     assert.ok(!autos.some((a) => a.clave === "METLIFE"));
     assert.ok(aseguradorasDelRamo("GMM").some((a) => a.clave === "METLIFE"));
     assert.equal(nombreAseguradora("ANA"), "ANA Seguros");
@@ -298,8 +298,8 @@ describe("multicotizador", () => {
     assert.deepEqual(r.valor, ["QUALITAS"]);
     assert.equal(validarAseguradoras([]).ok, false);
     assert.equal(validarAseguradoras("QUALITAS").ok, false);
-    // GNP está en el catálogo pero todavía no se puede cotizar.
-    assert.equal(validarAseguradoras(["QUALITAS", "GNP"]).ok, false);
+    // AXA está en el catálogo pero todavía no se puede cotizar.
+    assert.equal(validarAseguradoras(["QUALITAS", "AXA"]).ok, false);
     assert.ok(validarAseguradoras(["QUALITAS", "ZURICH"]).ok);
     assert.equal(validarAseguradoras(["constructor"]).ok, false);
     assert.equal(validarAseguradoras(Array.from({ length: MAX_ASEGURADORAS_POR_ENVIO + 1 }, (_, i) => `X${i}`)).ok, false);
@@ -308,7 +308,7 @@ describe("multicotizador", () => {
 
   it("el robot pide solo de los portales con sesión abierta", () => {
     assert.equal(aseguradorasDelRobot(null), null);
-    assert.deepEqual(aseguradorasDelRobot(" qualitas, GNP ,qualitas"), ["QUALITAS"]);
+    assert.deepEqual(aseguradorasDelRobot(" qualitas, AXA ,qualitas"), ["QUALITAS"]);
     assert.deepEqual(aseguradorasDelRobot("QUALITAS,ZURICH"), ["QUALITAS", "ZURICH"]);
     assert.deepEqual(aseguradorasDelRobot(""), []);
   });

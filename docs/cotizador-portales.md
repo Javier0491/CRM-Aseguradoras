@@ -17,7 +17,7 @@ hasta presionar «Cotizar», y eso se documentará cuando el robot haga la prime
 |---|---|---|---|
 | Qualitas | Autos | ✅ completo, robot funcionando | buena (menús) |
 | MetLife | GMM (MédicaLife Familiar) | ✅ datos de entrada | buena (formulario normal) |
-| GNP | Autos | ✅ datos de entrada | difícil: marco de otro dominio, solo con capturas |
+| GNP | Autos | ✅ cotizado (robot) | medio: abrir el marco como página propia y usar clics reales |
 | GNP | GMM (Planes Individuales) | ✅ datos del titular | difícil (mismo marco) |
 | GNP | Vida | ⚠️ Plan de Rentas en línea; Vida individual solo con el programa Nautilus | — |
 | HDI | Autos | ✅ datos de entrada | media (buscador de texto del auto) |
@@ -31,7 +31,7 @@ hasta presionar «Cotizar», y eso se documentará cuando el robot haga la prime
 | Insignia Life | Vida | ⏳ el «Cotizador Único» pide otro inicio de sesión | — |
 | BX+ | Autos, GMMI, Vida | ⏳ piden usuario propio | — |
 | GMX | Autos / Daños | ⏳ no hubo sesión de agente | — |
-| Afirme | — | ⏳ sin acceso | — |
+| Afirme | Autos | ✅ cotizado (robot) | medio: marca y tipo con sus menús, luego la versión |
 | AXA, ANA, Sura, Atlas, Thona, Aserta | — | ⏳ no se abrieron | — |
 
 ---
