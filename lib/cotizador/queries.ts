@@ -3,18 +3,18 @@ import "server-only";
 import { connection } from "next/server";
 
 import type { UsuarioSesion } from "@/lib/auth/dal";
-import { leerConfigCanales, type ConfigCanales } from "@/lib/cotizador/aseguradoras";
+import { leerConfigCanales, type ConfigCanales, type RamoCotizador } from "@/lib/cotizador/aseguradoras";
+import type { DatosCotizacionGMM } from "@/lib/cotizador/gmm";
 import type { DatosCotizacionAuto, ResultadoCotizacion } from "@/lib/cotizador/reglas";
 import { db } from "@/lib/db";
 import type { EstadoCotizacion } from "@/lib/generated/prisma/client";
 
 export const LIMITE_SOLICITUDES = 50;
 
-export type SolicitudVista = {
+type Comun = {
   id: string;
   aseguradora: string;
   estado: EstadoCotizacion;
-  datos: DatosCotizacionAuto;
   resultado: ResultadoCotizacion | null;
   error: string | null;
   pedidaPor: string | null;
@@ -27,13 +27,16 @@ export type SolicitudVista = {
   grupoId: string | null;
 };
 
+/** Una solicitud para la pantalla; `ramo` dice qué forma tienen los datos. */
+export type SolicitudVista = Comun & ({ ramo: "AUTOS"; datos: DatosCotizacionAuto } | { ramo: "GMM"; datos: DatosCotizacionGMM });
+
 /**
- * Últimas solicitudes de cotización de la agencia. Quien solo ve su cartera ve solo las que pidió.
+ * Últimas solicitudes de cotización de la agencia en ese ramo. Quien solo ve su cartera ve solo las que pidió.
  */
-export async function getSolicitudes(user: UsuarioSesion): Promise<SolicitudVista[]> {
+export async function getSolicitudes(user: UsuarioSesion, ramo: RamoCotizador = "AUTOS"): Promise<SolicitudVista[]> {
   await connection();
   const filas = await db.solicitudCotizacion.findMany({
-    where: { agenciaId: user.agenciaId, ...(user.soloSuCartera ? { creadoPorId: user.id } : {}) },
+    where: { agenciaId: user.agenciaId, ramo, ...(user.soloSuCartera ? { creadoPorId: user.id } : {}) },
     orderBy: { createdAt: "desc" },
     take: LIMITE_SOLICITUDES,
     select: {
@@ -55,7 +58,9 @@ export async function getSolicitudes(user: UsuarioSesion): Promise<SolicitudVist
     id: f.id,
     aseguradora: f.aseguradora,
     estado: f.estado,
-    datos: f.datos as DatosCotizacionAuto,
+    ...(ramo === "GMM"
+      ? { ramo: "GMM" as const, datos: f.datos as DatosCotizacionGMM }
+      : { ramo: "AUTOS" as const, datos: f.datos as DatosCotizacionAuto }),
     resultado: (f.resultado as ResultadoCotizacion | null) ?? null,
     error: f.error,
     pedidaPor: f.creadoPor?.nombre ?? null,

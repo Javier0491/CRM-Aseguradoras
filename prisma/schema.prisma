@@ -885,8 +885,11 @@ model SolicitudCotizacion {
   agencia     Agencia          @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   // Clave de lib/cotizador/reglas.ts (p. ej. "QUALITAS").
   aseguradora String
+  // Ramo del multicotizador ("AUTOS", "GMM"…; lib/cotizador/aseguradoras.ts). Las anteriores al
+  // 2026-11-19 son todas de autos.
+  ramo        String           @default("AUTOS")
   estado      EstadoCotizacion @default(PENDIENTE)
-  // Vehículo, conductor y coberturas (DatosCotizacionAuto, validado al guardar).
+  // Lo que se cotiza, validado al guardar: DatosCotizacionAuto (autos) o DatosCotizacionGMM (gastos médicos).
   datos       Json
   // Lo que devolvió el robot (ResultadoCotizacion): primas, desglose y avisos del portal.
   resultado   Json?
@@ -910,5 +913,6 @@ model SolicitudCotizacion {
   @@index([agenciaId, estado, createdAt])
   @@index([creadoPorId])
   @@index([agenciaId, grupoId])
+  @@index([agenciaId, ramo, createdAt])
   @@map("solicitudes_cotizacion")
 }

@@ -24,7 +24,7 @@ export const ETIQUETA_RAMO: Record<RamoCotizador, string> = {
 };
 
 /** Ramos con formulario en el multicotizador; los demás muestran sus conexiones y lo que pedirán. */
-export const RAMOS_CON_FORMULARIO: readonly RamoCotizador[] = ["AUTOS"];
+export const RAMOS_CON_FORMULARIO: readonly RamoCotizador[] = ["AUTOS", "GMM"];
 
 export type CanalCotizacion = "ROBOT" | "API";
 /** Lo que elige la agencia para cada aseguradora y ramo. */
@@ -45,7 +45,12 @@ export type FichaAseguradora = {
 
 export const CATALOGO_ASEGURADORAS = {
   QUALITAS: { nombre: "Qualitas", ramos: ["AUTOS"], robot: ["AUTOS"], portal: "https://agentes360.qualitas.com.mx/group/guest/inicio" },
-  METLIFE: { nombre: "MetLife", ramos: ["VIDA", "GMM", "ACCIDENTES"] },
+  METLIFE: {
+    nombre: "MetLife",
+    ramos: ["VIDA", "GMM", "ACCIDENTES"],
+    robot: ["GMM"],
+    portal: "https://servicios.metlife.com.mx/wps/myportal/",
+  },
   GNP: {
     nombre: "GNP",
     ramos: ["AUTOS", "GMM", "VIDA", "DANOS"],

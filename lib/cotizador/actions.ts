@@ -13,6 +13,7 @@ import {
   type RamoCotizador,
 } from "@/lib/cotizador/aseguradoras";
 import { generarLlave, hashLlave } from "@/lib/cotizador/llave";
+import { ASEGURADORAS_GMM, validarDatosGMM } from "@/lib/cotizador/gmm";
 import { validarAseguradoras, validarDatosCotizacion } from "@/lib/cotizador/reglas";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
@@ -25,17 +26,21 @@ const MAX_EN_ESPERA = 30;
 /**
  * Multicotizador: pide la misma cotización a varias aseguradoras. Crea una solicitud PENDIENTE por
  * aseguradora, todas con el mismo grupo para compararlas; el robot (o la API, cuando exista) las
- * resuelve una por una. `entrada` lleva los datos del formulario más `aseguradoras: string[]`.
+ * resuelve una por una. `entrada` lleva los datos del formulario más `aseguradoras: string[]` y
+ * `ramo` ("AUTOS" si no viene; "GMM" para gastos médicos).
  */
 export async function crearSolicitudCotizacion(entrada: unknown): Promise<Resultado> {
   const user = await getUsuarioCrm();
   if (!user) return { ok: false, error: "Tu sesión venció. Vuelve a iniciar sesión." };
   if (typeof entrada !== "object" || entrada === null) return { ok: false, error: "Datos inválidos." };
-  const a = validarAseguradoras((entrada as { aseguradoras?: unknown }).aseguradoras);
+  const { aseguradoras, ramo: ramoEntrada } = entrada as { aseguradoras?: unknown; ramo?: unknown };
+  const ramo = ramoEntrada === undefined || ramoEntrada === "AUTOS" ? "AUTOS" : ramoEntrada === "GMM" ? "GMM" : null;
+  if (!ramo) return { ok: false, error: "Ese ramo todavía no se puede cotizar." };
+  const a = ramo === "GMM" ? validarAseguradoras(aseguradoras, ASEGURADORAS_GMM) : validarAseguradoras(aseguradoras);
   if (!a.ok) return a;
-  const solicitudes = [];
+  const solicitudes: { aseguradora: string }[] = [];
   for (const aseguradora of a.valor) {
-    const v = validarDatosCotizacion({ ...entrada, aseguradora });
+    const v = ramo === "GMM" ? validarDatosGMM({ ...entrada, aseguradora }) : validarDatosCotizacion({ ...entrada, aseguradora });
     if (!v.ok) return v;
     solicitudes.push(v.valor);
   }
@@ -44,7 +49,7 @@ export async function crearSolicitudCotizacion(entrada: unknown): Promise<Result
   const agencia = await db.agencia.findUnique({ where: { id: user.agenciaId }, select: { cotizadorCanales: true } });
   const config = leerConfigCanales(agencia?.cotizadorCanales);
   for (const aseguradora of a.valor) {
-    const canal = canalDe(aseguradora, "AUTOS", config);
+    const canal = canalDe(aseguradora, ramo, config);
     if (canal === null) return { ok: false, error: `${nombreAseguradora(aseguradora)} está apagada en Conexiones.` };
     if (canal !== "ROBOT") return { ok: false, error: `La API de ${nombreAseguradora(aseguradora)} todavía no cotiza.` };
   }
@@ -61,6 +66,7 @@ export async function crearSolicitudCotizacion(entrada: unknown): Promise<Result
     data: solicitudes.map((datos) => ({
       agenciaId: user.agenciaId,
       aseguradora: datos.aseguradora,
+      ramo,
       datos: datos as unknown as Prisma.InputJsonValue,
       creadoPorId: user.id,
       grupoId,

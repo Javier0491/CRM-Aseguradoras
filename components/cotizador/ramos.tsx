@@ -39,15 +39,6 @@ export function SelectorRamo({ actual }: { actual: RamoCotizador }) {
 
 /** Lo que pedirá el formulario de cada ramo, según el escaneo de portales del 2026-11-18. */
 const PENDIENTE: Partial<Record<RamoCotizador, { pedira: string[]; nota?: string }>> = {
-  GMM: {
-    pedira: [
-      "Cada asegurado (titular, cónyuge e hijos) con nombre, fecha de nacimiento y sexo",
-      "Código postal, estado y municipio; peso y estatura del titular (GNP)",
-      "Plan, suma asegurada, deducible y coaseguro",
-      "Forma de pago y coberturas adicionales (dental, maternidad, extranjero…)",
-    ],
-    nota: "Ya se escanearon MetLife, GNP, Plan Seguro y Bupa. Sigue enseñarle al robot el cotizador de MetLife.",
-  },
   VIDA: {
     pedira: [
       "Fecha de nacimiento, sexo y si fuma",

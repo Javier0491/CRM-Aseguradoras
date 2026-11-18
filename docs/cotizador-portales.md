@@ -16,7 +16,7 @@ hasta presionar «Cotizar», y eso se documentará cuando el robot haga la prime
 | Aseguradora | Ramo escaneado | Estado | Facilidad para el robot |
 |---|---|---|---|
 | Qualitas | Autos | ✅ completo, robot funcionando | buena (menús) |
-| MetLife | GMM (MédicaLife Familiar) | ✅ datos de entrada | buena (formulario normal) |
+| MetLife | GMM (MédicaLife Familiar) | ✅ cotizado (robot) | buena (formulario normal) |
 | GNP | Autos | ✅ cotizado (robot) | medio: abrir el marco como página propia y usar clics reales |
 | GNP | GMM (Planes Individuales) | ✅ datos del titular | difícil (mismo marco) |
 | GNP | Vida | ⚠️ Plan de Rentas en línea; Vida individual solo con el programa Nautilus | — |
@@ -90,7 +90,14 @@ cotización y PDF oficial.
    coaseguro nacional, forma de pago, estado y municipio. Titular: edad y género. Adicionales (casillas),
    incremento de tabulador (100–300 %), último gasto, muerte accidental y renta diaria. Dependientes:
    cónyuge (casilla) y número de hijos.
-3. a 5. Generan la cotización (no se recorrieron).
+3. Edad y género del cónyuge y de cada hijo (Hijo u Otro).
+4. Resultado en pantalla: prima por asegurado, prima neta, recargo por forma de pago, derecho de póliza,
+   IVA y prima total. Sin número de cotización. «Terminar» pide nombre y correo para enviarla al cliente:
+   **el robot no lo usa**.
+- La suma asegurada va en unidades (SMGMVDF): 1,000 = $3,080,400 al 2026-11-18. Los municipios son
+  pocos por estado («Otros Municipios» para el resto).
+- Robot funcionando (skill `cotizador-robot`, sección 3h). Prueba: familia de 4 en Zapopan, Plan Más,
+  deducible $10,000, coaseguro 10 %, anual: **$59,786.79**.
 
 **Vida:** no hay cotizador en línea; la sección «Producto» ofrece cotizadores descargables. Igual que
 GNP (Nautilus): **Vida individual de las dos aseguradoras principales se cotiza con programas

@@ -3,6 +3,7 @@ import { Calculator } from "lucide-react";
 
 import { ConexionesAseguradoras } from "@/components/cotizador/conexiones-aseguradoras";
 import { FormularioCotizacion } from "@/components/cotizador/formulario-cotizacion";
+import { FormularioGMM } from "@/components/cotizador/formulario-gmm";
 import { ListaCotizaciones } from "@/components/cotizador/lista-cotizaciones";
 import { PanelRobot } from "@/components/cotizador/panel-robot";
 import { RamoPendiente, ramoDeParametro, SelectorRamo } from "@/components/cotizador/ramos";
@@ -24,7 +25,7 @@ export default async function MulticotizadorPage({ searchParams }: PageProps<"/c
   const aseguradoras = aseguradorasDelRamo(ramo, config);
   const conFormulario = RAMOS_CON_FORMULARIO.includes(ramo);
   const [solicitudes, estado] = conFormulario
-    ? await Promise.all([getSolicitudes(user), getEstadoRobot(user.agenciaId)])
+    ? await Promise.all([getSolicitudes(user, ramo), getEstadoRobot(user.agenciaId)])
     : [[], null];
 
   return (
@@ -39,7 +40,11 @@ export default async function MulticotizadorPage({ searchParams }: PageProps<"/c
         <>
           <PanelRobot estado={estado} esAdmin={admin} />
           <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-            <FormularioCotizacion hoy={hoyISO()} aseguradoras={aseguradoras} />
+            {ramo === "GMM" ? (
+              <FormularioGMM hoy={hoyISO()} aseguradoras={aseguradoras} />
+            ) : (
+              <FormularioCotizacion hoy={hoyISO()} aseguradoras={aseguradoras} />
+            )}
             <ListaCotizaciones solicitudes={solicitudes} />
           </div>
         </>

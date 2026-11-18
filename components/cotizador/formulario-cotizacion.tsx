@@ -82,7 +82,7 @@ const vacio = {
   conductor: { nombre: "", fechaNacimiento: "", sexo: "" as "H" | "M" | "", codigoPostal: "", municipio: "" },
 };
 
-function Campo({ id, etiqueta, children, ayuda }: { id: string; etiqueta: string; children: React.ReactNode; ayuda?: string }) {
+export function Campo({ id, etiqueta, children, ayuda }: { id: string; etiqueta: string; children: React.ReactNode; ayuda?: string }) {
   return (
     <div className="min-w-0 space-y-1.5">
       <Label htmlFor={id} className="text-xs">
@@ -94,7 +94,7 @@ function Campo({ id, etiqueta, children, ayuda }: { id: string; etiqueta: string
   );
 }
 
-function Opciones<T extends string>({
+export function Opciones<T extends string>({
   id,
   valor,
   onChange,

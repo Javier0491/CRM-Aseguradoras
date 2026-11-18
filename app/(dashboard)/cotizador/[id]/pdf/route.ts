@@ -25,6 +25,7 @@ export async function GET(_req: Request, ctx: RouteContext<"/cotizador/[id]/pdf"
 
   const datos = s.datos as DatosCotizacionAuto | null;
   const resultado = s.resultado as ResultadoCotizacion | null;
+  // Las de GMM no traen vehículo: el nombre queda «Cotizacion MetLife 12345.pdf».
   const nombre = nombrePdfCotizacion(s.aseguradora, resultado?.numeroCotizacion, datos?.vehiculo);
 
   let url: string;

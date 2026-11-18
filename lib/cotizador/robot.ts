@@ -1,7 +1,8 @@
 import "server-only";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
-import { canalDe, leerConfigCanales } from "@/lib/cotizador/aseguradoras";
+import { canalDe, leerConfigCanales, type RamoCotizador } from "@/lib/cotizador/aseguradoras";
+import { ASEGURADORAS_GMM, type DatosCotizacionGMM } from "@/lib/cotizador/gmm";
 import { llaveDeEncabezado, hashLlave } from "@/lib/cotizador/llave";
 import {
   ASEGURADORAS_COTIZADOR,
@@ -31,10 +32,21 @@ export async function agenciaDelRobot(authorization: string | null): Promise<str
   return agencia.id;
 }
 
+/** Aseguradoras que el robot sabe cotizar, por ramo. */
+export const ASEGURADORAS_ROBOT: Partial<Record<RamoCotizador, readonly string[]>> = {
+  AUTOS: Object.keys(ASEGURADORAS_COTIZADOR),
+  GMM: Object.keys(ASEGURADORAS_GMM),
+};
+
+/** Todas las claves que el robot puede pedir en `?aseguradoras=`. */
+export const CLAVES_ROBOT = [...new Set(Object.values(ASEGURADORAS_ROBOT).flat())];
+
 export type TrabajoRobot = {
   id: string;
   aseguradora: string;
-  datos: DatosCotizacionAuto;
+  /** "AUTOS" o "GMM": dice qué forma tienen los datos. */
+  ramo: string;
+  datos: DatosCotizacionAuto | DatosCotizacionGMM;
   pedidaPor: string | null;
   createdAt: Date;
 };
@@ -49,21 +61,23 @@ export async function tomarSiguiente(agenciaId: string, pedidas: string[] | null
   // Solo las que la agencia tiene en robot en Conexiones (las de API o apagadas no son suyas).
   const agencia = await db.agencia.findUnique({ where: { id: agenciaId }, select: { cotizadorCanales: true } });
   const config = leerConfigCanales(agencia?.cotizadorCanales);
-  const aseguradoras = Object.keys(ASEGURADORAS_COTIZADOR).filter(
-    (k) => canalDe(k, "AUTOS", config) === "ROBOT" && (pedidas === null || pedidas.includes(k))
-  );
-  if (aseguradoras.length === 0) return null;
+  const porRamo = (Object.entries(ASEGURADORAS_ROBOT) as [RamoCotizador, readonly string[]][])
+    .map(([ramo, claves]) => ({
+      ramo,
+      aseguradora: { in: claves.filter((k) => canalDe(k, ramo, config) === "ROBOT" && (pedidas === null || pedidas.includes(k))) },
+    }))
+    .filter((r) => r.aseguradora.in.length > 0);
+  if (porRamo.length === 0) return null;
   const limiteAbandono = new Date(Date.now() - MINUTOS_ABANDONO * 60_000);
   const disponible: Prisma.SolicitudCotizacionWhereInput = {
     agenciaId,
-    aseguradora: { in: aseguradoras },
-    OR: [{ estado: "PENDIENTE" }, { estado: "COTIZANDO", tomadaAt: { lt: limiteAbandono } }],
+    AND: [{ OR: porRamo }, { OR: [{ estado: "PENDIENTE" }, { estado: "COTIZANDO", tomadaAt: { lt: limiteAbandono } }] }],
   };
   for (let intento = 0; intento < 3; intento++) {
     const candidata = await db.solicitudCotizacion.findFirst({
       where: disponible,
       orderBy: { createdAt: "asc" },
-      select: { id: true, aseguradora: true, datos: true, createdAt: true, creadoPor: { select: { nombre: true } } },
+      select: { id: true, aseguradora: true, ramo: true, datos: true, createdAt: true, creadoPor: { select: { nombre: true } } },
     });
     if (!candidata) return null;
     const { count } = await db.solicitudCotizacion.updateMany({
@@ -74,7 +88,8 @@ export async function tomarSiguiente(agenciaId: string, pedidas: string[] | null
       return {
         id: candidata.id,
         aseguradora: candidata.aseguradora,
-        datos: candidata.datos as DatosCotizacionAuto,
+        ramo: candidata.ramo,
+        datos: candidata.datos as DatosCotizacionAuto | DatosCotizacionGMM,
         pedidaPor: candidata.creadoPor?.nombre ?? null,
         createdAt: candidata.createdAt,
       };

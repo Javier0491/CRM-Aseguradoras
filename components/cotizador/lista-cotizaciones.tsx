@@ -12,6 +12,7 @@ import { cancelarSolicitudCotizacion, reintentarSolicitudCotizacion } from "@/li
 import type { SolicitudVista } from "@/lib/cotizador/queries";
 import { nombreAseguradora } from "@/lib/cotizador/aseguradoras";
 import { agruparSolicitudes } from "@/lib/cotizador/comparativo";
+import { ADICIONALES_GMM, ETIQUETA_NIVEL, resumenAsegurados } from "@/lib/cotizador/gmm";
 import {
   ETIQUETA_FORMA_PAGO,
   ETIQUETA_PAQUETE,
@@ -19,6 +20,7 @@ import {
   ETIQUETA_TIPO_VEHICULO,
   ETIQUETA_VALOR,
   EXTRAS,
+  type FormaPago,
 } from "@/lib/cotizador/reglas";
 import { formatMoneda, formatNumero } from "@/lib/format";
 import type { EstadoCotizacion } from "@/lib/generated/prisma/enums";
@@ -37,17 +39,56 @@ const REFRESCO_MS = 10_000;
 
 const hora = new Intl.DateTimeFormat("es-MX", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Mexico_City" });
 
+/** Qué se cotizó: el auto, o el plan y los asegurados en GMM. */
+function titulo(s: SolicitudVista): string {
+  if (s.ramo === "GMM") return `GMM ${ETIQUETA_NIVEL[s.datos.plan] ?? s.datos.plan} · ${resumenAsegurados(s.datos.asegurados)}`;
+  const v = s.datos.vehiculo;
+  return `${v.marca} ${v.modelo} ${v.version} ${v.anio}`;
+}
+
+/** Para quién: el nombre del conductor o del titular, o su código postal. */
+function quien(s: SolicitudVista): string {
+  if (s.ramo === "GMM") return s.datos.asegurados[0]?.nombre ?? `C.P. ${s.datos.codigoPostal}`;
+  return s.datos.conductor.nombre ?? `C.P. ${s.datos.conductor.codigoPostal}`;
+}
+
+/** Lo que se pidió en GMM (mientras no hay resultado). */
+function PedidoGMM({ s }: { s: Extract<SolicitudVista, { ramo: "GMM" }> }) {
+  const d = s.datos;
+  return (
+    <p className="text-xs text-muted-foreground">
+      {ETIQUETA_NIVEL[d.plan] ?? d.plan}
+      {d.sumaAsegurada !== null && ` · suma asegurada ${formatMoneda(d.sumaAsegurada)}`}
+      {d.deducible !== null && ` · deducible ${formatMoneda(d.deducible)}`}
+      {d.coaseguro !== null && ` · coaseguro ${d.coaseguro}%`} · {ETIQUETA_FORMA_PAGO[d.formaPago]} · {d.municipio}, {d.estado}
+      {d.adicionales.map((x) => ` · ${ADICIONALES_GMM[x] ?? x}`)}
+    </p>
+  );
+}
+
+/** Lo que se pidió en autos (mientras no hay resultado). */
+function PedidoAuto({ k, formaPago }: { k: Extract<SolicitudVista, { ramo: "AUTOS" }>["datos"]["coberturas"]; formaPago: FormaPago }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      {ETIQUETA_PAQUETE[k.paquete]} · DM {k.deducibleDM}% · RT {k.deducibleRT}%
+      {k.responsabilidadCivil !== null && ` · RC $${formatNumero(k.responsabilidadCivil)}`}
+      {k.bonificacionMaxima && " · bonificación máxima"} · {ETIQUETA_FORMA_PAGO[formaPago]}
+      {k.rcDanosOcupantes !== null && ` · RC ocupantes $${formatNumero(k.rcDanosOcupantes)}`}
+      {k.rcComplementariaPersonas !== null && ` · RC complementaria $${formatNumero(k.rcComplementariaPersonas)}`}
+      {(k.extras ?? []).map((x) => ` · ${EXTRAS[x] ?? x}`)}
+    </p>
+  );
+}
 
 function Detalle({ s }: { s: SolicitudVista }) {
   const r = s.resultado;
-  const k = s.datos.coberturas;
   return (
     <div className="space-y-4 border-t px-4 py-4 text-sm">
       {r ? (
         <>
           <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
             {r.numeroCotizacion && <span>Cotización {nombreAseguradora(s.aseguradora)}: <b className="text-foreground">{r.numeroCotizacion}</b></span>}
-            {r.sumaAseguradaVehiculo !== null && <span>Suma asegurada del auto: {formatMoneda(r.sumaAseguradaVehiculo)}</span>}
+            {r.sumaAseguradaVehiculo !== null && s.ramo === "AUTOS" && <span>Suma asegurada del auto: {formatMoneda(r.sumaAseguradaVehiculo)}</span>}
             {r.bonificacion !== null && <span>Bonificación técnica: {r.bonificacion}%</span>}
           </div>
           {r.coberturas.length > 0 && (
@@ -55,7 +96,7 @@ function Detalle({ s }: { s: SolicitudVista }) {
               <table className="w-full min-w-[480px] text-xs">
                 <thead className="text-left text-muted-foreground">
                   <tr>
-                    <th className="py-1 pr-3 font-normal">Cobertura</th>
+                    <th className="py-1 pr-3 font-normal">{s.ramo === "GMM" ? "Asegurado o cobertura" : "Cobertura"}</th>
                     <th className="py-1 pr-3 font-normal">Suma asegurada</th>
                     <th className="py-1 pr-3 font-normal">Deducible</th>
                     <th className="py-1 text-right font-normal">Prima</th>
@@ -99,17 +140,12 @@ function Detalle({ s }: { s: SolicitudVista }) {
             </ul>
           )}
         </>
+      ) : s.ramo === "GMM" ? (
+        <PedidoGMM s={s} />
       ) : (
-        <p className="text-xs text-muted-foreground">
-          {ETIQUETA_PAQUETE[k.paquete]} · DM {k.deducibleDM}% · RT {k.deducibleRT}%
-          {k.responsabilidadCivil !== null && ` · RC $${formatNumero(k.responsabilidadCivil)}`}
-          {k.bonificacionMaxima && " · bonificación máxima"} · {ETIQUETA_FORMA_PAGO[s.datos.formaPago]}
-          {k.rcDanosOcupantes !== null && ` · RC ocupantes $${formatNumero(k.rcDanosOcupantes)}`}
-          {k.rcComplementariaPersonas !== null && ` · RC complementaria $${formatNumero(k.rcComplementariaPersonas)}`}
-          {(k.extras ?? []).map((x) => ` · ${EXTRAS[x] ?? x}`)}
-        </p>
+        <PedidoAuto k={s.datos.coberturas} formaPago={s.datos.formaPago} />
       )}
-      {s.datos.vehiculo.tipo && (
+      {s.ramo === "AUTOS" && s.datos.vehiculo.tipo && (
         <p className="text-xs text-muted-foreground">
           {ETIQUETA_TIPO_VEHICULO[s.datos.vehiculo.tipo]} · {ETIQUETA_PROCEDENCIA[s.datos.vehiculo.procedencia]} ·{" "}
           {ETIQUETA_VALOR[s.datos.vehiculo.valor]} · {s.datos.tipoPersona === "MORAL" ? "Persona moral" : "Persona física"} · vigencia
@@ -163,7 +199,6 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
   /** Renglón de una solicitud. En un comparativo el título es la aseguradora (el auto va arriba). */
   const fila = (s: SolicitudVista, enGrupo: boolean, mejor: boolean) => {
     const est = ESTADO[s.estado];
-    const v = s.datos.vehiculo;
     const abiertaEsta = abierta === s.id;
     return (
       <div key={s.id} className={cn(!enGrupo && "rounded-lg border", enGrupo && "border-t first:border-t-0")}>
@@ -177,7 +212,7 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
             <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", abiertaEsta && "rotate-180")} />
             <div className="min-w-0">
               <p className="flex items-center gap-2 truncate font-medium">
-                {enGrupo ? nombreAseguradora(s.aseguradora) : `${v.marca} ${v.modelo} ${v.version} ${v.anio}`}
+                {enGrupo ? nombreAseguradora(s.aseguradora) : titulo(s)}
                 {mejor && (
                   <Badge variant="outline" className="gap-1 border-success/30 bg-success/10 text-success">
                     <Trophy className="size-3" /> Más barata
@@ -186,7 +221,7 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
               </p>
               {!enGrupo && (
                 <p className="truncate text-xs text-muted-foreground">
-                  {nombreAseguradora(s.aseguradora)} · {s.datos.conductor.nombre ?? `C.P. ${s.datos.conductor.codigoPostal}`} ·{" "}
+                  {nombreAseguradora(s.aseguradora)} · {quien(s)} ·{" "}
                   {hora.format(new Date(s.createdAt))}
                 </p>
               )}
@@ -254,25 +289,22 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
         {solicitudes.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted-foreground">
             <Bot className="size-7 text-primary" />
-            Todavía no hay cotizaciones. Llena el formulario y el robot de la oficina la hará en el portal.
+            Todavía no hay cotizaciones de este ramo. Llena el formulario y el robot de la oficina la hará en el portal.
           </div>
         ) : (
           grupos.map((g) => {
             if (g.solicitudes.length === 1) return fila(g.solicitudes[0], false, false);
             const primera = g.solicitudes[0];
-            const v = primera.datos.vehiculo;
             const listas = g.solicitudes.filter((s) => s.resultado).length;
             return (
               <div key={g.clave} className="rounded-lg border">
                 <div className="flex items-start gap-3 bg-muted/40 px-4 py-3">
                   <Layers className="mt-0.5 size-4 shrink-0 text-primary" />
                   <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {v.marca} {v.modelo} {v.version} {v.anio}
-                    </p>
+                    <p className="truncate font-medium">{titulo(primera)}</p>
                     <p className="truncate text-xs text-muted-foreground">
                       Comparativo · {listas} de {g.solicitudes.length} listas ·{" "}
-                      {primera.datos.conductor.nombre ?? `C.P. ${primera.datos.conductor.codigoPostal}`} ·{" "}
+                      {quien(primera)} ·{" "}
                       {hora.format(new Date(primera.createdAt))}
                     </p>
                   </div>

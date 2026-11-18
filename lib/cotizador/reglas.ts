@@ -7,6 +7,7 @@
 // /api/cotizador/robot, cotiza en el portal y devuelve el resultado. El CRM nunca entra a los
 // portales ni guarda sus contraseñas.
 
+import { nombreAseguradora } from "@/lib/cotizador/aseguradoras";
 import { hoyISO } from "@/lib/format";
 
 /**
@@ -277,16 +278,19 @@ export const MAX_ASEGURADORAS_POR_ENVIO = 10;
  * Aseguradoras elegidas en el multicotizador: sin repetir, entre 1 y MAX_ASEGURADORAS_POR_ENVIO, y
  * solo las que ya se pueden cotizar (hoy, las que maneja el robot).
  */
-export function validarAseguradoras(entrada: unknown): Validacion<AseguradoraCotizador[]> {
+export function validarAseguradoras<K extends string = AseguradoraCotizador>(
+  entrada: unknown,
+  validas: Readonly<Record<K, unknown>> = ASEGURADORAS_COTIZADOR as unknown as Readonly<Record<K, unknown>>
+): Validacion<K[]> {
   if (!Array.isArray(entrada) || entrada.length === 0) return { ok: false, error: "Elige al menos una aseguradora." };
   const claves = [...new Set(entrada)];
   if (claves.length > MAX_ASEGURADORAS_POR_ENVIO) {
     return { ok: false, error: `Elige a lo más ${MAX_ASEGURADORAS_POR_ENVIO} aseguradoras por envío.` };
   }
-  if (claves.some((k) => typeof k !== "string" || !Object.hasOwn(ASEGURADORAS_COTIZADOR, k))) {
+  if (claves.some((k) => typeof k !== "string" || !Object.hasOwn(validas, k))) {
     return { ok: false, error: "Alguna aseguradora todavía no se puede cotizar." };
   }
-  return { ok: true, valor: claves as AseguradoraCotizador[] };
+  return { ok: true, valor: claves as K[] };
 }
 
 /** Valida lo que manda el formulario y lo deja en la forma que lee el robot. */
@@ -472,15 +476,18 @@ export function validarResultado(entrada: unknown): Validacion<ResultadoCotizaci
 
 /**
  * Aseguradoras cuyo portal tiene sesión abierta en la oficina, según el parámetro `?aseguradoras=`
- * con que el robot pide trabajo (p. ej. "QUALITAS,GNP"). Sin parámetro: todas (null). Las claves
- * desconocidas se ignoran; si no queda ninguna, la lista vacía hace que no reciba nada.
+ * con que el robot pide trabajo (p. ej. "QUALITAS,GNP,METLIFE"). Sin parámetro: todas (null). Las
+ * claves que no están en `validas` se ignoran; si no queda ninguna, la lista vacía hace que no reciba nada.
  */
-export function aseguradorasDelRobot(parametro: string | null): AseguradoraCotizador[] | null {
+export function aseguradorasDelRobot(
+  parametro: string | null,
+  validas: readonly string[] = Object.keys(ASEGURADORAS_COTIZADOR)
+): string[] | null {
   if (parametro === null) return null;
   const claves = parametro
     .split(",")
     .map((s) => s.trim().toUpperCase())
-    .filter((s): s is AseguradoraCotizador => Object.hasOwn(ASEGURADORAS_COTIZADOR, s));
+    .filter((s) => validas.includes(s));
   return [...new Set(claves)];
 }
 
@@ -515,10 +522,7 @@ export function nombrePdfCotizacion(
   numeroCotizacion: string | null | undefined,
   vehiculo: { marca?: string; modelo?: string; anio?: number } | undefined
 ): string {
-  const nombreAseg =
-    Object.hasOwn(ASEGURADORAS_COTIZADOR, aseguradora)
-      ? ASEGURADORAS_COTIZADOR[aseguradora as AseguradoraCotizador].nombre
-      : aseguradora;
+  const nombreAseg = nombreAseguradora(aseguradora);
   const partes = ["Cotizacion", nombreAseg, numeroCotizacion, vehiculo?.marca, vehiculo?.modelo, vehiculo?.anio]
     .filter((p) => p !== null && p !== undefined && String(p).trim() !== "")
     .map((p) => String(p).trim());
