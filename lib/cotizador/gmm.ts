@@ -10,11 +10,25 @@
 import { FORMAS_PAGO, type FormaPago, type Validacion } from "@/lib/cotizador/reglas";
 import { hoyISO } from "@/lib/format";
 
-/** Aseguradoras cuyo cotizador de GMM ya maneja el robot. */
+/**
+ * Aseguradoras cuyo cotizador de GMM ya maneja el robot (probadas el 2026-11-18). `pideNombres`: el
+ * portal no cotiza sin el nombre de cada asegurado.
+ */
 export const ASEGURADORAS_GMM = {
   METLIFE: {
     nombre: "MetLife",
     portal: "https://servicios.metlife.com.mx/wps/myportal/",
+    pideNombres: false,
+  },
+  GNP: {
+    nombre: "GNP",
+    portal: "https://portalintermediarios.gnp.com.mx/home/dashboard",
+    pideNombres: false,
+  },
+  PLAN_SEGURO: {
+    nombre: "Plan Seguro",
+    portal: "https://cotizador.planseguro.com.mx/cotizador/holder",
+    pideNombres: true,
   },
 } as const;
 export type AseguradoraGMM = keyof typeof ASEGURADORAS_GMM;
@@ -148,7 +162,10 @@ export function validarDatosGMM(entrada: unknown, hoy = hoyISO()): Validacion<Da
     if (!esFechaISO(fechaNacimiento)) return { ok: false, error: `Falta la fecha de nacimiento del ${quien}.` };
     if (fechaNacimiento > hoy) return { ok: false, error: "Una fecha de nacimiento no puede ser futura." };
     if (x.sexo !== "H" && x.sexo !== "M") return { ok: false, error: `Falta el sexo del ${quien}.` };
-    asegurados.push({ parentesco, nombre: texto(x.nombre, 120).toUpperCase() || null, fechaNacimiento, sexo: x.sexo });
+    const nombre = texto(x.nombre, 120).toUpperCase() || null;
+    const aseg = ASEGURADORAS_GMM[e.aseguradora as AseguradoraGMM];
+    if (aseg.pideNombres && !nombre) return { ok: false, error: `${aseg.nombre} necesita el nombre del ${quien}.` };
+    asegurados.push({ parentesco, nombre, fechaNacimiento, sexo: x.sexo });
   }
   if (asegurados.filter((a) => a.parentesco === "CONYUGE").length > 1) return { ok: false, error: "Solo puede haber un cónyuge." };
 

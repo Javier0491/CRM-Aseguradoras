@@ -86,15 +86,28 @@ describe("solicitud de cotización de GMM", () => {
 });
 
 describe("multicotizador de GMM", () => {
-  it("MetLife cotiza GMM por robot y aparece primero en el ramo", () => {
+  it("Plan Seguro exige el nombre de cada asegurado; MetLife y GNP no", () => {
+    const sinNombres = familia();
+    assert.equal(validarDatosGMM({ ...sinNombres, aseguradora: "PLAN_SEGURO" }, HOY).ok, false);
+    assert.match((validarDatosGMM({ ...sinNombres, aseguradora: "PLAN_SEGURO" }, HOY) as { error: string }).error, /Plan Seguro necesita el nombre del cónyuge/);
+    assert.ok(validarDatosGMM({ ...sinNombres, aseguradora: "GNP" }, HOY).ok);
+    const conNombres = familia();
+    conNombres.asegurados.forEach((a, i) => (a.nombre = `PERSONA ${i}`));
+    assert.ok(validarDatosGMM({ ...conNombres, aseguradora: "PLAN_SEGURO" }, HOY).ok);
+  });
+
+  it("MetLife, GNP y Plan Seguro cotizan GMM por robot", () => {
+    assert.equal(canalDe("GNP", "GMM"), "ROBOT");
+    assert.equal(canalDe("GNP", "AUTOS"), "ROBOT");
+    assert.equal(canalDe("PLAN_SEGURO", "GMM"), "ROBOT");
+    assert.deepEqual(aseguradorasDelRamo("GMM").filter((a) => a.canal === "ROBOT").map((a) => a.clave).sort(), ["GNP", "METLIFE", "PLAN_SEGURO"]);
     assert.equal(canalDe("METLIFE", "GMM"), "ROBOT");
     assert.equal(canalDe("METLIFE", "VIDA"), null);
     assert.equal(canalDe("METLIFE", "GMM", { "METLIFE:GMM": "APAGADO" }), null);
-    assert.equal(aseguradorasDelRamo("GMM")[0].clave, "METLIFE");
   });
 
   it("valida aseguradoras de GMM con su propia lista", () => {
-    assert.ok(validarAseguradoras(["METLIFE"], ASEGURADORAS_GMM).ok);
+    assert.ok(validarAseguradoras(["METLIFE", "GNP", "PLAN_SEGURO"], ASEGURADORAS_GMM).ok);
     assert.equal(validarAseguradoras(["QUALITAS"], ASEGURADORAS_GMM).ok, false);
     assert.equal(validarAseguradoras(["METLIFE"]).ok, false);
   });

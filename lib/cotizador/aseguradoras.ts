@@ -54,7 +54,7 @@ export const CATALOGO_ASEGURADORAS = {
   GNP: {
     nombre: "GNP",
     ramos: ["AUTOS", "GMM", "VIDA", "DANOS"],
-    robot: ["AUTOS"],
+    robot: ["AUTOS", "GMM"],
     portal: "https://portalintermediarios.gnp.com.mx/home/dashboard",
   },
   AXA: { nombre: "AXA", ramos: ["AUTOS", "GMM", "VIDA", "DANOS"] },
@@ -78,7 +78,7 @@ export const CATALOGO_ASEGURADORAS = {
   EL_POTOSI: { nombre: "El Potosí", ramos: ["AUTOS", "VIDA"], robot: ["AUTOS"], portal: "https://portal.elpotosi.com.mx/Inicio/" },
   GMX: { nombre: "GMX", ramos: ["AUTOS", "DANOS"] },
   BX_MAS: { nombre: "BX+", ramos: ["AUTOS", "VIDA", "GMM", "DANOS"] },
-  PLAN_SEGURO: { nombre: "Plan Seguro", ramos: ["GMM"] },
+  PLAN_SEGURO: { nombre: "Plan Seguro", ramos: ["GMM"], robot: ["GMM"], portal: "https://cotizador.planseguro.com.mx/cotizador/holder" },
   BUPA: { nombre: "Bupa", ramos: ["GMM"] },
   INSIGNIA_LIFE: { nombre: "Insignia Life", ramos: ["VIDA", "ACCIDENTES"] },
   THONA: { nombre: "Thona Seguros", ramos: ["ACCIDENTES", "VIDA", "GMM"] },

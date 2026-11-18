@@ -14,6 +14,7 @@ import { crearSolicitudCotizacion } from "@/lib/cotizador/actions";
 import type { AseguradoraDelRamo } from "@/lib/cotizador/aseguradoras";
 import {
   ADICIONALES_GMM,
+  ASEGURADORAS_GMM,
   COASEGUROS,
   ESTADOS_MX,
   ETIQUETA_NIVEL,
@@ -64,6 +65,12 @@ export function FormularioGMM({ hoy, aseguradoras: opciones }: { hoy: string; as
   const [enviando, startEnvio] = React.useTransition();
 
   const hayConyuge = asegurados.some((a) => a.parentesco === "CONYUGE");
+  // Aseguradoras marcadas que no cotizan sin el nombre de cada persona (Plan Seguro).
+  const pidenNombre = aseguradoras
+    .filter((k): k is keyof typeof ASEGURADORAS_GMM => Object.hasOwn(ASEGURADORAS_GMM, k))
+    .filter((k) => ASEGURADORAS_GMM[k].pideNombres)
+    .map((k) => ASEGURADORAS_GMM[k].nombre);
+  const etiquetaNombre = pidenNombre.length > 0 ? `nombre (lo pide ${pidenNombre.join(" y ")})` : "nombre (opcional)";
   const cambiar = (i: number, campo: keyof AseguradoForm, valor: string) =>
     setAsegurados((x) => x.map((a, j) => (j === i ? { ...a, [campo]: valor } : a)));
   const agregar = (parentesco: Parentesco) =>
@@ -119,7 +126,7 @@ export function FormularioGMM({ hoy, aseguradoras: opciones }: { hoy: string; as
               const edad = a.fechaNacimiento ? edadEn(a.fechaNacimiento, hoy) : null;
               return (
                 <div key={i} className="grid items-end gap-3 rounded-lg border p-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1.3fr)_minmax(0,1fr)_auto]">
-                  <Campo id={`gmm-nombre-${i}`} etiqueta={`${ETIQUETA_PARENTESCO[a.parentesco]} · nombre (opcional)`}>
+                  <Campo id={`gmm-nombre-${i}`} etiqueta={`${ETIQUETA_PARENTESCO[a.parentesco]} · ${etiquetaNombre}`}>
                     <Input id={`gmm-nombre-${i}`} value={a.nombre} onChange={(e) => cambiar(i, "nombre", e.target.value)} />
                   </Campo>
                   <Campo id={`gmm-fn-${i}`} etiqueta={edad !== null && edad >= 0 ? `Nacimiento (${edad} años)` : "Fecha de nacimiento"}>

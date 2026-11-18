@@ -18,13 +18,13 @@ hasta presionar «Cotizar», y eso se documentará cuando el robot haga la prime
 | Qualitas | Autos | ✅ completo, robot funcionando | buena (menús) |
 | MetLife | GMM (MédicaLife Familiar) | ✅ cotizado (robot) | buena (formulario normal) |
 | GNP | Autos | ✅ cotizado (robot) | medio: abrir el marco como página propia y usar clics reales |
-| GNP | GMM (Planes Individuales) | ✅ datos del titular | difícil (mismo marco) |
+| GNP | GMM (Planes Individuales) | ✅ cotizado (robot) | medio: abrir el marco como página propia |
 | GNP | Vida | ⚠️ Plan de Rentas en línea; Vida individual solo con el programa Nautilus | — |
 | HDI | Autos | ✅ datos de entrada | media (buscador de texto del auto) |
 | Zurich | Autos | ✅ vehículo y pre-cotización | buena (menús), pero lanza avisos emergentes |
 | Mapfre | Autos | ✅ paso 1 de 4 | buena (menús y buscador) |
 | El Potosí | Autos | ✅ datos de entrada | buena (una sola página) |
-| Plan Seguro | GMM | ✅ asegurados | buena |
+| Plan Seguro | GMM | ✅ cotizado (robot) | buena |
 | Bupa | GMM | ✅ datos de entrada (cotizador público, sin sesión) | media (marco embebido) |
 | Assist Card | Viaje | ✅ datos de entrada | buena |
 | MetLife | Vida | ❌ no hay cotizador en línea: se descargan cotizadores | — |
@@ -187,3 +187,15 @@ Catálogos (deducibles, sumas, planes): …
 Qué regresa: prima total, desglose, folio, ¿PDF?
 Trampas: (avisos emergentes, marcos, tiempos de carga, sesión que expira…)
 ```
+
+### GMM en el robot (2026-11-18)
+Familia de prueba (H 49, M 46, M 16, H 12; Zapopan / Jalisco), precio anual:
+- **MetLife** MédicaLife Familiar Más, 1,000 unidades ($3,080,400), deducible $10,000, coaseguro 10 %: **$59,786.79**.
+- **Plan Seguro** Intermedio, 1000 UMAM ($3,566,220), deducible 7 UMAM ($24,963.54), coaseguro 10 %: **$72,553.63**
+  (de fábrica: Óptimo Plus $169,840.73 · Óptimo $147,245.31 · Avanzado $108,874.29 · Intermedio $73,053.54 · Esencial para
+  Gente Joven $45,309.72). Exige nombre de cada persona; no da desglose por persona.
+- **GNP** Personaliza Fija Nacional con valores de fábrica (suma $174.9 millones, deducible $21,000, tabulador B, acceso
+  Esencial, con emergencia en el extranjero y cero deducible incluidos): **$148,636.20**.
+Cada aseguradora maneja la suma distinto (MetLife en unidades de $3,080.40, Plan Seguro en UMAM de $3,566.22, GNP en pesos):
+el CRM la pide en pesos y el robot elige la opción más cercana y avisa.
+
