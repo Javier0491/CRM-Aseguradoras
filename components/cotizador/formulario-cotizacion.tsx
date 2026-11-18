@@ -79,7 +79,7 @@ const vacio = {
     procedencia: "RESIDENTE" as Procedencia,
     valor: "COMERCIAL" as ValorVehiculo,
   },
-  conductor: { nombre: "", fechaNacimiento: "", sexo: "" as "H" | "M" | "", codigoPostal: "" },
+  conductor: { nombre: "", fechaNacimiento: "", sexo: "" as "H" | "M" | "", codigoPostal: "", municipio: "" },
 };
 
 function Campo({ id, etiqueta, children, ayuda }: { id: string; etiqueta: string; children: React.ReactNode; ayuda?: string }) {
@@ -143,12 +143,15 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
   const archivosRef = React.useRef<HTMLInputElement>(null);
 
   const edad = conductor.fechaNacimiento ? edadEn(conductor.fechaNacimiento, hoy) : null;
-  // Aseguradoras marcadas que no cotizan sin la fecha de nacimiento y el sexo del conductor.
-  const pidenConductor = aseguradoras
-    .filter((k): k is keyof typeof ASEGURADORAS_COTIZADOR => Object.hasOwn(ASEGURADORAS_COTIZADOR, k))
-    .filter((k) => ASEGURADORAS_COTIZADOR[k].pideConductor)
-    .map((k) => ASEGURADORAS_COTIZADOR[k].nombre);
-  const ayudaConductor = pidenConductor.length > 0 ? `Obligatorio para ${pidenConductor.join(" y ")}.` : "Opcional.";
+  // Qué datos opcionales vuelven obligatorios las aseguradoras marcadas (cada portal pide distinto).
+  const marcadasRobot = aseguradoras.filter((k): k is keyof typeof ASEGURADORAS_COTIZADOR =>
+    Object.hasOwn(ASEGURADORAS_COTIZADOR, k)
+  );
+  const ayudaSi = (pide: "pideConductor" | "pideNombre" | "pideMunicipio") => {
+    const quienes = marcadasRobot.filter((k) => ASEGURADORAS_COTIZADOR[k][pide]).map((k) => ASEGURADORAS_COTIZADOR[k].nombre);
+    return quienes.length > 0 ? `Obligatorio para ${quienes.join(", ").replace(/, ([^,]*)$/, " y $1")}.` : "Opcional.";
+  };
+  const ayudaConductor = ayudaSi("pideConductor");
 
   async function leerDocumentos(archivos: FileList | null) {
     if (!archivos || archivos.length === 0) return;
@@ -175,6 +178,7 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
         placas: v.placas ?? x.placas,
       }));
       setConductor((x) => ({
+        ...x,
         nombre: c.nombre ?? x.nombre,
         fechaNacimiento: c.fechaNacimiento ?? x.fechaNacimiento,
         sexo: c.sexo ?? x.sexo,
@@ -361,10 +365,13 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
                 />
               </Campo>
               <div className="sm:col-span-2 lg:col-span-1">
-                <Campo id="cot-nombre" etiqueta="Nombre (opcional)">
+                <Campo id="cot-nombre" etiqueta="Nombre del conductor" ayuda={ayudaSi("pideNombre")}>
                   <Input id="cot-nombre" value={conductor.nombre} onChange={c("nombre")} className="uppercase" />
                 </Campo>
               </div>
+              <Campo id="cot-municipio" etiqueta="Municipio" ayuda={ayudaSi("pideMunicipio")}>
+                <Input id="cot-municipio" value={conductor.municipio} onChange={c("municipio")} className="uppercase" placeholder="CUERNAVACA" />
+              </Campo>
               <Campo
                 id="cot-nacimiento"
                 etiqueta="Fecha de nacimiento"

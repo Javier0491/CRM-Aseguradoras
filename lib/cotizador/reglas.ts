@@ -10,15 +10,40 @@
 import { hoyISO } from "@/lib/format";
 
 /**
- * Aseguradoras que el robot ya sabe cotizar. `pideConductor`: el portal no cotiza sin la fecha de
- * nacimiento (edad) y el sexo del conductor (lo vimos en el escaneo del 2026-11-18).
+ * Aseguradoras que el robot ya sabe cotizar y qué exige su portal además del código postal (lo vimos
+ * en las cotizaciones de prueba del 2026-11-18):
+ * - `pideConductor`: fecha de nacimiento (edad) y sexo del conductor.
+ * - `pideNombre`: nombre del conductor.
+ * - `pideMunicipio`: municipio de circulación (no lo deduce del código postal).
  */
 export const ASEGURADORAS_COTIZADOR = {
-  QUALITAS: { nombre: "Qualitas", portal: "https://agentes360.qualitas.com.mx/group/guest/inicio", pideConductor: false },
+  QUALITAS: {
+    nombre: "Qualitas",
+    portal: "https://agentes360.qualitas.com.mx/group/guest/inicio",
+    pideConductor: false,
+    pideNombre: false,
+    pideMunicipio: false,
+  },
   ZURICH: {
     nombre: "Zurich",
     portal: "https://www.zurich.com.mx/PortalAgentes/produccion/autos/nuevaCotizacion",
     pideConductor: true,
+    pideNombre: false,
+    pideMunicipio: false,
+  },
+  MAPFRE: {
+    nombre: "Mapfre",
+    portal: "https://zonaliados.mapfre.com.mx/zonaliados/Index.aspx",
+    pideConductor: true,
+    pideNombre: true,
+    pideMunicipio: false,
+  },
+  EL_POTOSI: {
+    nombre: "El Potosí",
+    portal: "https://autos.elpotosi.com.mx/SeguroDeAutomovil/oficinavirtual/CotizadorAutos/Cotizacion",
+    pideConductor: true,
+    pideNombre: false,
+    pideMunicipio: true,
   },
 } as const;
 export type AseguradoraCotizador = keyof typeof ASEGURADORAS_COTIZADOR;
@@ -123,6 +148,8 @@ export type DatosCotizacionAuto = {
     fechaNacimiento: string | null;
     sexo: "H" | "M" | null;
     codigoPostal: string;
+    /** Municipio de circulación (lo exige El Potosí). Anteriores al 2026-11-19 no lo traen. */
+    municipio?: string | null;
   };
   coberturas: {
     paquete: Paquete;
@@ -278,6 +305,9 @@ export function validarDatosCotizacion(entrada: unknown, hoy = hoyISO()): Valida
   if (aseg.pideConductor && (!fechaNacimiento || !sexo)) {
     return { ok: false, error: `${aseg.nombre} necesita la fecha de nacimiento y el sexo del conductor.` };
   }
+  if (aseg.pideNombre && !nombre) return { ok: false, error: `${aseg.nombre} necesita el nombre del conductor.` };
+  const municipio = textoOpcional(c.municipio, 80)?.toUpperCase() ?? null;
+  if (aseg.pideMunicipio && !municipio) return { ok: false, error: `${aseg.nombre} necesita el municipio de circulación.` };
   if (fechaNacimiento && fechaNacimiento > hoy) return { ok: false, error: "La fecha de nacimiento no puede ser futura." };
 
   const opcion = <T extends string>(valor: unknown, opciones: readonly T[], porDefecto: T): T | undefined =>
@@ -338,7 +368,7 @@ export function validarDatosCotizacion(entrada: unknown, hoy = hoyISO()): Valida
       },
       tipoPersona,
       vigenciaInicio,
-      conductor: { nombre, fechaNacimiento, sexo, codigoPostal },
+      conductor: { nombre, fechaNacimiento, sexo, codigoPostal, municipio },
       coberturas: {
         paquete: k.paquete as Paquete,
         deducibleDM,

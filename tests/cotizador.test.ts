@@ -138,6 +138,24 @@ describe("datos que piden las aseguradoras (escaneo 2026-11-18)", () => {
     assert.equal(validarDatosCotizacion({ ...mazda(), vigenciaInicio: "2026-11-01" }, hoy).ok, false);
   });
 
+  it("Mapfre exige el nombre del conductor y El Potosí el municipio", () => {
+    const sinNombre = mazda();
+    sinNombre.conductor = { ...sinNombre.conductor, nombre: "" };
+    const m = validarDatosCotizacion({ ...sinNombre, aseguradora: "MAPFRE" }, hoy);
+    assert.equal(m.ok, false);
+    assert.match(m.ok ? "" : m.error, /Mapfre necesita el nombre/);
+    assert.ok(validarDatosCotizacion({ ...mazda(), aseguradora: "MAPFRE" }, hoy).ok);
+    const p = validarDatosCotizacion({ ...mazda(), aseguradora: "EL_POTOSI" }, hoy);
+    assert.match(p.ok ? "" : p.error, /municipio/);
+    const conMunicipio = mazda();
+    const r = validarDatosCotizacion(
+      { ...conMunicipio, aseguradora: "EL_POTOSI", conductor: { ...conMunicipio.conductor, municipio: " cuernavaca " } },
+      hoy
+    );
+    assert.ok(r.ok);
+    assert.equal(r.valor.conductor.municipio, "CUERNAVACA");
+  });
+
   it("Zurich no cotiza sin fecha de nacimiento y sexo; Qualitas sí", () => {
     const sinIne = mazda();
     sinIne.conductor = { nombre: "", fechaNacimiento: "", sexo: "", codigoPostal: "62260" };
@@ -266,8 +284,7 @@ describe("multicotizador", () => {
 
   it("lista las aseguradoras de un ramo con las disponibles primero", () => {
     const autos = aseguradorasDelRamo("AUTOS");
-    assert.deepEqual(autos.slice(0, 2).map((a) => a.clave), ["QUALITAS", "ZURICH"]);
-    assert.equal(autos[1].canal, "ROBOT");
+    assert.deepEqual(autos.filter((a) => a.canal === "ROBOT").map((a) => a.clave), ["EL_POTOSI", "MAPFRE", "QUALITAS", "ZURICH"]);
     assert.ok(autos.some((a) => a.clave === "GNP" && a.canal === null));
     assert.ok(!autos.some((a) => a.clave === "METLIFE"));
     assert.ok(aseguradorasDelRamo("GMM").some((a) => a.clave === "METLIFE"));
