@@ -284,7 +284,7 @@ describe("multicotizador", () => {
 
   it("lista las aseguradoras de un ramo con las disponibles primero", () => {
     const autos = aseguradorasDelRamo("AUTOS");
-    assert.deepEqual(autos.filter((a) => a.canal === "ROBOT").map((a) => a.clave), ["EL_POTOSI", "MAPFRE", "QUALITAS", "ZURICH"]);
+    assert.deepEqual(autos.filter((a) => a.canal === "ROBOT").map((a) => a.clave), ["EL_POTOSI", "HDI", "MAPFRE", "QUALITAS", "ZURICH"]);
     assert.ok(autos.some((a) => a.clave === "GNP" && a.canal === null));
     assert.ok(!autos.some((a) => a.clave === "METLIFE"));
     assert.ok(aseguradorasDelRamo("GMM").some((a) => a.clave === "METLIFE"));

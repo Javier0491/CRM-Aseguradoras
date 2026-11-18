@@ -38,6 +38,13 @@ export const ASEGURADORAS_COTIZADOR = {
     pideNombre: true,
     pideMunicipio: false,
   },
+  HDI: {
+    nombre: "HDI",
+    portal: "https://smartoffice.hdi.com.mx/dashboard",
+    pideConductor: false,
+    pideNombre: false,
+    pideMunicipio: false,
+  },
   EL_POTOSI: {
     nombre: "El Potosí",
     portal: "https://autos.elpotosi.com.mx/SeguroDeAutomovil/oficinavirtual/CotizadorAutos/Cotizacion",

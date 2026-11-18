@@ -54,7 +54,7 @@ export const CATALOGO_ASEGURADORAS = {
     robot: ["AUTOS"],
     portal: "https://zonaliados.mapfre.com.mx/zonaliados/Index.aspx",
   },
-  HDI: { nombre: "HDI", ramos: ["AUTOS", "GMM", "DANOS"] },
+  HDI: { nombre: "HDI", ramos: ["AUTOS", "GMM", "DANOS"], robot: ["AUTOS"], portal: "https://smartoffice.hdi.com.mx/dashboard" },
   ANA: { nombre: "ANA Seguros", ramos: ["AUTOS"] },
   ZURICH: { nombre: "Zurich", ramos: ["AUTOS", "GMM", "DANOS"], robot: ["AUTOS"], portal: "https://miportal.zurich.com.mx/agente/inicio" },
   SURA: { nombre: "Sura", ramos: ["AUTOS", "DANOS"] },
