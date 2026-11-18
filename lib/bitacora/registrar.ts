@@ -41,6 +41,7 @@ export const ACCIONES_BITACORA = {
   "agencia.reactivar": "Reactivó la agencia",
   "aseguradora.reglas": "Cambió reglas de cobranza",
   "avisos.configurar": "Configuró avisos automáticos",
+  "cotizador.llave": "Generó o revocó la llave del robot cotizador",
 } as const;
 export type AccionBitacora = keyof typeof ACCIONES_BITACORA;
 

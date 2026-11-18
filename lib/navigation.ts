@@ -1,6 +1,7 @@
 import {
   BarChart3,
   BellRing,
+  Calculator,
   Building2,
   FileText,
   LayoutDashboard,
@@ -39,6 +40,7 @@ export const mainNav: NavItem[] = [
   { title: "Renovaciones", href: "/renovaciones", icon: RefreshCcw },
   { title: "Tareas", href: "/tareas", icon: ListTodo, paraTareas: true },
   { title: "Captura Inteligente", href: "/captura", icon: ScanText },
+  { title: "Cotizador de Autos", href: "/cotizador", icon: Calculator },
   { title: "Asistente IA", href: "/asistente", icon: Sparkles },
   { title: "Conciliación de Cobranza", href: "/conciliacion", icon: Scale, permiso: "conciliar" },
   { title: "Comunicaciones", href: "/comunicaciones", icon: Mail },

@@ -74,45 +74,45 @@ enum Rol {
 // El agenciaId de cada tabla no tiene default: el código lo toma de la sesión
 // (UsuarioSesion.agenciaId) en cada consulta y escritura.
 model Agencia {
-  id        String   @id @default(uuid()) @db.Uuid
-  nombre    String
+  id                    String           @id @default(uuid()) @db.Uuid
+  nombre                String
   // Ícono o monograma cuadrado de la barra lateral.
-  logoUrl   String?  @map("logo_url")
+  logoUrl               String?          @map("logo_url")
   // Logotipo completo para documentos y correos; sin él, los correos usan el ícono.
-  logoDocumentosUrl String? @map("logo_documentos_url")
-  colorHex  String?  @map("color_hex")
+  logoDocumentosUrl     String?          @map("logo_documentos_url")
+  colorHex              String?          @map("color_hex")
   // Fondo de la interfaz: "dark" o "light" (lo valida un CHECK en la base de datos).
-  tema      String   @default("dark")
+  tema                  String           @default("dark")
   // Buzón de la agencia (p. ej. servicios@…) que recibe copia de cada aviso automático y las
   // respuestas de los clientes (Configuración → Avisos automáticos).
-  correoCopiaAvisos String? @map("correo_copia_avisos")
+  correoCopiaAvisos     String?          @map("correo_copia_avisos")
   // Correo de atención a clientes (p. ej. servicio@…): va en los correos masivos y en el de
   // agradecimiento por renovar, y es a donde responden (Configuración → Mi agencia).
-  correoServicio    String? @map("correo_servicio")
+  correoServicio        String?          @map("correo_servicio")
   // Suspensión por falta de pago (la decide el SUPERADMIN): sus usuarios no pueden entrar y no
   // salen sus avisos automáticos. No borra nada; al reactivarla todo sigue como estaba.
-  suspendida        Boolean   @default(false)
-  suspendidaAt      DateTime? @map("suspendida_at")
-  motivoSuspension  String?   @map("motivo_suspension")
+  suspendida            Boolean          @default(false)
+  suspendidaAt          DateTime?        @map("suspendida_at")
+  motivoSuspension      String?          @map("motivo_suspension")
   // Liga de acceso con la marca de la agencia: /login?agencia=<slug>.
-  slug              String    @unique
+  slug                  String           @unique
   // true: cada EJECUTIVO solo ve los clientes y pólizas que tiene asignados.
-  carteraPorEjecutivo Boolean @default(false) @map("cartera_por_ejecutivo")
+  carteraPorEjecutivo   Boolean          @default(false) @map("cartera_por_ejecutivo")
   // Cobranza de la plataforma (la configura el SUPERADMIN). Cuota mensual y fecha hasta la que
   // está pagado el servicio; sin ambas no se cobra ni se suspende nada.
-  cuotaMensual          Decimal?  @db.Decimal(12, 2) @map("cuota_mensual")
-  pagadoHasta           DateTime? @db.Date @map("pagado_hasta")
+  cuotaMensual          Decimal?         @map("cuota_mensual") @db.Decimal(12, 2)
+  pagadoHasta           DateTime?        @map("pagado_hasta") @db.Date
   // Días después de pagadoHasta en que aún se puede pagar sin suspensión.
-  diasToleranciaPago    Int       @default(5) @map("dias_tolerancia_pago")
+  diasToleranciaPago    Int              @default(5) @map("dias_tolerancia_pago")
   // Pasada la tolerancia, la tarea diaria suspende la agencia.
-  suspensionAutomatica  Boolean   @default(false) @map("suspension_automatica")
+  suspensionAutomatica  Boolean          @default(false) @map("suspension_automatica")
   // pagadoHasta del último aviso de cobro enviado: evita repetirlo en el mismo periodo.
-  avisoCobroEnviadoPara DateTime? @db.Date @map("aviso_cobro_enviado_para")
+  avisoCobroEnviadoPara DateTime?        @map("aviso_cobro_enviado_para") @db.Date
   // A quién se mandan los avisos de cobro; sin él, a los administradores de la agencia.
-  correoFacturacion     String?   @map("correo_facturacion")
+  correoFacturacion     String?          @map("correo_facturacion")
   // Último día de la prueba gratis (la da el SUPERADMIN). Mientras no haya pagos (pagadoHasta),
   // al pasar esa fecha la tarea diaria suspende la agencia. null = sin prueba.
-  pruebaHasta           DateTime? @db.Date @map("prueba_hasta")
+  pruebaHasta           DateTime?        @map("prueba_hasta") @db.Date
   // Plan de suscripción (lo asigna el SUPERADMIN): fija sus límites de usuarios activos y de
   // escaneos con IA al mes (lib/planes). El estado de la suscripción es el de la cobranza de
   // arriba: pagadoHasta, la tolerancia y `suspendida`.
@@ -120,34 +120,40 @@ model Agencia {
   // Básico o Pro: cada una con sus límites (lib/planes).
   edicion               EdicionPlan      @default(PRO) @map("edicion_plan")
   cicloFacturacion      CicloFacturacion @default(MENSUAL) @map("ciclo_facturacion")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  // Robot cotizador (lib/cotizador): SHA-256 de la llave con la que la computadora de la oficina
+  // pide las cotizaciones pendientes. La llave solo se muestra una vez al generarla.
+  cotizadorTokenHash    String?          @unique @map("cotizador_token_hash")
+  // Última vez que el robot pidió trabajo: dice en pantalla si está encendido.
+  cotizadorVistoAt      DateTime?        @map("cotizador_visto_at")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
 
-  usuarios           Usuario[]          @relation("UsuariosAgencia")
+  usuarios              Usuario[]             @relation("UsuariosAgencia")
   // Superadmins que están operando esta agencia en este momento.
-  superadminsActivos Usuario[]          @relation("AgenciaActiva")
-  clientes           Cliente[]
-  aseguradoras       Aseguradora[]
-  polizas            Poliza[]
-  recibos            Recibo[]
-  asegurados         Asegurado[]
-  esquemasComision   EsquemaComision[]
-  bitacora           Bitacora[]
-  lotesConciliacion  LoteConciliacion[]
-  lotesCambios       LoteCambio[]
-  lotesRenglones     LoteRenglon[]
-  notasAclaracion    NotaAclaracion[]
-  avisosEnviados     AvisoEnviado[]
-  endosos            Endoso[]
-  notasCliente       NotaCliente[]
-  tareas             Tarea[]
-  responsablesTareas TareaResponsable[]
-  pagosPlataforma    PagoPlataforma[]
-  conversaciones     Conversacion[]
-  mensajes           Mensaje[]
-  lecturasMensajes   ConversacionLectura[]
-  suscripcionesPush  SuscripcionPush[]
-  usoOcr             UsoOcr[]
+  superadminsActivos    Usuario[]             @relation("AgenciaActiva")
+  clientes              Cliente[]
+  aseguradoras          Aseguradora[]
+  polizas               Poliza[]
+  recibos               Recibo[]
+  asegurados            Asegurado[]
+  esquemasComision      EsquemaComision[]
+  bitacora              Bitacora[]
+  lotesConciliacion     LoteConciliacion[]
+  lotesCambios          LoteCambio[]
+  lotesRenglones        LoteRenglon[]
+  notasAclaracion       NotaAclaracion[]
+  avisosEnviados        AvisoEnviado[]
+  endosos               Endoso[]
+  notasCliente          NotaCliente[]
+  tareas                Tarea[]
+  responsablesTareas    TareaResponsable[]
+  pagosPlataforma       PagoPlataforma[]
+  conversaciones        Conversacion[]
+  mensajes              Mensaje[]
+  lecturasMensajes      ConversacionLectura[]
+  suscripcionesPush     SuscripcionPush[]
+  usoOcr                UsoOcr[]
+  solicitudesCotizacion SolicitudCotizacion[]
 
   @@map("agencias")
 }
@@ -171,8 +177,8 @@ enum CicloFacturacion {
 // Escaneos de carátulas con IA (POST /api/ocr) de cada agencia por mes, contra el límite de su
 // plan. Se reserva el escaneo antes de llamar a la IA y se devuelve si la lectura falla.
 model UsoOcr {
-  agenciaId String  @map("agencia_id") @db.Uuid
-  agencia   Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  agenciaId String   @map("agencia_id") @db.Uuid
+  agencia   Agencia  @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   // Primer día del mes, en hora de la Ciudad de México.
   periodo   DateTime @db.Date
   escaneos  Int      @default(0)
@@ -210,32 +216,33 @@ model Usuario {
   desactivado_at  DateTime?
   created_at      DateTime   @default(now())
 
-  clientesAsignados Cliente[]          @relation("EjecutivoCliente")
-  polizasAsignadas  Poliza[]           @relation("EjecutivoPoliza")
-  tareasAsignadas   TareaResponsable[]
-  conversacionesA   Conversacion[]        @relation("ConversacionUsuarioA")
-  conversacionesB   Conversacion[]        @relation("ConversacionUsuarioB")
-  mensajes          Mensaje[]
-  lecturasMensajes  ConversacionLectura[]
-  suscripcionesPush SuscripcionPush[]
+  clientesAsignados     Cliente[]             @relation("EjecutivoCliente")
+  polizasAsignadas      Poliza[]              @relation("EjecutivoPoliza")
+  tareasAsignadas       TareaResponsable[]
+  conversacionesA       Conversacion[]        @relation("ConversacionUsuarioA")
+  conversacionesB       Conversacion[]        @relation("ConversacionUsuarioB")
+  mensajes              Mensaje[]
+  lecturasMensajes      ConversacionLectura[]
+  suscripcionesPush     SuscripcionPush[]
+  solicitudesCotizacion SolicitudCotizacion[]
 
   @@index([agenciaId])
   @@map("usuarios")
 }
 
 model Cliente {
-  id        String  @id @default(cuid())
+  id              String      @id @default(cuid())
   // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
-  agenciaId String  @map("agencia_id") @db.Uuid
-  agencia   Agencia @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
-  nombre    String
-  rfc       String
-  telefono  String
-  email     String
+  agenciaId       String      @map("agencia_id") @db.Uuid
+  agencia         Agencia     @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  nombre          String
+  rfc             String
+  telefono        String
+  email           String
   // Física (RFC de 13) o moral (RFC de 12); se deduce del RFC al crearlo y se puede corregir.
   tipoPersona     TipoPersona @default(FISICA) @map("tipo_persona")
   // Solo persona física; si falta se usa la del RFC.
-  fechaNacimiento DateTime?   @db.Date @map("fecha_nacimiento")
+  fechaNacimiento DateTime?   @map("fecha_nacimiento") @db.Date
   // Calle, número y colonia.
   direccion       String?
   municipio       String?
@@ -346,7 +353,7 @@ model Poliza {
   ejecutivo         Usuario?         @relation("EjecutivoPoliza", fields: [ejecutivoId], references: [id], onDelete: SetNull)
   // Cancelación: la póliza se conserva con su historia y sus recibos pendientes pasan a
   // CANCELADO. canceladaAt es la fecha efectiva de la cancelación.
-  canceladaAt       DateTime?        @db.Date @map("cancelada_at")
+  canceladaAt       DateTime?        @map("cancelada_at") @db.Date
   motivoCancelacion String?          @map("motivo_cancelacion")
   // Seguimiento de la renovación (Renovaciones): etapa, motivo de pérdida o nota, y cuándo cambió.
   renovacionEtapa   EtapaRenovacion? @map("renovacion_etapa")
@@ -371,16 +378,16 @@ model Poliza {
   expediente_bytes      Int?
   expediente_subido_at  DateTime?
 
-  cliente     Cliente     @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
+  cliente               Cliente       @relation(fields: [cliente_id], references: [id], onDelete: Cascade)
   // Restrict: borrar una aseguradora no debe arrastrar la cartera de pólizas.
-  aseguradora Aseguradora @relation(fields: [aseguradora_id], references: [id], onDelete: Restrict)
-  recibos     Recibo[]
-  asegurados  Asegurado[]
+  aseguradora           Aseguradora   @relation(fields: [aseguradora_id], references: [id], onDelete: Restrict)
+  recibos               Recibo[]
+  asegurados            Asegurado[]
   // Renglones de estados de cuenta que la conciliación asoció a esta póliza sin poder conciliarlos.
   renglonesConciliacion LoteRenglon[]
-  endosos     Endoso[]
-  notas       NotaCliente[]
-  tareas      Tarea[]
+  endosos               Endoso[]
+  notas                 NotaCliente[]
+  tareas                Tarea[]
 
   // Las renovaciones comparten el número original; dos pólizas con el mismo número y la misma
   // vigencia son una captura repetida.
@@ -444,28 +451,28 @@ model NotaCliente {
 
 // Pendiente con fecha y responsable, opcionalmente de un cliente o una póliza.
 model Tarea {
-  id                 String    @id @default(cuid())
+  id                 String             @id @default(cuid())
   // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
-  agenciaId          String    @map("agencia_id") @db.Uuid
-  agencia            Agencia   @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  agenciaId          String             @map("agencia_id") @db.Uuid
+  agencia            Agencia            @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
   titulo             String
   descripcion        String?
-  vence              DateTime  @db.Date
+  vence              DateTime           @db.Date
   // Actividad de póliza (clave de lib/tareas/actividades.ts: cambio_agente, …): se pide al capturar
   // o renovar y se recuerda con insistencia hasta finalizarla. null = tarea normal.
   tipo               String?
   // Encargados: cada uno marca su parte; sin encargados, la marca cualquiera.
   responsables       TareaResponsable[]
-  clienteId          String?   @map("cliente_id")
-  cliente            Cliente?  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
-  polizaId           String?   @map("poliza_id")
-  poliza             Poliza?   @relation(fields: [polizaId], references: [id], onDelete: SetNull)
-  creadaPorEmail     String?   @map("creada_por_email")
-  completadaAt       DateTime? @map("completada_at")
-  completadaPorEmail String?   @map("completada_por_email")
+  clienteId          String?            @map("cliente_id")
+  cliente            Cliente?           @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  polizaId           String?            @map("poliza_id")
+  poliza             Poliza?            @relation(fields: [polizaId], references: [id], onDelete: SetNull)
+  creadaPorEmail     String?            @map("creada_por_email")
+  completadaAt       DateTime?          @map("completada_at")
+  completadaPorEmail String?            @map("completada_por_email")
   // Borrado suave: "Deshacer" la recupera tal cual, con sus encargados y su avance.
-  eliminadaAt        DateTime? @map("eliminada_at")
-  createdAt          DateTime  @default(now()) @map("created_at")
+  eliminadaAt        DateTime?          @map("eliminada_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
 
   @@index([agenciaId, completadaAt, vence])
   @@index([clienteId])
@@ -587,7 +594,7 @@ model PagoPlataforma {
   fecha         DateTime @db.Date
   monto         Decimal  @db.Decimal(12, 2)
   // pagadoHasta de la agencia después de este pago.
-  cubreHasta    DateTime @db.Date @map("cubre_hasta")
+  cubreHasta    DateTime @map("cubre_hasta") @db.Date
   nota          String?
   registradoPor String?  @map("registrado_por")
   createdAt     DateTime @default(now()) @map("created_at")
@@ -746,8 +753,8 @@ model LoteConciliacion {
   revertido_at   DateTime?
   revertido_por  String?
 
-  aseguradora Aseguradora  @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
-  cambios     LoteCambio[]
+  aseguradora  Aseguradora   @relation(fields: [aseguradora_id], references: [id], onDelete: Cascade)
+  cambios      LoteCambio[]
   sinConciliar LoteRenglon[]
 
   @@index([created_at])
@@ -855,4 +862,42 @@ model NotaAclaracion {
   @@index([recibo_id, created_at])
   @@index([agenciaId])
   @@map("notas_aclaracion")
+}
+
+enum EstadoCotizacion {
+  PENDIENTE
+  COTIZANDO
+  LISTA
+  ERROR
+  CANCELADA
+}
+
+// Cotización de auto que pide un usuario del CRM y resuelve el robot cotizador: Claude manejando
+// el portal de la aseguradora en la computadora de la oficina (ver lib/cotizador). El CRM no entra
+// a los portales ni guarda sus contraseñas.
+model SolicitudCotizacion {
+  id          String           @id @default(cuid())
+  // Agencia dueña del registro: toda consulta y escritura debe llevarla explícitamente.
+  agenciaId   String           @map("agencia_id") @db.Uuid
+  agencia     Agencia          @relation(fields: [agenciaId], references: [id], onDelete: Restrict)
+  // Clave de lib/cotizador/reglas.ts (p. ej. "QUALITAS").
+  aseguradora String
+  estado      EstadoCotizacion @default(PENDIENTE)
+  // Vehículo, conductor y coberturas (DatosCotizacionAuto, validado al guardar).
+  datos       Json
+  // Lo que devolvió el robot (ResultadoCotizacion): primas, desglose y avisos del portal.
+  resultado   Json?
+  // Por qué no se pudo cotizar (estado ERROR).
+  error       String?
+  creadoPorId String?          @map("creado_por_id")
+  creadoPor   Usuario?         @relation(fields: [creadoPorId], references: [id], onDelete: SetNull)
+  // Cuándo la tomó el robot y cuándo terminó.
+  tomadaAt    DateTime?        @map("tomada_at")
+  terminadaAt DateTime?        @map("terminada_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([agenciaId, estado, createdAt])
+  @@index([creadoPorId])
+  @@map("solicitudes_cotizacion")
 }
