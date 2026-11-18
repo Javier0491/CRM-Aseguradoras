@@ -125,6 +125,9 @@ model Agencia {
   cotizadorTokenHash    String?          @unique @map("cotizador_token_hash")
   // Última vez que el robot pidió trabajo: dice en pantalla si está encendido.
   cotizadorVistoAt      DateTime?        @map("cotizador_visto_at")
+  // Multicotizador → Conexiones: por "CLAVE:RAMO" si se cotiza con ROBOT, con API o está APAGADO
+  // (lib/cotizador/aseguradoras.ts). Sin elección: la API si existe, si no el robot.
+  cotizadorCanales      Json?            @map("cotizador_canales")
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 

@@ -3,6 +3,7 @@ import "server-only";
 import { connection } from "next/server";
 
 import type { UsuarioSesion } from "@/lib/auth/dal";
+import { leerConfigCanales, type ConfigCanales } from "@/lib/cotizador/aseguradoras";
 import type { DatosCotizacionAuto, ResultadoCotizacion } from "@/lib/cotizador/reglas";
 import { db } from "@/lib/db";
 import type { EstadoCotizacion } from "@/lib/generated/prisma/client";
@@ -64,6 +65,13 @@ export async function getSolicitudes(user: UsuarioSesion): Promise<SolicitudVist
     tienePdf: Boolean(f.pdfClave),
     grupoId: f.grupoId,
   }));
+}
+
+/** Qué eligió la agencia en Conexiones (robot, API o apagada) por aseguradora y ramo. */
+export async function getConfigCanales(agenciaId: string): Promise<ConfigCanales> {
+  await connection();
+  const a = await db.agencia.findUnique({ where: { id: agenciaId }, select: { cotizadorCanales: true } });
+  return leerConfigCanales(a?.cotizadorCanales);
 }
 
 export type EstadoRobot = {

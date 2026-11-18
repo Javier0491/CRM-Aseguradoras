@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { aseguradorasDelRamo, canalDe, CATALOGO_ASEGURADORAS, nombreAseguradora } from "@/lib/cotizador/aseguradoras";
+import {
+  aseguradorasDelRamo,
+  canalDe,
+  CATALOGO_ASEGURADORAS,
+  leerConfigCanales,
+  nombreAseguradora,
+  validarEleccionCanal,
+} from "@/lib/cotizador/aseguradoras";
 import { agruparSolicitudes } from "@/lib/cotizador/comparativo";
 import { generarLlave, hashLlave, llaveDeEncabezado } from "@/lib/cotizador/llave";
 import type { SolicitudVista } from "@/lib/cotizador/queries";
@@ -215,6 +222,39 @@ describe("llave del robot", () => {
     assert.equal(llaveDeEncabezado("Bearer abc"), null);
     assert.equal(llaveDeEncabezado(`Basic ${generarLlave()}`), null);
     assert.equal(llaveDeEncabezado("Bearer zsr_corta"), null);
+  });
+});
+
+describe("conexiones del multicotizador", () => {
+  it("sin elección usa el robot; apagada no cotiza; elegir algo que no existe no cuenta", () => {
+    assert.equal(canalDe("ZURICH", "AUTOS"), "ROBOT");
+    assert.equal(canalDe("ZURICH", "AUTOS", { "ZURICH:AUTOS": "APAGADO" }), null);
+    assert.equal(canalDe("ZURICH", "AUTOS", { "ZURICH:AUTOS": "API" }), "ROBOT");
+    assert.equal(canalDe("GNP", "AUTOS"), null);
+    const autos = aseguradorasDelRamo("AUTOS", { "ZURICH:AUTOS": "APAGADO" });
+    const zurich = autos.find((a) => a.clave === "ZURICH");
+    assert.equal(zurich?.apagada, true);
+    assert.equal(zurich?.canal, null);
+    assert.deepEqual(zurich?.disponibles, ["ROBOT"]);
+  });
+
+  it("solo deja elegir canales que existen", () => {
+    assert.equal(validarEleccionCanal("ZURICH", "AUTOS", "ROBOT"), null);
+    assert.equal(validarEleccionCanal("ZURICH", "AUTOS", "APAGADO"), null);
+    assert.match(validarEleccionCanal("ZURICH", "AUTOS", "API") ?? "", /API/);
+    assert.match(validarEleccionCanal("GNP", "AUTOS", "ROBOT") ?? "", /robot/);
+    assert.match(validarEleccionCanal("QUALITAS", "GMM", "APAGADO") ?? "", /no vende/);
+    assert.notEqual(validarEleccionCanal("NADIE", "AUTOS", "APAGADO"), null);
+    assert.notEqual(validarEleccionCanal("ZURICH", "AUTOS", "OTRO"), null);
+  });
+
+  it("lee de la base solo claves y valores conocidos", () => {
+    assert.deepEqual(
+      leerConfigCanales({ "ZURICH:AUTOS": "APAGADO", "NADIE:AUTOS": "ROBOT", "QUALITAS:AUTOS": "X", "GNP:PLANETA": "API" }),
+      { "ZURICH:AUTOS": "APAGADO" }
+    );
+    assert.deepEqual(leerConfigCanales(null), {});
+    assert.deepEqual(leerConfigCanales(["ROBOT"]), {});
   });
 });
 

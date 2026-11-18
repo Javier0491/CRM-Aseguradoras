@@ -4,6 +4,14 @@ import { revalidatePath } from "next/cache";
 
 import { getAdmin, getUsuarioCrm } from "@/lib/auth/dal";
 import { registrarBitacora } from "@/lib/bitacora/registrar";
+import {
+  canalDe,
+  claveCanal,
+  leerConfigCanales,
+  nombreAseguradora,
+  validarEleccionCanal,
+  type RamoCotizador,
+} from "@/lib/cotizador/aseguradoras";
 import { generarLlave, hashLlave } from "@/lib/cotizador/llave";
 import { validarAseguradoras, validarDatosCotizacion } from "@/lib/cotizador/reglas";
 import { db } from "@/lib/db";
@@ -30,6 +38,15 @@ export async function crearSolicitudCotizacion(entrada: unknown): Promise<Result
     const v = validarDatosCotizacion({ ...entrada, aseguradora });
     if (!v.ok) return v;
     solicitudes.push(v.valor);
+  }
+
+  // Cada aseguradora debe estar encendida en Conexiones y con un canal que ya funcione (hoy, el robot).
+  const agencia = await db.agencia.findUnique({ where: { id: user.agenciaId }, select: { cotizadorCanales: true } });
+  const config = leerConfigCanales(agencia?.cotizadorCanales);
+  for (const aseguradora of a.valor) {
+    const canal = canalDe(aseguradora, "AUTOS", config);
+    if (canal === null) return { ok: false, error: `${nombreAseguradora(aseguradora)} está apagada en Conexiones.` };
+    if (canal !== "ROBOT") return { ok: false, error: `La API de ${nombreAseguradora(aseguradora)} todavía no cotiza.` };
   }
 
   const enEspera = await db.solicitudCotizacion.count({
@@ -87,6 +104,36 @@ export async function reintentarSolicitudCotizacion(id: string): Promise<Resulta
   });
   revalidatePath("/cotizador");
   return count === 1 ? { ok: true } : { ok: false, error: "Esa cotización no se puede reintentar." };
+}
+
+/**
+ * Conexiones (solo ADMIN): elige si una aseguradora cotiza un ramo con el robot, con la API o si
+ * queda apagada para la agencia.
+ */
+export async function cambiarCanalCotizador(clave: unknown, ramo: unknown, eleccion: unknown): Promise<Resultado> {
+  const admin = await getAdmin();
+  if (!admin) return { ok: false, error: "Solo un administrador puede cambiar las conexiones." };
+  const error = validarEleccionCanal(clave, ramo, eleccion);
+  if (error) return { ok: false, error };
+  const k = claveCanal(clave as string, ramo as RamoCotizador);
+  await db.$transaction(async (tx) => {
+    const a = await tx.agencia.findUnique({ where: { id: admin.agenciaId }, select: { cotizadorCanales: true } });
+    const config = { ...leerConfigCanales(a?.cotizadorCanales), [k]: eleccion };
+    await tx.agencia.update({ where: { id: admin.agenciaId }, data: { cotizadorCanales: config as Prisma.InputJsonValue } });
+    const texto = eleccion === "APAGADO" ? "apagó" : `puso en ${eleccion === "API" ? "API" : "robot"}`;
+    await registrarBitacora(
+      admin,
+      {
+        accion: "cotizador.conexion",
+        entidad: "agencia",
+        entidadId: admin.agenciaId,
+        descripcion: `Multicotizador: ${texto} ${nombreAseguradora(clave as string)} (${ramo})`,
+      },
+      tx
+    );
+  });
+  revalidatePath("/cotizador");
+  return { ok: true };
 }
 
 /**

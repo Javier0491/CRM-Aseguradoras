@@ -1,8 +1,10 @@
 import "server-only";
 
 import { getAlmacen } from "@/lib/archivos/almacen";
+import { canalDe, leerConfigCanales } from "@/lib/cotizador/aseguradoras";
 import { llaveDeEncabezado, hashLlave } from "@/lib/cotizador/llave";
 import {
+  ASEGURADORAS_COTIZADOR,
   clavePdfCotizacion,
   esPdf,
   MAX_BYTES_PDF,
@@ -43,12 +45,18 @@ export type TrabajoRobot = {
  * solo uno se queda con cada solicitud. `aseguradoras` limita a los portales con sesión abierta en la
  * oficina (null = cualquiera); las de otras aseguradoras esperan en la fila.
  */
-export async function tomarSiguiente(agenciaId: string, aseguradoras: string[] | null = null): Promise<TrabajoRobot | null> {
-  if (aseguradoras && aseguradoras.length === 0) return null;
+export async function tomarSiguiente(agenciaId: string, pedidas: string[] | null = null): Promise<TrabajoRobot | null> {
+  // Solo las que la agencia tiene en robot en Conexiones (las de API o apagadas no son suyas).
+  const agencia = await db.agencia.findUnique({ where: { id: agenciaId }, select: { cotizadorCanales: true } });
+  const config = leerConfigCanales(agencia?.cotizadorCanales);
+  const aseguradoras = Object.keys(ASEGURADORAS_COTIZADOR).filter(
+    (k) => canalDe(k, "AUTOS", config) === "ROBOT" && (pedidas === null || pedidas.includes(k))
+  );
+  if (aseguradoras.length === 0) return null;
   const limiteAbandono = new Date(Date.now() - MINUTOS_ABANDONO * 60_000);
   const disponible: Prisma.SolicitudCotizacionWhereInput = {
     agenciaId,
-    ...(aseguradoras ? { aseguradora: { in: aseguradoras } } : {}),
+    aseguradora: { in: aseguradoras },
     OR: [{ estado: "PENDIENTE" }, { estado: "COTIZANDO", tomadaAt: { lt: limiteAbandono } }],
   };
   for (let intento = 0; intento < 3; intento++) {

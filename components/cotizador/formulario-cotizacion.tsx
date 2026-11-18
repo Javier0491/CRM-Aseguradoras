@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { crearSolicitudCotizacion } from "@/lib/cotizador/actions";
-import { aseguradorasDelRamo } from "@/lib/cotizador/aseguradoras";
+import type { AseguradoraDelRamo } from "@/lib/cotizador/aseguradoras";
 import type { LecturaDocumentosAuto } from "@/lib/cotizador/lector";
 import {
   ASEGURADORAS_COTIZADOR,
@@ -65,9 +65,6 @@ const BASICAS: readonly CampoSuma[] = ["responsabilidadCivil", "gastosMedicosOcu
 const OPCIONALES: readonly CampoSuma[] = ["rcDanosOcupantes", "rcComplementariaPersonas"];
 const NINGUNA = "ninguna";
 
-/** Aseguradoras de Autos del catálogo: las que ya se cotizan primero. */
-const ASEGURADORAS_AUTOS = aseguradorasDelRamo("AUTOS");
-const SELECCION_INICIAL = ASEGURADORAS_AUTOS.filter((a) => a.canal !== null).map((a) => a.clave as string);
 
 const vacio = {
   vehiculo: {
@@ -125,8 +122,13 @@ function Opciones<T extends string>({
 }
 
 /** Formulario para pedir una cotización de auto: se puede prellenar leyendo la INE y la tarjeta con IA. */
-export function FormularioCotizacion({ hoy }: { hoy: string }) {
-  const [aseguradoras, setAseguradoras] = React.useState<string[]>(SELECCION_INICIAL);
+export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: string; aseguradoras: AseguradoraDelRamo[] }) {
+  // De inicio, todas las que se pueden cotizar por robot (las de API llegarán cuando se conecten).
+  const [marcadas, setAseguradoras] = React.useState<string[]>(() =>
+    opciones.filter((a) => a.canal === "ROBOT").map((a) => a.clave)
+  );
+  // Si un administrador apaga una aseguradora mientras el formulario está abierto, deja de contar.
+  const aseguradoras = marcadas.filter((k) => opciones.some((a) => a.clave === k && a.canal === "ROBOT"));
   const [vehiculo, setVehiculo] = React.useState(vacio.vehiculo);
   const [conductor, setConductor] = React.useState(vacio.conductor);
   const [coberturas, setCoberturas] = React.useState(COBERTURAS_PREDETERMINADAS);
@@ -206,7 +208,7 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
         setError(r.error);
         return;
       }
-      const nombres = ASEGURADORAS_AUTOS.filter((a) => aseguradoras.includes(a.clave)).map((a) => a.nombre);
+      const nombres = opciones.filter((a) => aseguradoras.includes(a.clave)).map((a) => a.nombre);
       toast.success(nombres.length > 1 ? `Enviada a ${nombres.length} aseguradoras` : "Cotización enviada al robot", {
         description: `${vehiculo.marca} ${vehiculo.modelo} ${vehiculo.anio} en ${nombres.join(", ")}.`,
       });
@@ -485,8 +487,8 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
               Aseguradoras <span className="font-normal text-muted-foreground">(se cotiza en todas las que marques y se comparan juntas)</span>
             </legend>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {ASEGURADORAS_AUTOS.map((a) => {
-                const disponible = a.canal !== null;
+              {opciones.map((a) => {
+                const disponible = a.canal === "ROBOT";
                 const marcada = aseguradoras.includes(a.clave);
                 return (
                   <label
@@ -508,7 +510,7 @@ export function FormularioCotizacion({ hoy }: { hoy: string }) {
                     />
                     <span className="min-w-0 flex-1 truncate">{a.nombre}</span>
                     <span className="shrink-0 text-[11px] text-muted-foreground">
-                      {a.canal === "API" ? "API" : a.canal === "ROBOT" ? "Robot" : "Próximamente"}
+                      {a.apagada ? "Apagada" : a.canal === "API" ? "API (pronto)" : a.canal === "ROBOT" ? "Robot" : "Próximamente"}
                     </span>
                   </label>
                 );
