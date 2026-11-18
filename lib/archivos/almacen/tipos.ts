@@ -12,6 +12,11 @@ export interface Almacen {
   readonly proveedor: "supabase" | "r2";
   /** URL firmada de un solo uso para subir `bytes` bytes de tipo `contentType` a `clave`. */
   urlSubida(clave: string, contentType: string, bytes: number): Promise<SubidaFirmada>;
+  /**
+   * Guarda desde el servidor un archivo que ya está en memoria (p. ej. el PDF que manda el robot
+   * cotizador). Usa siempre una clave nueva (con uuid): no se revisa si ya existe.
+   */
+  guardar(clave: string, contenido: Uint8Array, contentType: string): Promise<void>;
   /** Tamaño del objeto, o null si no existe. */
   info(clave: string): Promise<{ bytes: number } | null>;
   /** Primeros `n` bytes del objeto (para verificar su firma real), o null si no existe. */

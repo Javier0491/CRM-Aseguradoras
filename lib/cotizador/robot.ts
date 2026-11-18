@@ -1,7 +1,15 @@
 import "server-only";
 
+import { getAlmacen } from "@/lib/archivos/almacen";
 import { llaveDeEncabezado, hashLlave } from "@/lib/cotizador/llave";
-import { MINUTOS_ABANDONO, type DatosCotizacionAuto, type ResultadoCotizacion } from "@/lib/cotizador/reglas";
+import {
+  clavePdfCotizacion,
+  esPdf,
+  MAX_BYTES_PDF,
+  MINUTOS_ABANDONO,
+  type DatosCotizacionAuto,
+  type ResultadoCotizacion,
+} from "@/lib/cotizador/reglas";
 import { db } from "@/lib/db";
 import type { Prisma } from "@/lib/generated/prisma/client";
 
@@ -81,4 +89,36 @@ export async function guardarResultado(
         : { estado: "ERROR", error: salida.error, terminadaAt: new Date() },
   });
   return count === 1;
+}
+
+export type ResultadoPdf = { ok: true; bytes: number } | { ok: false; status: 404 | 413 | 415; error: string };
+
+/**
+ * Guarda el PDF oficial de la aseguradora de una solicitud ya LISTA de la agencia. Si ya tenía uno
+ * (el robot lo reenvió), lo reemplaza y borra el anterior.
+ */
+export async function guardarPdf(agenciaId: string, id: string, contenido: Uint8Array): Promise<ResultadoPdf> {
+  if (contenido.byteLength === 0 || contenido.byteLength > MAX_BYTES_PDF) {
+    return { ok: false, status: 413, error: `El PDF está vacío o pasa de ${MAX_BYTES_PDF / 1024 / 1024} MB.` };
+  }
+  if (!esPdf(contenido)) return { ok: false, status: 415, error: "El archivo no es un PDF." };
+
+  const solicitud = await db.solicitudCotizacion.findFirst({
+    where: { id, agenciaId, estado: "LISTA" },
+    select: { pdfClave: true },
+  });
+  if (!solicitud) return { ok: false, status: 404, error: "No hay una cotización lista con ese id." };
+
+  const almacen = getAlmacen();
+  const clave = clavePdfCotizacion(agenciaId, id);
+  await almacen.guardar(clave, contenido, "application/pdf");
+
+  const { count } = await db.solicitudCotizacion.updateMany({
+    where: { id, agenciaId, estado: "LISTA" },
+    data: { pdfClave: clave, pdfBytes: contenido.byteLength },
+  });
+  const sobra = count === 1 ? solicitud.pdfClave : clave;
+  if (sobra) await almacen.eliminar([sobra]).catch((e) => console.error("[cotizador/pdf] no se borró", e instanceof Error ? e.message : e));
+  if (count !== 1) return { ok: false, status: 404, error: "La cotización cambió mientras se subía el PDF." };
+  return { ok: true, bytes: contenido.byteLength };
 }

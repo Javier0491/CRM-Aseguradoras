@@ -337,3 +337,35 @@ export const MINUTOS_ABANDONO = 20;
 
 /** Sin contacto del robot en este tiempo, la pantalla avisa que la computadora parece apagada. */
 export const MINUTOS_ROBOT_ACTIVO = 10;
+
+/**
+ * Tamaño máximo del PDF de la aseguradora. El robot lo manda en el cuerpo de la solicitud y Vercel
+ * no acepta cuerpos de más de 4.5 MB; el de Qualitas pesa unos 20 KB.
+ */
+export const MAX_BYTES_PDF = 4 * 1024 * 1024;
+
+/** ¿Los primeros bytes son de un PDF (%PDF-)? No se confía en el tipo que dice la solicitud. */
+export function esPdf(bytes: Uint8Array): boolean {
+  return bytes.length >= 5 && [0x25, 0x50, 0x44, 0x46, 0x2d].every((b, i) => bytes[i] === b);
+}
+
+/** Clave nueva del PDF de una solicitud en el almacenamiento: cotizaciones/{agenciaId}/{id}/{uuid}.pdf. */
+export function clavePdfCotizacion(agenciaId: string, solicitudId: string): string {
+  return `cotizaciones/${agenciaId}/${solicitudId}/${crypto.randomUUID()}.pdf`;
+}
+
+/** Nombre con que se descarga el PDF, p. ej. «Cotizacion Qualitas 1251879762 HYUNDAI HB 2023.pdf». */
+export function nombrePdfCotizacion(
+  aseguradora: string,
+  numeroCotizacion: string | null | undefined,
+  vehiculo: { marca?: string; modelo?: string; anio?: number } | undefined
+): string {
+  const nombreAseg =
+    aseguradora in ASEGURADORAS_COTIZADOR
+      ? ASEGURADORAS_COTIZADOR[aseguradora as AseguradoraCotizador].nombre
+      : aseguradora;
+  const partes = ["Cotizacion", nombreAseg, numeroCotizacion, vehiculo?.marca, vehiculo?.modelo, vehiculo?.anio]
+    .filter((p) => p !== null && p !== undefined && String(p).trim() !== "")
+    .map((p) => String(p).trim());
+  return `${partes.join(" ").replace(/[\\/:*?"<>|\r\n]+/g, "_").slice(0, 150)}.pdf`;
+}

@@ -33,6 +33,13 @@ export function crearAlmacenSupabase(): Almacen {
       };
     },
 
+    async guardar(clave, contenido, contentType) {
+      // Con la sesión del usuario: sin ella (p. ej. el robot cotizador) las políticas del bucket lo
+      // rechazan. Por eso el PDF del robot requiere R2.
+      const { error } = await (await storage()).upload(clave, contenido, { contentType, upsert: false });
+      if (error) throw new Error(`No se pudo guardar en Storage: ${error.message}`);
+    },
+
     async info(clave) {
       const { data, error } = await (await storage()).info(clave);
       return error || !data ? null : { bytes: data.size ?? 0 };

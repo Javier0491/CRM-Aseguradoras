@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { generarLlave, hashLlave, llaveDeEncabezado } from "@/lib/cotizador/llave";
-import { COBERTURAS_PREDETERMINADAS, edadEn, validarDatosCotizacion, validarResultado } from "@/lib/cotizador/reglas";
+import {
+  clavePdfCotizacion,
+  COBERTURAS_PREDETERMINADAS,
+  edadEn,
+  esPdf,
+  nombrePdfCotizacion,
+  validarDatosCotizacion,
+  validarResultado,
+} from "@/lib/cotizador/reglas";
 
 // El caso real con que se probó el robot en Qualitas el 2026-11-17.
 const mazda = () => ({
@@ -119,6 +127,29 @@ describe("resultado del robot", () => {
     assert.equal(validarResultado({ ...resultado(), iva: "1094" }).ok, false);
     assert.equal(validarResultado({ ...resultado(), formaPago: "DIARIO" }).ok, false);
     assert.equal(validarResultado({ ...resultado(), otrasFormasPago: [{ formaPago: "MENSUAL", primaTotal: -5 }] }).ok, false);
+  });
+});
+
+describe("PDF de la aseguradora", () => {
+  it("reconoce un PDF por sus primeros bytes", () => {
+    assert.equal(esPdf(new TextEncoder().encode("%PDF-1.4\n...")), true);
+    assert.equal(esPdf(new TextEncoder().encode("<html>")), false);
+    assert.equal(esPdf(new Uint8Array()), false);
+  });
+
+  it("guarda cada PDF en una carpeta de la agencia y la cotización, con clave nueva", () => {
+    const agencia = "0b6f3c1e-1111-4222-8333-944445555666";
+    const a = clavePdfCotizacion(agencia, "cmwm9kj3l000008k4bf3fopig");
+    assert.match(a, /^cotizaciones\/0b6f3c1e-1111-4222-8333-944445555666\/cmwm9kj3l000008k4bf3fopig\/[0-9a-f-]{36}\.pdf$/);
+    assert.notEqual(a, clavePdfCotizacion(agencia, "cmwm9kj3l000008k4bf3fopig"));
+  });
+
+  it("descarga con un nombre que dice qué es", () => {
+    assert.equal(
+      nombrePdfCotizacion("QUALITAS", "1251879762", { marca: "HYUNDAI", modelo: "HB", anio: 2023 }),
+      "Cotizacion Qualitas 1251879762 HYUNDAI HB 2023.pdf"
+    );
+    assert.equal(nombrePdfCotizacion("QUALITAS", null, { marca: "MAZDA", modelo: "3/I", anio: 2017 }), "Cotizacion Qualitas MAZDA 3_I 2017.pdf");
   });
 });
 

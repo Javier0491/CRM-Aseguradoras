@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
   ListObjectsV2Command,
   NotFound,
+  PutObjectCommand,
   S3ServiceException,
 } from "@aws-sdk/client-s3";
 
@@ -24,6 +25,18 @@ export function crearAlmacenR2(): Almacen {
 
     async urlSubida(clave, contentType, bytes) {
       return { url: await generarUrlSubida(clave, contentType, bytes), headers: { "content-type": contentType } };
+    },
+
+    async guardar(clave, contenido, contentType) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: clave,
+          Body: contenido,
+          ContentType: contentType,
+          ContentLength: contenido.byteLength,
+        })
+      );
     },
 
     async info(clave) {

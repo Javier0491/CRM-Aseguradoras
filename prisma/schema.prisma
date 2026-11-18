@@ -894,6 +894,10 @@ model SolicitudCotizacion {
   // Cuándo la tomó el robot y cuándo terminó.
   tomadaAt    DateTime?        @map("tomada_at")
   terminadaAt DateTime?        @map("terminada_at")
+  // PDF oficial de la aseguradora que sube el robot al terminar: clave del objeto en el almacenamiento
+  // (cotizaciones/{agenciaId}/{id}/{uuid}.pdf) y su tamaño.
+  pdfClave    String?          @map("pdf_clave")
+  pdfBytes    Int?             @map("pdf_bytes")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
 

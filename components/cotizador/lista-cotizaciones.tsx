@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Bot, ChevronDown, Clock, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
+import { Ban, Bot, ChevronDown, Clock, FileDown, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -103,6 +103,13 @@ function Detalle({ s }: { s: SolicitudVista }) {
           {(k.extras ?? []).map((x) => ` · ${EXTRAS[x] ?? x}`)}
         </p>
       )}
+      {s.tienePdf && (
+        <Button asChild variant="outline" size="sm">
+          <a href={`/cotizador/${s.id}/pdf`} download>
+            <FileDown /> Descargar PDF de {nombreAseguradora(s.aseguradora)}
+          </a>
+        </Button>
+      )}
       {s.datos.notas && <p className="text-xs"><span className="text-muted-foreground">Extras pedidos: </span>{s.datos.notas}</p>}
       {s.error && <p className="text-xs text-destructive">{s.error}</p>}
       <p className="text-[11px] text-muted-foreground">
@@ -186,6 +193,13 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
                         <span className="block font-semibold tabular-nums">{formatMoneda(s.resultado.primaTotal)}</span>
                         <span className="block text-[11px] text-muted-foreground">{ETIQUETA_FORMA_PAGO[s.resultado.formaPago]}</span>
                       </span>
+                    )}
+                    {s.tienePdf && (
+                      <Button asChild variant="ghost" size="icon-sm" title={`PDF de ${nombreAseguradora(s.aseguradora)}`}>
+                        <a href={`/cotizador/${s.id}/pdf`} download aria-label={`Descargar PDF de ${nombreAseguradora(s.aseguradora)}`}>
+                          <FileDown />
+                        </a>
+                      </Button>
                     )}
                     <Badge variant="outline" className={cn("gap-1", est.clase)}>
                       {s.estado === "COTIZANDO" && <Loader2 className="size-3 animate-spin" />}
