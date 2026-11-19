@@ -1,0 +1,19 @@
+{
+  "name": "zensecure-robot-oficina",
+  "version": "0.1.0",
+  "description": "Robot cotizador de ZenSecure: cotiza en los portales de las aseguradoras desde la computadora de la oficina del broker, sin Claude.",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node robot.mjs",
+    "claves": "node claves.mjs",
+    "test": "node --test pruebas/"
+  },
+  "dependencies": {
+    "playwright-core": "1.64.1"
+  }
+}

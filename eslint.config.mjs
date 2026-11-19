@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Cliente generado por Prisma
     "lib/generated/**",
+    // Robot cotizador de oficina (Node + Playwright): proyecto aparte con su propio package.json.
+    "robot-oficina/**",
   ]),
 ]);
 
