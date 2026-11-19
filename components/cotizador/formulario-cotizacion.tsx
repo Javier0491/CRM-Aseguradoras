@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { FileScan, Loader2, Send, TriangleAlert } from "lucide-react";
+import { FileScan, FileStack, Loader2, Scale, Send, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -14,7 +14,8 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { crearSolicitudCotizacion } from "@/lib/cotizador/actions";
 import type { AseguradoraDelRamo } from "@/lib/cotizador/aseguradoras";
-import type { LecturaDocumentosAuto } from "@/lib/cotizador/lector";
+import { loMejorDeLasDos } from "@/lib/cotizador/igualar";
+import type { LecturaDocumentosAuto, LecturaPolizaAuto } from "@/lib/cotizador/lector";
 import {
   ASEGURADORAS_COTIZADOR,
   COBERTURAS_PREDETERMINADAS,
@@ -30,29 +31,24 @@ import {
   FORMAS_PAGO,
   PAQUETES,
   PROCEDENCIAS,
+  SUMAS_AUTO,
   TIPOS_VEHICULO,
   VALORES_VEHICULO,
+  type CampoSumaAuto,
   type Extra,
   type FormaPago,
   type Paquete,
+  type PolizaActual,
   type Procedencia,
   type TipoPersona,
   type TipoVehiculo,
   type ValorVehiculo,
 } from "@/lib/cotizador/reglas";
-import { formatNumero } from "@/lib/format";
+import { formatMoneda, formatNumero } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const millones = (...m: number[]) => m.map((x) => x * 1_000_000);
-const miles = (...m: number[]) => m.map((x) => x * 1_000);
-const SUMAS = {
-  responsabilidadCivil: millones(1, 1.5, 2, 2.5, 3, 4, 5, 6, 8),
-  gastosMedicosOcupantes: miles(100, 200, 300, 400, 500, 600, 800, 1000),
-  muerteConductor: miles(100, 150, 200, 300, 500, 1000),
-  rcDanosOcupantes: miles(300, 500, 750, 1000, 1500, 2000),
-  rcComplementariaPersonas: millones(1, 2, 3, 4, 5),
-} as const;
-type CampoSuma = keyof typeof SUMAS;
+const SUMAS = SUMAS_AUTO;
+type CampoSuma = CampoSumaAuto;
 const ETIQUETA_SUMA: Record<CampoSuma, string> = {
   responsabilidadCivil: "Responsabilidad civil",
   gastosMedicosOcupantes: "Gastos médicos ocupantes",
@@ -137,10 +133,14 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
   const [tipoPersona, setTipoPersona] = React.useState<TipoPersona>("FISICA");
   const [vigenciaInicio, setVigenciaInicio] = React.useState(hoy);
   const [avisosLectura, setAvisosLectura] = React.useState<string[]>([]);
+  /** Póliza o cotización que el cliente ya tiene: se iguala («lo mejor de las dos») y va al comparativo. */
+  const [polizaActual, setPolizaActual] = React.useState<PolizaActual | null>(null);
+  const [cambiosIgualacion, setCambiosIgualacion] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
-  const [leyendo, setLeyendo] = React.useState(false);
+  const [leyendo, setLeyendo] = React.useState<null | "documentos" | "poliza">(null);
   const [enviando, startEnvio] = React.useTransition();
   const archivosRef = React.useRef<HTMLInputElement>(null);
+  const polizaRef = React.useRef<HTMLInputElement>(null);
 
   const edad = conductor.fechaNacimiento ? edadEn(conductor.fechaNacimiento, hoy) : null;
   // Qué datos opcionales vuelven obligatorios las aseguradoras marcadas (cada portal pide distinto).
@@ -155,7 +155,7 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
 
   async function leerDocumentos(archivos: FileList | null) {
     if (!archivos || archivos.length === 0) return;
-    setLeyendo(true);
+    setLeyendo("documentos");
     setError(null);
     try {
       const body = new FormData();
@@ -189,9 +189,84 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
     } catch {
       setError("Sin conexión: no se pudieron leer los documentos.");
     } finally {
-      setLeyendo(false);
+      setLeyendo(null);
       if (archivosRef.current) archivosRef.current.value = "";
     }
+  }
+
+  /** Lee la póliza o cotización actual del cliente, prellena el auto y arma «lo mejor de las dos». */
+  async function leerPoliza(archivos: FileList | null) {
+    if (!archivos || archivos.length === 0) return;
+    setLeyendo("poliza");
+    setError(null);
+    try {
+      const body = new FormData();
+      body.append("tipo", "poliza");
+      for (const a of Array.from(archivos)) body.append("files", a);
+      const res = await fetch("/api/cotizador/leer", { method: "POST", body });
+      const json = (await res.json().catch(() => null)) as { ok: boolean; error?: string; poliza?: LecturaPolizaAuto } | null;
+      if (!json?.ok || !json.poliza) {
+        setError(json?.error ?? (res.status === 413 ? "El documento pesa demasiado." : "No se pudo leer la póliza."));
+        return;
+      }
+      const { documento: d, vehiculo: v, conductor: c, tipoPersona: persona, coberturas: k, renglones, avisos } = json.poliza;
+      setVehiculo((x) => ({
+        ...x,
+        anio: v.anio ? String(v.anio) : x.anio,
+        marca: v.marca ?? x.marca,
+        modelo: v.modelo ?? x.modelo,
+        version: v.version ?? x.version,
+        transmision: v.transmision ?? x.transmision,
+        serie: v.serie ?? x.serie,
+        placas: v.placas ?? x.placas,
+        valor: v.valor ?? x.valor,
+      }));
+      setConductor((x) => ({
+        ...x,
+        nombre: c.nombre ?? x.nombre,
+        fechaNacimiento: c.fechaNacimiento ?? x.fechaNacimiento,
+        sexo: c.sexo ?? x.sexo,
+        codigoPostal: c.codigoPostal ?? x.codigoPostal,
+      }));
+      if (persona) setTipoPersona(persona);
+      if (d.formaPago) setFormaPago(d.formaPago);
+      const igualada = loMejorDeLasDos(COBERTURAS_PREDETERMINADAS, k);
+      setCoberturas(igualada.coberturas);
+      const cambios = [...igualada.cambios];
+      // Si es una póliza que sigue vigente, la nueva arranca cuando termina la actual (renovación).
+      if (d.finVigencia && d.finVigencia >= hoy) {
+        setVigenciaInicio(d.finVigencia);
+        cambios.push(`Vigencia desde el ${d.finVigencia}, cuando termina su póliza actual.`);
+      }
+      setPolizaActual({
+        tipoDocumento: d.tipoDocumento,
+        aseguradora: d.aseguradora,
+        numero: d.numero,
+        finVigencia: d.finVigencia,
+        formaPago: d.formaPago,
+        primaTotal: d.primaTotal,
+        paquete: d.paquete,
+        coberturas: renglones,
+      });
+      setCambiosIgualacion(cambios);
+      setAvisosLectura([...(d.primaTotal === null ? ["No se leyó el precio de su póliza: el comparativo no podrá calcular el ahorro."] : []), ...avisos]);
+      toast.success(d.tipoDocumento === "POLIZA" ? "Póliza leída" : "Cotización leída", {
+        description: "Revisa las coberturas igualadas antes de enviar.",
+      });
+    } catch {
+      setError("Sin conexión: no se pudo leer la póliza.");
+    } finally {
+      setLeyendo(null);
+      if (polizaRef.current) polizaRef.current.value = "";
+    }
+  }
+
+  function quitarPoliza() {
+    setPolizaActual(null);
+    setCambiosIgualacion([]);
+    setCoberturas(COBERTURAS_PREDETERMINADAS);
+    setVigenciaInicio(hoy);
+    setAvisosLectura([]);
   }
 
   function enviar(e: React.FormEvent) {
@@ -207,6 +282,7 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
         coberturas,
         formaPago,
         notas,
+        polizaActual,
       });
       if (!r.ok) {
         setError(r.error);
@@ -223,6 +299,8 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
       setTipoPersona("FISICA");
       setVigenciaInicio(hoy);
       setAvisosLectura([]);
+      setPolizaActual(null);
+      setCambiosIgualacion([]);
     });
   }
 
@@ -269,13 +347,65 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
               className="sr-only"
               id="cotizador-documentos"
               onChange={(e) => leerDocumentos(e.target.files)}
-              disabled={leyendo}
+              disabled={leyendo !== null}
             />
-            <Button type="button" variant="outline" size="sm" disabled={leyendo} onClick={() => archivosRef.current?.click()}>
-              {leyendo ? <Loader2 className="animate-spin" /> : <FileScan />}
-              {leyendo ? "Leyendo…" : "Leer con IA"}
+            <Button type="button" variant="outline" size="sm" disabled={leyendo !== null} onClick={() => archivosRef.current?.click()}>
+              {leyendo === "documentos" ? <Loader2 className="animate-spin" /> : <FileScan />}
+              {leyendo === "documentos" ? "Leyendo…" : "Leer con IA"}
             </Button>
           </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-dashed p-4">
+            <FileStack className="size-5 shrink-0 text-primary" />
+            <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+              ¿Ya tiene seguro o le cotizaron en otro lado? Sube su póliza o esa cotización: se igualan sus coberturas con lo
+              mejor de nuestro paquete y aparece en el comparativo junto a las nuestras.
+            </p>
+            <input
+              ref={polizaRef}
+              type="file"
+              multiple
+              accept="image/jpeg,image/png,image/webp,application/pdf"
+              className="sr-only"
+              id="cotizador-poliza-actual"
+              onChange={(e) => leerPoliza(e.target.files)}
+              disabled={leyendo !== null}
+            />
+            <Button type="button" variant="outline" size="sm" disabled={leyendo !== null} onClick={() => polizaRef.current?.click()}>
+              {leyendo === "poliza" ? <Loader2 className="animate-spin" /> : <Scale />}
+              {leyendo === "poliza" ? "Leyendo…" : "Igualar su póliza"}
+            </Button>
+          </div>
+
+          {polizaActual && (
+            <div className="space-y-2 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
+              <div className="flex items-start gap-3">
+                <Scale className="mt-0.5 size-4 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">
+                    Igualando {polizaActual.tipoDocumento === "POLIZA" ? "su póliza" : "la cotización"}
+                    {polizaActual.aseguradora && ` de ${polizaActual.aseguradora}`}
+                    {polizaActual.numero && ` ${polizaActual.numero}`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {polizaActual.primaTotal !== null
+                      ? `Hoy paga ${formatMoneda(polizaActual.primaTotal)}${polizaActual.formaPago ? ` (${ETIQUETA_FORMA_PAGO[polizaActual.formaPago].toLowerCase()})` : ""}`
+                      : "Sin precio leído"}
+                    {polizaActual.paquete && ` · ${polizaActual.paquete}`}
+                    {polizaActual.finVigencia && ` · vence el ${polizaActual.finVigencia}`}
+                  </p>
+                </div>
+                <Button type="button" variant="ghost" size="icon-sm" title="Quitar la póliza y volver al paquete básico" onClick={quitarPoliza}>
+                  <X />
+                </Button>
+              </div>
+              <ul className="list-disc space-y-0.5 pl-11 text-xs text-muted-foreground">
+                {cambiosIgualacion.map((c) => (
+                  <li key={c}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {avisosLectura.length > 0 && (
             <Alert className="border-warning/30 bg-warning/10 text-warning">
@@ -533,7 +663,7 @@ export function FormularioCotizacion({ hoy, aseguradoras: opciones }: { hoy: str
           )}
 
           <div className="flex justify-end">
-            <Button type="submit" disabled={enviando || leyendo || aseguradoras.length === 0}>
+            <Button type="submit" disabled={enviando || leyendo !== null || aseguradoras.length === 0}>
               {enviando ? <Loader2 className="animate-spin" /> : <Send />}
               {aseguradoras.length > 1 ? `Cotizar en ${aseguradoras.length} aseguradoras` : "Enviar a cotizar"}
             </Button>

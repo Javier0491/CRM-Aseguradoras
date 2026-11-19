@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Ban, Bot, ChevronDown, Clock, FileDown, Layers, Loader2, RotateCcw, TriangleAlert, Trophy } from "lucide-react";
+import { Ban, Bot, ChevronDown, Clock, FileDown, Layers, Loader2, RotateCcw, Scale, TriangleAlert, Trophy } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,7 @@ import { cancelarSolicitudCotizacion, reintentarSolicitudCotizacion } from "@/li
 import type { SolicitudVista } from "@/lib/cotizador/queries";
 import { nombreAseguradora } from "@/lib/cotizador/aseguradoras";
 import { agruparSolicitudes } from "@/lib/cotizador/comparativo";
+import { ahorroContraActual } from "@/lib/cotizador/igualar";
 import { ADICIONALES_GMM, ETIQUETA_NIVEL, resumenAsegurados } from "@/lib/cotizador/gmm";
 import {
   ETIQUETA_FORMA_PAGO,
@@ -21,6 +22,7 @@ import {
   ETIQUETA_VALOR,
   EXTRAS,
   type FormaPago,
+  type PolizaActual,
 } from "@/lib/cotizador/reglas";
 import { formatMoneda, formatNumero } from "@/lib/format";
 import type { EstadoCotizacion } from "@/lib/generated/prisma/enums";
@@ -169,6 +171,90 @@ function Detalle({ s }: { s: SolicitudVista }) {
   );
 }
 
+/** La póliza o cotización que el cliente ya tiene, si se subió al pedir la cotización de auto. */
+function polizaActualDe(s: SolicitudVista): PolizaActual | null {
+  return s.ramo === "AUTOS" ? (s.datos.polizaActual ?? null) : null;
+}
+
+/** Renglón del comparativo con lo que el cliente paga hoy (su póliza o la cotización que le dieron). */
+function FilaActual({ p }: { p: PolizaActual }) {
+  const [abierta, setAbierta] = React.useState(false);
+  const nombre = p.tipoDocumento === "POLIZA" ? "Su póliza actual" : "Cotización que le dieron";
+  return (
+    <div className="border-b border-dashed bg-muted/20">
+      <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+        <button
+          type="button"
+          onClick={() => setAbierta(!abierta)}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          aria-expanded={abierta}
+        >
+          <ChevronDown className={cn("size-4 shrink-0 text-muted-foreground transition-transform", abierta && "rotate-180")} />
+          <div className="min-w-0">
+            <p className="flex items-center gap-2 truncate font-medium">
+              <Scale className="size-3.5 shrink-0 text-muted-foreground" />
+              {nombre}
+              {p.aseguradora && ` · ${p.aseguradora}`}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {[p.numero && `No. ${p.numero}`, p.paquete, p.finVigencia && `vence el ${p.finVigencia}`].filter(Boolean).join(" · ") ||
+                "Referencia para comparar"}
+            </p>
+          </div>
+        </button>
+        <span className="text-right">
+          <span className="block font-semibold tabular-nums text-muted-foreground">
+            {p.primaTotal !== null ? formatMoneda(p.primaTotal) : "Sin precio"}
+          </span>
+          <span className="block text-[11px] text-muted-foreground">
+            {p.formaPago ? ETIQUETA_FORMA_PAGO[p.formaPago] : "Hoy paga"}
+          </span>
+        </span>
+      </div>
+      {abierta && p.coberturas.length > 0 && (
+        <div className="overflow-x-auto border-t px-4 py-3">
+          <table className="w-full min-w-[480px] text-xs">
+            <thead className="text-left text-muted-foreground">
+              <tr>
+                <th className="py-1 pr-3 font-normal">Cobertura (como viene en su documento)</th>
+                <th className="py-1 pr-3 font-normal">Suma asegurada</th>
+                <th className="py-1 pr-3 font-normal">Deducible</th>
+                <th className="py-1 text-right font-normal">Prima</th>
+              </tr>
+            </thead>
+            <tbody>
+              {p.coberturas.map((c, i) => (
+                <tr key={`${c.cobertura}-${i}`} className="border-t">
+                  <td className="py-1.5 pr-3">{c.cobertura}</td>
+                  <td className="py-1.5 pr-3">{c.sumaAsegurada ?? "—"}</td>
+                  <td className="py-1.5 pr-3">{c.deducible ?? "—"}</td>
+                  <td className="py-1.5 text-right tabular-nums">{c.prima === null ? "—" : formatMoneda(c.prima)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Nuestras cotizaciones llevan cada cobertura en lo más alto entre esta póliza y nuestro paquete básico.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** «Ahorra $1,200 (8.5 %)» o «$300 más» contra lo que paga hoy. */
+function Ahorro({ actual, s }: { actual: PolizaActual | null; s: SolicitudVista }) {
+  const a = ahorroContraActual(actual, s.resultado);
+  if (!a) return null;
+  return a.monto >= 0 ? (
+    <span className="block text-[11px] font-medium text-success">
+      Ahorra {formatMoneda(a.monto)} ({a.porcentaje.toLocaleString("es-MX")}%)
+    </span>
+  ) : (
+    <span className="block text-[11px] font-medium text-warning">{formatMoneda(-a.monto)} más que hoy</span>
+  );
+}
+
 export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista[] }) {
   const router = useRouter();
   const [abierta, setAbierta] = React.useState<string | null>(null);
@@ -197,7 +283,7 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
   }
 
   /** Renglón de una solicitud. En un comparativo el título es la aseguradora (el auto va arriba). */
-  const fila = (s: SolicitudVista, enGrupo: boolean, mejor: boolean) => {
+  const fila = (s: SolicitudVista, enGrupo: boolean, mejor: boolean, actual: PolizaActual | null = null) => {
     const est = ESTADO[s.estado];
     const abiertaEsta = abierta === s.id;
     return (
@@ -232,6 +318,7 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
               <span className="text-right">
                 <span className="block font-semibold tabular-nums">{formatMoneda(s.resultado.primaTotal)}</span>
                 <span className="block text-[11px] text-muted-foreground">{ETIQUETA_FORMA_PAGO[s.resultado.formaPago]}</span>
+                <Ahorro actual={actual} s={s} />
               </span>
             )}
             {s.tienePdf && (
@@ -293,8 +380,9 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
           </div>
         ) : (
           grupos.map((g) => {
-            if (g.solicitudes.length === 1) return fila(g.solicitudes[0], false, false);
             const primera = g.solicitudes[0];
+            const actual = polizaActualDe(primera);
+            if (g.solicitudes.length === 1 && !actual) return fila(primera, false, false);
             const listas = g.solicitudes.filter((s) => s.resultado).length;
             return (
               <div key={g.clave} className="rounded-lg border">
@@ -303,13 +391,14 @@ export function ListaCotizaciones({ solicitudes }: { solicitudes: SolicitudVista
                   <div className="min-w-0">
                     <p className="truncate font-medium">{titulo(primera)}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      Comparativo · {listas} de {g.solicitudes.length} listas ·{" "}
+                      {actual ? "Comparativo contra su póliza" : "Comparativo"} · {listas} de {g.solicitudes.length} listas ·{" "}
                       {quien(primera)} ·{" "}
                       {hora.format(new Date(primera.createdAt))}
                     </p>
                   </div>
                 </div>
-                {g.solicitudes.map((s, i) => fila(s, true, i === 0 && listas > 1 && s.resultado !== null))}
+                {actual && <FilaActual p={actual} />}
+                {g.solicitudes.map((s, i) => fila(s, true, i === 0 && listas > 1 && s.resultado !== null, actual))}
               </div>
             );
           })

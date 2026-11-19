@@ -141,6 +141,18 @@ export type TipoPersona = (typeof TIPOS_PERSONA)[number];
 export const DEDUCIBLES_DM = [3, 5, 10, 20] as const;
 export const DEDUCIBLES_RT = [5, 10, 20] as const;
 
+const millones = (...m: number[]) => m.map((x) => x * 1_000_000);
+const miles = (...m: number[]) => m.map((x) => x * 1_000);
+/** Sumas aseguradas que se pueden pedir en el formulario (los portales tienen opciones parecidas). */
+export const SUMAS_AUTO = {
+  responsabilidadCivil: millones(1, 1.5, 2, 2.5, 3, 4, 5, 6, 8),
+  gastosMedicosOcupantes: miles(100, 200, 300, 400, 500, 600, 800, 1000),
+  muerteConductor: miles(100, 150, 200, 300, 500, 1000),
+  rcDanosOcupantes: miles(300, 500, 750, 1000, 1500, 2000),
+  rcComplementariaPersonas: millones(1, 2, 3, 4, 5),
+} as const;
+export type CampoSumaAuto = keyof typeof SUMAS_AUTO;
+
 export type DatosCotizacionAuto = {
   aseguradora: AseguradoraCotizador;
   vehiculo: {
@@ -193,6 +205,32 @@ export type DatosCotizacionAuto = {
   formaPago: FormaPago;
   /** Qué más se necesita, en palabras de quien la pide (sumas de equipo especial, otra cobertura…). El robot lo lee. */
   notas: string | null;
+  /**
+   * Póliza o cotización que el cliente ya tiene (leída con IA), para compararla en el comparativo.
+   * Las coberturas pedidas ya vienen igualadas («lo mejor de las dos»); esto es solo la referencia.
+   * Solicitudes anteriores al 2026-11-19 no la traen.
+   */
+  polizaActual?: PolizaActual | null;
+};
+
+export const TIPOS_DOCUMENTO_ACTUAL = ["POLIZA", "COTIZACION"] as const;
+export type TipoDocumentoActual = (typeof TIPOS_DOCUMENTO_ACTUAL)[number];
+
+/** Lo que se guarda de la póliza o cotización actual del cliente. */
+export type PolizaActual = {
+  tipoDocumento: TipoDocumentoActual;
+  /** Nombre de la aseguradora como viene en el documento («GNP», «AXA Seguros»…). */
+  aseguradora: string | null;
+  numero: string | null;
+  /** Fin de vigencia (yyyy-mm-dd), si es póliza. */
+  finVigencia: string | null;
+  formaPago: FormaPago | null;
+  /** Prima total anual del documento (todos los recibos del año). */
+  primaTotal: number | null;
+  /** Nombre del paquete como lo llama esa aseguradora. */
+  paquete: string | null;
+  /** Sus coberturas tal como vienen, para mostrarlas junto a las nuestras. */
+  coberturas: RenglonCobertura[];
 };
 
 /**
@@ -374,6 +412,9 @@ export function validarDatosCotizacion(entrada: unknown, hoy = hoyISO()): Valida
 
   if (!(FORMAS_PAGO as readonly unknown[]).includes(e.formaPago)) return { ok: false, error: "Elige la forma de pago." };
 
+  const polizaActual = validarPolizaActual(e.polizaActual);
+  if (polizaActual === undefined) return { ok: false, error: "Los datos de la póliza actual no son válidos." };
+
   return {
     ok: true,
     valor: {
@@ -404,7 +445,46 @@ export function validarDatosCotizacion(entrada: unknown, hoy = hoyISO()): Valida
       },
       formaPago: e.formaPago as FormaPago,
       notas: textoOpcional(e.notas, 500),
+      polizaActual,
     },
+  };
+}
+
+/** Limpia la póliza actual que manda el formulario. null si no viene; undefined si viene mal. */
+export function validarPolizaActual(entrada: unknown): PolizaActual | null | undefined {
+  if (entrada === null || entrada === undefined) return null;
+  if (typeof entrada !== "object") return undefined;
+  const p = entrada as Record<string, unknown>;
+  if (!(TIPOS_DOCUMENTO_ACTUAL as readonly unknown[]).includes(p.tipoDocumento)) return undefined;
+  const prima = p.primaTotal;
+  if (prima !== null && prima !== undefined && !(typeof prima === "number" && Number.isFinite(prima) && prima >= 0 && prima < 10_000_000)) {
+    return undefined;
+  }
+  const primaTotal = typeof prima === "number" ? Math.round(prima * 100) / 100 : null;
+  const finVigencia = textoOpcional(p.finVigencia, 10);
+  const coberturas: RenglonCobertura[] = [];
+  for (const fila of Array.isArray(p.coberturas) ? p.coberturas.slice(0, 30) : []) {
+    if (typeof fila !== "object" || fila === null) continue;
+    const f = fila as Record<string, unknown>;
+    const nombre = texto(f.cobertura, 80);
+    if (!nombre) continue;
+    const prima = typeof f.prima === "number" && Number.isFinite(f.prima) ? Math.round(f.prima * 100) / 100 : null;
+    coberturas.push({
+      cobertura: nombre,
+      sumaAsegurada: textoOpcional(f.sumaAsegurada, 40),
+      deducible: textoOpcional(f.deducible, 40),
+      prima,
+    });
+  }
+  return {
+    tipoDocumento: p.tipoDocumento as TipoDocumentoActual,
+    aseguradora: textoOpcional(p.aseguradora, 60),
+    numero: textoOpcional(p.numero, 40),
+    finVigencia: finVigencia && esFechaISO(finVigencia) ? finVigencia : null,
+    formaPago: (FORMAS_PAGO as readonly unknown[]).includes(p.formaPago) ? (p.formaPago as FormaPago) : null,
+    primaTotal: primaTotal && primaTotal > 0 ? primaTotal : null,
+    paquete: textoOpcional(p.paquete, 60),
+    coberturas,
   };
 }
 
